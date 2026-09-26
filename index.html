@@ -248,20 +248,41 @@ async function runFix() {
       $('#lbl').textContent = `${label}… ${pct}%`;
     }, { zeroDuration: zero });
 
+    const changed = r.moved || !!r.durationZeroed;
+    $('#fill').style.background = 'var(--green)';
+
+    if (!changed) {
+      // Nothing to do. Do NOT hand back an identical file pretending we fixed it.
+      prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
+        ★ Nothing to fix — this file is already optimal<br>
+        <span style="font-weight:600;font-size:13.5px">moov is already at the front and no patch was
+        requested, so there is literally nothing to change. Upload your original file as it is.</span></div>
+        <p class="lead" style="font-size:13.5px">Downloading a copy would give you a byte-identical
+        file. Tick the duration patch above if you want to try that, otherwise you are done.</p>`;
+      btn.textContent = 'Nothing to change';
+      btn.disabled = true;
+      return;
+    }
+
     const base = current.file.name.replace(/\.[^.]+$/, '');
     const name = base + (zero ? '-patched.mp4' : '-faststart.mp4');
     const url = URL.createObjectURL(r.blob);
     const a = document.createElement('a');
-    a.href = url; a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    a.href = url; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
 
-    $('#fill').style.background = 'var(--green)';
+    const what = [];
+    if (r.moved) what.push(`moov moved to the front (${r.patched} chunk offsets rewritten)`);
+    if (r.durationZeroed) what.push('header duration zeroed — players will show 0:00, which is expected');
+
     prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
-      ✓ Downloaded <b>${esc(name)}</b> — ${(r.blob.size/1048576).toFixed(1)} MB<br>
-      <span style="font-weight:600;font-size:13.5px">${esc(r.note)}</span></div>
-      <p class="lead" style="font-size:13.5px">Upload this from TikTok Studio on desktop, with
-      "Allow high-quality uploads" enabled. Don't edit it after posting — that makes TikTok re-process it.</p>`;
-    btn.textContent = '✓ Done — drop another file to start again';
+      ✓ <b>${esc(name)}</b> — ${(r.blob.size/1048576).toFixed(1)} MB<br>
+      <span style="font-weight:600;font-size:13.5px">${what.map(esc).join(' · ')}</span></div>
+      <p class="lead" style="font-size:13.5px">Video and audio copied byte-for-byte — no quality change.
+      Upload it with "Allow high-quality uploads" on, and don't edit it after posting.</p>
+      <a class="btn white" id="again" href="${url}" download="${esc(name)}">Download didn't start? Tap here</a>`;
+    btn.textContent = '✓ Done';
   } catch (err) {
     btn.disabled = false;
     prog.innerHTML = `<div class="verdict v-bad" style="margin-top:10px">Couldn't fix it: ${esc(err.message)}
