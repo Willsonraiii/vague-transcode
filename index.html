@@ -37,6 +37,23 @@
   <!-- ============ RESULTS ============ -->
   <section id="results"></section>
 
+  <!-- ============ COMPARE ============ -->
+  <section>
+    <div class="card">
+      <h2>Did it survive?</h2>
+      <p class="tiny">After your video is live, download it back from TikTok and drop it here.
+         You'll see exactly what they delivered versus what you sent — the only way to know
+         whether any of this worked.</p>
+      <div class="drop" id="drop2" style="padding:22px 14px">
+        <div class="plus" style="width:42px;height:42px;font-size:22px;background:var(--violet)">↓</div>
+        <b style="font-size:15px">Drop the downloaded TikTok</b>
+        <small>compares against the file above</small>
+        <input type="file" id="file2" accept="video/*,.mp4,.mov" class="hide">
+      </div>
+      <div id="cmp"></div>
+    </div>
+  </section>
+
   <!-- ============ INTRO CONTENT ============ -->
   <section id="intro">
     <div class="card">
@@ -145,7 +162,7 @@ async function go(file){
 function show(){
   const {file,p,dx} = cur;
   const bad = dx.criticalCount + (p.vfr?1:0);
-  const fixable = p.moovAtEnd;
+  const fixable = p.moovAtEnd || p.isQuickTime || p.hasEditList;
   const fmt = p.hdrFormat==='dolbyvision' ? 'Dolby Vision 8.4'
             : p.hdrFormat==='hlg' ? 'HLG HDR'
             : p.hdrFormat ? 'HDR' : 'SDR';
@@ -162,6 +179,10 @@ function show(){
   list.push(issue(p.hdr?'ok':'warn','Colour',fmt,`${p.colorPrimaries||'untagged'} / ${p.colorTransfer||'untagged'}`));
   list.push(issue(p.bitrateMbps<6?'warn':'ok','Bitrate',`${p.bitrateMbps} Mbps`,
     p.bitrateMbps<6 ? 'Low — gives their encoder very little to work with.' : null));
+  if(p.isQuickTime) list.push(issue('warn','QuickTime branding','qt',
+    'This is a QuickTime-branded file, not a standard MP4. Some ingest pipelines treat them differently. Relabelled on fix — no re-encode.'));
+  if(p.hasEditList) list.push(issue('warn','Edit list present','elst',
+    'An edit list can shift the start, skip leading frames, or drift audio against video. Neutralised on fix.'));
   list.push(issue(p.moovAtEnd?'warn':'ok','Container',p.moovAtEnd?'moov at end':'faststart',
     p.moovAtEnd ? 'The index sits after the video data. Slower to ingest, and some uploaders stall. Fixed below.' : 'Already optimal.'));
   for(const f of dx.findings){ if(f.severity!=='ok') list.push(issue(f.severity==='critical'?'bad':'warn', f.title,'', f.symptom+' — '+f.fix)); }
@@ -190,8 +211,10 @@ function show(){
   <div class="card">
     <div class="step"><i>3</i><b>Fix it</b></div>
     ${fixable
-      ? `<p class="tiny">Your container needs fixing. Streams are copied byte-for-byte —
-         ${p.hdr?'HDR, ':''}frame rate, bitrate and audio are untouched.</p>`
+      ? `<p class="tiny">We'll ${[p.moovAtEnd?'move <b>moov</b> to the front':null,
+            p.isQuickTime?'relabel <b>QuickTime → MP4</b>':null,
+            p.hasEditList?'neutralise the <b>edit list</b>':null].filter(Boolean).join(', ')}.
+         Streams are copied byte-for-byte — ${p.hdr?'HDR, ':''}frame rate, bitrate and audio untouched.</p>`
       : `<p class="tiny">Nothing needs fixing in the container. You can still apply the
          experimental patch below, or just upload your original.</p>`}
     <label class="opt"><input type="checkbox" id="patch">
@@ -226,6 +249,61 @@ function checklist(){
     </ol></div>`;
 }
 
+/* ---------------- compare: what TikTok actually delivered ---------------- */
+const drop2=$('#drop2'), file2=$('#file2');
+drop2.onclick=()=>file2.click();
+file2.onchange=e=>e.target.files[0]&&compare(e.target.files[0]);
+['dragenter','dragover'].forEach(n=>drop2.addEventListener(n,e=>{e.preventDefault();drop2.classList.add('hot')}));
+['dragleave','drop'].forEach(n=>drop2.addEventListener(n,e=>{e.preventDefault();drop2.classList.remove('hot')}));
+drop2.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)compare(f)});
+
+async function compare(file){
+  const box=$('#cmp');
+  box.innerHTML='<p class="tiny">Reading…</p>';
+  let d;
+  try{ d = await probeFile(file); }
+  catch(err){ box.innerHTML=`<p class="tiny">Couldn't read it: ${esc(err.message)}</p>`; return; }
+
+  const src = cur ? cur.p : null;
+  const row=(label,a,b,good)=>`<tr>
+    <td style="padding:7px 4px;font-weight:800">${esc(label)}</td>
+    <td style="padding:7px 4px;opacity:.7">${esc(a??'—')}</td>
+    <td style="padding:7px 4px;font-weight:800">${esc(b)} ${good===null?'':good?'<span style="color:#2fb862">✓</span>':'<span style="color:#e0474c">✗</span>'}</td></tr>`;
+
+  const fmt=v=>v.hdrFormat==='dolbyvision'?'Dolby Vision':v.hdrFormat==='hlg'?'HLG HDR':v.hdr?'HDR':'SDR';
+  const rows=[];
+  rows.push(row('Resolution', src?`${src.width}×${src.height}`:null, `${d.width}×${d.height}`, null));
+  rows.push(row('Frame rate', src?`${src.fps} fps`:null, `${d.fps} fps`,
+    src ? Math.abs(d.fps-src.fps)<1 : null));
+  rows.push(row('Codec', src?`${src.codec} ${src.bitDepth}-bit`:null, `${d.codec} ${d.bitDepth}-bit`, null));
+  rows.push(row('Colour', src?fmt(src):null, fmt(d), src ? (!src.hdr || d.hdr) : null));
+  rows.push(row('Transfer', src?(src.colorTransfer||'—'):null, d.colorTransfer||'—', null));
+  rows.push(row('Dolby Vision', src?(src.hasDolbyVisionRPU?'yes':'no'):null,
+    d.hasDolbyVisionRPU?'yes':'no', src ? (!src.hasDolbyVisionRPU || d.hasDolbyVisionRPU) : null));
+  rows.push(row('Bitrate', src?`${src.bitrateMbps} Mbps`:null, `${d.bitrateMbps} Mbps`, null));
+
+  const fpsKept = src && Math.abs(d.fps-src.fps)<1;
+  const hdrKept = src && (!src.hdr || d.hdr);
+  let verdict, cls;
+  if(!src){ verdict='Drop your source file at the top first to compare side by side.'; cls='v-info'; }
+  else if(fpsKept && hdrKept){ verdict='★ Frame rate and HDR both survived TikTok'; cls='v-good'; }
+  else if(fpsKept){ verdict='Frame rate survived, HDR did not'; cls='v-bad'; }
+  else if(hdrKept){ verdict='HDR survived, frame rate did not'; cls='v-bad'; }
+  else { verdict='Neither frame rate nor HDR survived'; cls='v-bad'; }
+
+  box.innerHTML=`<div class="verdict ${cls}" style="margin-top:12px">${esc(verdict)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+      <tr style="border-bottom:2.5px solid var(--ink)">
+        <th style="text-align:left;padding:6px 4px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">Field</th>
+        <th style="text-align:left;padding:6px 4px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">You sent</th>
+        <th style="text-align:left;padding:6px 4px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">TikTok served</th></tr>
+      ${rows.join('')}
+    </table>
+    <p class="tiny" style="margin-top:10px">Bitrate always drops — every platform re-encodes.
+       What matters is the frame rate and colour rows.</p>
+    <details style="margin-top:9px"><summary>Raw probe of the delivered file</summary><pre>${esc(raw(d))}</pre></details>`;
+}
+
 async function run(){
   const btn=$('#run'), prog=$('#prog'), zero=$('#patch').checked;
   btn.disabled=true;
@@ -233,9 +311,9 @@ async function run(){
   try{
     const r = await faststartRemux(cur.file,(pct,label)=>{
       $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
-    },{zeroDuration:zero});
+    },{ zeroDuration:zero, rebrand:true, stripEdits:true });
 
-    const changed = r.moved || !!r.durationZeroed;
+    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded;
     $('#fill').style.background='var(--green)';
 
     if(!changed){
@@ -256,6 +334,8 @@ async function run(){
 
     const did=[];
     if(r.moved) did.push(`moov moved to the front, ${r.patched} chunk offsets rewritten`);
+    if(r.rebranded) did.push('QuickTime rebranded as standard MP4');
+    if(r.editsStripped) did.push(`${r.editsStripped} edit list${r.editsStripped>1?'s':''} neutralised`);
     if(r.durationZeroed) did.push('header duration zeroed — players will show 0:00, which is expected');
 
     prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
