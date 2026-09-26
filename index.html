@@ -1,100 +1,85 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vague Transcode — check and fix your video before uploading to TikTok</title>
-<meta name="description" content="Free browser tool. Scans your video for the things that cost quality on TikTok — variable frame rate, broken HDR tags, slow container — and fixes the container losslessly. Nothing is uploaded.">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fbf6ec">
+<title>Vague Transcode — fix your video before TikTok ruins it</title>
+<meta name="description" content="Free. Runs in your browser, phone or desktop. Finds what's costing you quality on TikTok — variable frame rate, broken HDR tags, slow container — and fixes it losslessly. Nothing is uploaded.">
 <link rel="stylesheet" href="_style.css">
-<style>
-.drop{border:4px dashed var(--ink);border-radius:20px;padding:46px 20px;text-align:center;
-  background:#fffdf6;cursor:pointer;transition:.15s}
-.drop.hot{background:var(--mint);transform:scale(1.01)}
-.drop .plus{width:62px;height:62px;margin:0 auto 12px;border:3px solid var(--ink);border-radius:50%;
-  background:var(--cyan);display:grid;place-items:center;font-size:34px;font-weight:900;line-height:1}
-.drop b{display:block;font-size:19px;margin-bottom:4px}
-.drop small{font-size:13px;opacity:.7}
-.hide{display:none}
-.verdict{border:3px solid var(--ink);border-radius:14px;padding:13px 16px;font-weight:800;font-size:16px;margin-bottom:14px}
-.v-good{background:var(--mint)} .v-bad{background:#ffe3e3} .v-info{background:var(--peach)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-@media(max-width:560px){.grid2{grid-template-columns:1fr}}
-.stat{border:3px solid var(--ink);border-radius:13px;padding:11px 13px;background:#fff}
-.stat small{display:block;font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.6;font-weight:900}
-.stat b{display:block;font-size:17px;margin-top:2px}
-.row{display:grid;grid-template-columns:24px 1fr auto;gap:9px;align-items:baseline;
-  border:2.5px solid var(--ink);border-radius:11px;padding:9px 11px;margin-bottom:7px;font-size:14px;background:#fff}
-.row.ok{background:#f2fbf6}.row.warn{background:#fff8e6}.row.bad{background:#ffeff0}
-.row i{font-style:normal;font-weight:900;text-align:center}
-.row .n{grid-column:2/4;font-size:12.5px;font-weight:500;opacity:.85;margin-top:4px;line-height:1.5}
-.btn{display:block;width:100%;border:3px solid var(--ink);border-radius:14px;padding:14px;
-  font-size:15px;font-weight:900;cursor:pointer;background:var(--amber);box-shadow:4px 4px 0 var(--ink);
-  font-family:inherit;margin-bottom:9px;transition:.12s;text-align:center;text-decoration:none;color:var(--ink)}
-.btn:hover:not(:disabled){transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
-.btn:disabled{opacity:.45;cursor:default;box-shadow:none}
-.btn.green{background:var(--green);color:#fff}
-.btn.white{background:#fff}
-label.opt{display:flex;gap:9px;align-items:flex-start;border:3px solid var(--ink);border-radius:12px;
-  padding:11px 13px;background:#fff6d9;font-size:13.5px;cursor:pointer;margin-bottom:10px;font-weight:700}
-label.opt span{display:block;font-weight:500;opacity:.8;font-size:12px;margin-top:3px}
-pre.raw{background:var(--ink);color:#9fe8a0;border-radius:12px;padding:13px;font-size:11px;
-  line-height:1.6;overflow:auto;max-height:280px;margin:0;white-space:pre-wrap}
-details summary{cursor:pointer;font-weight:800;font-size:13.5px;padding:6px 0}
-.bar{height:18px;border:3px solid var(--ink);border-radius:999px;background:#fff;overflow:hidden;margin:10px 0}
-.bar i{display:block;height:100%;background:var(--cyan);width:0;transition:width .25s}
-.pill{display:inline-block;border:2.5px solid var(--ink);border-radius:999px;padding:3px 11px;
-  font-size:11px;font-weight:900;background:#fff;margin:0 5px 5px 0}
-</style></head><body><div class="wrap">
+</head><body>
 
-<header>
+<div class="top"><div class="wrap">
   <span class="logo">V</span>
-  <span><b>Vague Transcode</b><span>Check your video before you post it</span></span>
-  <nav><a href="index.html">Tool</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
-</header>
+  <span class="brand"><b>Vague Transcode</b><span>Fix it before you post it</span></span>
+  <nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
+</div></div>
 
-<h1>What's costing you quality?</h1>
-<p class="lead">Drop a video in. It's read <strong>in your browser</strong> — nothing is uploaded,
-nothing is stored, there is no server. You'll see exactly what TikTok is going to do to it.</p>
+<div class="wrap">
 
-<div class="card">
-  <div class="drop" id="drop">
-    <div class="plus">+</div>
-    <b>Drop a video here</b>
-    <small>MP4 · MOV · M4V — read locally, never uploaded</small>
-    <input type="file" id="file" accept="video/*,.mp4,.mov,.m4v,.mkv" class="hide">
-  </div>
+  <!-- ============ STEP 1 ============ -->
+  <section id="s1">
+    <h1>Your video is losing quality<br>before TikTok even sees it.</h1>
+    <p class="lead">Variable frame rate turns 60fps into 30. Bad colour tags make HDR look grey.
+       A lossy transfer from your phone already threw away half the detail.
+       <mark>Check yours in 3 seconds.</mark></p>
+
+    <div class="card">
+      <div class="drop" id="drop">
+        <div class="plus">+</div>
+        <b>Tap to choose a video</b>
+        <small>or drag one here — MP4 / MOV</small>
+        <input type="file" id="file" accept="video/*,.mp4,.mov,.m4v" class="hide">
+      </div>
+      <p class="tiny" style="text-align:center;margin:11px 0 0">
+        🔒 Read on your own device. Never uploaded. No server exists.</p>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="results"></section>
+
+  <!-- ============ INTRO CONTENT ============ -->
+  <section id="intro">
+    <div class="card">
+      <h2>What it finds</h2>
+      <div class="issue bad"><div class="h"><i>✗</i><b>Variable frame rate</b><span>the 60→30 killer</span></div>
+        <p>The single most common reason a 60fps export gets delivered at 30. Platforms re-time VFR
+           footage. Read straight from the frame timing table, not guessed.</p></div>
+      <div class="issue bad"><div class="h"><i>✗</i><b>Broken HDR tags</b><span>the grey look</span></div>
+        <p>Wide-gamut pixels labelled as SDR — the classic CapCut export fault. It's why HDR footage
+           comes out washed out and milky.</p></div>
+      <div class="issue bad"><div class="h"><i>✗</i><b>Transfer damage</b><span>already too late</span></div>
+        <p>A 4K file that's 8-bit H.264 SDR was re-encoded by WhatsApp or by iOS "Automatic" transfer.
+           That loss happened before you even opened this page.</p></div>
+      <div class="issue warn"><div class="h"><i>!</i><b>Slow container</b><span>moov at end</span></div>
+        <p>The index sits after the video data, so uploaders must read the whole file first.
+           Fixable here, losslessly.</p></div>
+      <div class="issue ok"><div class="h"><i>✓</i><b>Dolby Vision</b><span>profile + RPU</span></div>
+        <p>Detects the DV configuration record and which profile it carries.</p></div>
+    </div>
+
+    <div class="card">
+      <h2>What nobody else will tell you</h2>
+      <p><strong>Every platform re-encodes every upload.</strong> TikTok delivers about 1080p at
+         2–2.5&nbsp;Mbps no matter what you send it. No tool prevents that.</p>
+      <p>Tools claiming "no compression" are describing the file they hand back to you — not what
+         your viewers actually receive.</p>
+      <p class="lead">What you <em>can</em> control: the quality of the source their encoder works
+         from, and whether your frame rate and colour survive the trip. That's this.</p>
+    </div>
+
+    <div class="card">
+      <h2>Need more than the container fixed?</h2>
+      <p>Downscaling 4K to 1080p while keeping Dolby Vision can't be done in a browser — a canvas is
+         SDR only, so any in-browser re-encode destroys HDR.</p>
+      <p>The desktop tool uses ffmpeg and <code>dovi_tool</code> to do it properly: extract the DV
+         metadata, encode the base layer, inject it back, and verify it survived.</p>
+      <span class="pill">Linux · macOS · Windows</span><span class="pill">free</span><span class="pill">open source</span>
+    </div>
+  </section>
+
 </div>
 
-<div id="out"></div>
-
-<div class="card" id="intro">
-  <h2>What it checks</h2>
-  <div class="row ok"><i>✓</i><span>Variable frame rate</span><span>the 60→30 killer</span>
-    <div class="n">VFR is the most common reason an exported 60 fps video is delivered at 30. Platforms
-    re-time it. We detect it from the raw frame timing table.</div></div>
-  <div class="row ok"><i>✓</i><span>HDR colour tagging</span><span>washed-out look</span>
-    <div class="n">Wide-gamut pixels tagged as SDR is the classic CapCut export fault — it's why HDR
-    footage looks grey and milky after upload. We read the actual colr box.</div></div>
-  <div class="row ok"><i>✓</i><span>Dolby Vision</span><span>profile + RPU</span>
-    <div class="n">Detects the DV configuration record and which profile it carries.</div></div>
-  <div class="row ok"><i>✓</i><span>Transfer damage</span><span>before you even got here</span>
-    <div class="n">A 4K file that's 8-bit H.264 SDR was almost certainly re-encoded by WhatsApp or by
-    iOS "Automatic" transfer. That loss happened before TikTok ever saw it.</div></div>
-  <div class="row ok"><i>✓</i><span>Faststart</span><span>moov position</span>
-    <div class="n">If the index sits at the end of the file, uploaders have to read the whole thing first.</div></div>
-</div>
-
-<div class="card">
-  <h2>Honest limits</h2>
-  <p><strong>Every platform re-encodes every upload.</strong> TikTok delivers around 1080p at
-  2–2.5&nbsp;Mbps no matter what you send. No tool changes that — anyone claiming "no compression"
-  is describing the file they hand you, not what viewers receive.</p>
-  <p>What you <em>can</em> control is the source their encoder works from, and whether your frame
-  rate and colour survive the trip. That's what this does.</p>
-  <p class="lead" style="font-size:15px">Need to downscale 4K to 1080p while keeping Dolby Vision?
-  That can't be done in a browser — a canvas is SDR only. Use the desktop tool for that.</p>
-</div>
-
-<footer>Runs entirely in your browser · no uploads · no accounts · no analytics</footer>
-</div>
+<footer>Runs entirely on your device · no uploads · no accounts · no analytics</footer>
 
 <script type="module">
 import { probeFile } from './lib/probe.js';
@@ -104,189 +89,187 @@ import { faststartRemux } from './lib/remux.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const drop = $('#drop'), fileInput = $('#file'), out = $('#out');
-let current = null;
+const drop = $('#drop'), fileInput = $('#file'), results = $('#results');
+let cur = null;
 
 drop.onclick = () => fileInput.click();
-fileInput.onchange = e => e.target.files[0] && handle(e.target.files[0]);
-['dragenter','dragover'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.add('hot'); }));
-['dragleave','drop'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.remove('hot'); }));
-drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handle(f); });
+fileInput.onchange = e => e.target.files[0] && go(e.target.files[0]);
+['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('hot')}));
+['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('hot')}));
+drop.addEventListener('drop', e => { const f=e.dataTransfer.files[0]; if(f) go(f); });
 
-function row(state, label, value, note) {
-  const ic = { ok:'✓', warn:'!', bad:'✗' }[state];
-  return `<div class="row ${state}"><i>${ic}</i><span>${esc(label)}</span><span>${esc(value)}</span>
-    ${note ? `<div class="n">${esc(note)}</div>` : ''}</div>`;
+function issue(kind, title, tag, body) {
+  return `<div class="issue ${kind}"><div class="h">
+    <i>${kind==='ok'?'✓':kind==='warn'?'!':'✗'}</i><b>${esc(title)}</b>
+    ${tag?`<span>${esc(tag)}</span>`:''}</div>${body?`<p>${esc(body)}</p>`:''}</div>`;
 }
 
-function rawDump(p) {
-  const L = [];
+function raw(p){
+  const L=[];
   L.push(`file      ${p.fileName}  (${p.fileSizeMB} MB)`);
   L.push(`brand     ${p.brand||'?'}    faststart ${p.moovAtEnd?'NO':'yes'}`);
-  L.push(`video     ${p.width}x${p.height}  rot ${p.rotation}deg  ${p.codec||'?'}  ${p.bitDepth}-bit`);
+  L.push(`video     ${p.width}x${p.height}  rot ${p.rotation}  ${p.codec||'?'}  ${p.bitDepth}-bit`);
   L.push(`timing    ${p.fps} fps  ${p.vfr?'VFR':'CFR'}  ${p.frameCount} frames  ${p.durationSec}s`);
   L.push(`colr box  primaries=${p.colorPrimaries??'ABSENT'}  transfer=${p.colorTransfer??'ABSENT'}`);
   L.push(`          matrix=${p.colorMatrix??'ABSENT'}  range=${p.colorRange}`);
   L.push(`dolby     RPU=${p.hasDolbyVisionRPU?'yes, profile '+p.dvProfile:'none'}`);
   L.push(`verdict   ${p.hdr?'HDR ('+(p.hdrFormat||'?')+')':'SDR'}`);
-  L.push(`bitrate   ${p.bitrateMbps} Mbps     audio ${p.audioCodec||'none'}`);
-  L.push('');
-  L.push('tracks:');
-  for (const t of p._debug.tracks)
-    L.push(`  [${t.kind||'?'}] ${t.dims||'-'}  ts=${t.timescale}  frames=${t.frames}  ${t.codec||''}`);
-  if (p._debug.warnings.length) L.push('', 'warnings: ' + p._debug.warnings.join(' | '));
+  L.push(`bitrate   ${p.bitrateMbps} Mbps    audio ${p.audioCodec||'none'}`);
+  L.push('','tracks:');
+  for(const t of p._debug.tracks) L.push(`  [${t.kind||'?'}] ${t.dims||'-'} ts=${t.timescale} frames=${t.frames} ${t.codec||''}`);
+  if(p._debug.warnings.length) L.push('','warnings: '+p._debug.warnings.join(' | '));
   return L.join('\n');
 }
 
-async function handle(file) {
+async function go(file){
   $('#intro').classList.add('hide');
-  out.innerHTML = `<div class="card"><b>Reading ${esc(file.name)}…</b></div>`;
-  let p, dx, pl;
-  try {
+  results.innerHTML = `<div class="card"><div class="step"><i>1</i><b>Reading ${esc(file.name)}…</b></div>
+    <div class="bar"><i style="width:40%"></i></div></div>`;
+  results.scrollIntoView({behavior:'smooth',block:'start'});
+  let p,dx,pl;
+  try{
     p  = await probeFile(file);
     dx = diagnose(p);
-    pl = plan({ ...p, sizeMB: p.fileSizeMB, path: file.name }, 'tiktok', { uploadPath: 'web' });
-  } catch (err) {
-    out.innerHTML = `<div class="card"><div class="verdict v-bad">Couldn't read this file</div>
-      <p>${esc(err.message)}</p><p class="lead" style="font-size:14px">Fragmented MP4s (DASH/HLS) and
-      non-MP4 containers like MKV aren't supported yet.</p></div>`;
+    pl = plan({...p, sizeMB:p.fileSizeMB, path:file.name}, 'tiktok', {uploadPath:'web'});
+  }catch(err){
+    results.innerHTML = `<div class="card"><div class="verdict v-bad">Couldn't read this file</div>
+      <p class="tiny">${esc(err.message)}</p>
+      <p class="tiny">Fragmented MP4s (DASH/HLS) and containers like MKV aren't supported yet.</p>
+      <button class="btn ghost" onclick="location.reload()">Try another file</button></div>`;
     return;
   }
-  current = { file, p, dx, pl };
-  render();
+  cur = {file,p,dx,pl};
+  show();
 }
 
-function render() {
-  const { file, p, dx, pl } = current;
-  const o = pl.output, asIs = pl.asIs || {};
-  const issues = dx.criticalCount + (p.vfr ? 1 : 0);
-  const fmt = p.hdrFormat === 'dolbyvision' ? 'Dolby Vision'
-            : p.hdrFormat === 'hlg' ? 'HLG HDR'
+function show(){
+  const {file,p,dx} = cur;
+  const bad = dx.criticalCount + (p.vfr?1:0);
+  const fixable = p.moovAtEnd;
+  const fmt = p.hdrFormat==='dolbyvision' ? 'Dolby Vision 8.4'
+            : p.hdrFormat==='hlg' ? 'HLG HDR'
             : p.hdrFormat ? 'HDR' : 'SDR';
-  const rows = [];
+  const big = Math.max(p.width,p.height) > 1920;
+  const list = [];
 
-  rows.push(row(p.vfr ? 'bad' : 'ok', 'Frame rate', `${p.fps} fps ${p.vfr ? 'VFR' : 'CFR'}`,
-    p.vfr ? 'Variable frame rate. The platform will re-time this — a 60 fps export commonly lands at 30 fps.'
-          : 'Constant frame rate. This will be preserved.'));
-
-  rows.push(row(Math.max(p.width,p.height) > 1920 ? 'warn' : 'ok', 'Resolution',
-    `${p.width}×${p.height}`,
-    Math.max(p.width,p.height) > 1920
-      ? `Above TikTok's 1080p delivery ceiling — they'll downscale it with a fast, low-quality filter.`
-      : 'Matches the delivery resolution.'));
-
-  rows.push(row('ok', 'Codec', `${p.codec || '?'} · ${p.bitDepth}-bit`));
-  rows.push(row(p.hdr ? 'ok' : 'warn', 'Colour', fmt,
-    `${p.colorPrimaries || 'untagged'} / ${p.colorTransfer || 'untagged'}`));
-  rows.push(row(p.bitrateMbps < 6 ? 'warn' : 'ok', 'Bitrate', `${p.bitrateMbps} Mbps`,
-    p.bitrateMbps < 6 ? 'Low — gives the platform encoder very little to work with.' : null));
-  rows.push(row(p.moovAtEnd ? 'warn' : 'ok', 'Faststart', p.moovAtEnd ? 'moov at end' : 'moov at front',
-    p.moovAtEnd ? 'Slower to ingest; some uploaders stall. Fixable below, losslessly.' : null));
-
-  for (const f of dx.findings) {
-    if (f.severity === 'ok') continue;
-    rows.push(row(f.severity === 'critical' ? 'bad' : 'warn', f.title, '', `${f.symptom} — ${f.fix}`));
-  }
+  list.push(issue(p.vfr?'bad':'ok','Frame rate',`${p.fps} fps ${p.vfr?'VFR':'CFR'}`,
+    p.vfr ? 'Variable frame rate. TikTok will re-time this — your 60fps export commonly lands at 30fps.'
+          : 'Constant. This will be preserved.'));
+  list.push(issue(big?'warn':'ok','Resolution',`${p.width}×${p.height}`,
+    big ? "Above TikTok's 1080p ceiling. They'll downscale it with a fast, low-quality filter — a proper downscale beforehand looks better."
+        : 'Matches TikTok\u2019s delivery resolution exactly. Nothing to downscale.'));
+  list.push(issue('ok','Codec',`${p.codec||'?'} ${p.bitDepth}-bit`));
+  list.push(issue(p.hdr?'ok':'warn','Colour',fmt,`${p.colorPrimaries||'untagged'} / ${p.colorTransfer||'untagged'}`));
+  list.push(issue(p.bitrateMbps<6?'warn':'ok','Bitrate',`${p.bitrateMbps} Mbps`,
+    p.bitrateMbps<6 ? 'Low — gives their encoder very little to work with.' : null));
+  list.push(issue(p.moovAtEnd?'warn':'ok','Container',p.moovAtEnd?'moov at end':'faststart',
+    p.moovAtEnd ? 'The index sits after the video data. Slower to ingest, and some uploaders stall. Fixed below.' : 'Already optimal.'));
+  for(const f of dx.findings){ if(f.severity!=='ok') list.push(issue(f.severity==='critical'?'bad':'warn', f.title,'', f.symptom+' — '+f.fix)); }
 
   const tool = identifyToolchain(p);
 
-  out.innerHTML = `
+  results.innerHTML = `
   <div class="card">
-    <div class="verdict ${issues ? 'v-bad' : 'v-good'}">
-      ${issues ? `${issues} issue${issues>1?'s':''} will cost you quality`
-               : `★ ${fmt} · ${p.fps} fps · nothing wrong with this file`}
+    <div class="step"><i>2</i><b>What we found</b></div>
+    <div class="verdict ${bad?'v-bad':'v-good'}">
+      ${bad ? `${bad} problem${bad>1?'s':''} will cost you quality`
+            : `★ ${fmt} · ${p.fps} fps · this file is in good shape`}
     </div>
-    ${tool ? `<div class="verdict v-info" style="font-size:14px;font-weight:600">
-       🔍 <b>${esc(tool.likely)}</b><br>${esc(tool.advice)}</div>` : ''}
-
-    <div class="grid2">
-      <div class="stat"><small>Your file</small><b>${p.width}×${p.height} @ ${p.fps}fps</b></div>
-      <div class="stat"><small>TikTok will deliver</small><b>1080×1920 · ~2.4 Mbps</b></div>
+    ${tool?`<div class="verdict v-info" style="font-weight:600;font-size:13.5px">
+       🔍 <b>${esc(tool.likely)}</b><br>${esc(tool.advice)}</div>`:''}
+    <div class="specs">
+      <div class="spec"><small>Your file</small><b>${p.width}×${p.height}</b></div>
+      <div class="spec"><small>Frame rate</small><b>${p.fps} fps</b></div>
+      <div class="spec"><small>Colour</small><b>${esc(fmt)}</b></div>
+      <div class="spec"><small>TikTok delivers</small><b>1080p · ~2.4 Mbps</b></div>
     </div>
-
-    ${rows.join('')}
-
-    <details style="margin-top:10px"><summary>Raw probe — what the file actually says</summary>
-      <pre class="raw">${esc(rawDump(p))}</pre></details>
+    ${list.join('')}
+    <details><summary>Raw probe — what the file actually says</summary><pre>${esc(raw(p))}</pre></details>
   </div>
 
   <div class="card">
-    <h2>Fix it</h2>
+    <div class="step"><i>3</i><b>Fix it</b></div>
+    ${fixable
+      ? `<p class="tiny">Your container needs fixing. Streams are copied byte-for-byte —
+         ${p.hdr?'HDR, ':''}frame rate, bitrate and audio are untouched.</p>`
+      : `<p class="tiny">Nothing needs fixing in the container. You can still apply the
+         experimental patch below, or just upload your original.</p>`}
     <label class="opt"><input type="checkbox" id="patch">
-      <div><b>Also apply the duration patch</b> (experimental)
+      <div>Also apply the duration patch <em>(experimental)</em>
       <span>Zeroes the header duration, which appears to make TikTok compress less aggressively.
-      Players will show 0:00 — that's expected. It exploits a quirk and may stop working at any time.</span></div></label>
-
-    <button class="btn green" id="go">⚡ Fix container &amp; download — lossless${p.hdr ? `, keeps ${esc(fmt)}` : ''}</button>
+      Players will show 0:00 — that's expected. Unproven, and may stop working.</span></div></label>
+    <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
-    <p class="lead" style="font-size:13.5px;margin:6px 0 0">
-      Streams are copied byte-for-byte. Nothing is re-encoded, so ${p.hdr ? 'your HDR, ' : ''}frame rate,
-      bitrate and audio are untouched — only the container layout changes.</p>
+    <button class="btn ghost" onclick="location.reload()">Check a different video</button>
   </div>
 
-  ${Math.max(p.width,p.height) > 1920 || p.vfr ? `
-  <div class="card">
-    <h2>This file would benefit from a re-encode</h2>
-    <p>${p.vfr ? 'It needs locking to constant frame rate. ' : ''}${Math.max(p.width,p.height) > 1920
-      ? 'It should be downscaled to 1080p with a proper filter rather than letting TikTok do it. ' : ''}</p>
-    <p>A browser can't do that without destroying HDR — a canvas is SDR only. The desktop tool
-       uses ffmpeg and <code>dovi_tool</code>, so it can downscale while keeping Dolby Vision intact.</p>
-    <span class="pill">ffmpeg + dovi_tool</span><span class="pill">Linux · Windows · macOS</span><span class="pill">free</span>
-  </div>` : ''}`;
+  ${big||p.vfr ? `<div class="card">
+    <h2>This one would benefit from a re-encode</h2>
+    <p class="tiny">${p.vfr?'It needs locking to constant frame rate. ':''}${big?'It should be downscaled to 1080p with a proper filter instead of letting TikTok do it. ':''}
+    A browser can't do that without destroying HDR. The desktop tool can.</p>
+  </div>`:''}`;
 
-  $('#go').onclick = runFix;
+  $('#run').onclick = run;
+  if (!fixable) $('#run').disabled = !$('#patch').checked;
+  $('#patch').onchange = e => { if (!fixable) $('#run').disabled = !e.target.checked; };
 }
 
-async function runFix() {
-  const btn = $('#go'), prog = $('#prog');
-  const zero = $('#patch').checked;
-  btn.disabled = true;
-  prog.innerHTML = `<div class="bar"><i id="fill"></i></div><div id="lbl" class="lead" style="font-size:13px">Starting…</div>`;
-  try {
-    const r = await faststartRemux(current.file, (pct, label) => {
-      $('#fill').style.width = pct + '%';
-      $('#lbl').textContent = `${label}… ${pct}%`;
-    }, { zeroDuration: zero });
+function checklist(){
+  return `<div class="card">
+    <div class="step"><i>4</i><b>Now upload it properly</b></div>
+    <ol class="check">
+      <li><b>TikTok Studio on desktop</b>, or the app from your Files — not a re-transfer</li>
+      <li>Turn on <b>"Allow high-quality uploads"</b><br><span class="tiny">Phone → Profile → Menu → Settings and privacy → Content preferences</span></li>
+      <li>Post <b>public</b>, not "Only me" — private posts take a different processing path</li>
+      <li><b>Don't edit after posting.</b> No sounds, trims, filters or text — any edit makes TikTok re-process the file and undoes this</li>
+      <li>Wait <b>30+ minutes</b>, then check <b>on your phone</b> — desktop web never shows HDR</li>
+    </ol></div>`;
+}
+
+async function run(){
+  const btn=$('#run'), prog=$('#prog'), zero=$('#patch').checked;
+  btn.disabled=true;
+  prog.innerHTML=`<div class="bar"><i id="fill"></i></div><div class="tiny" id="lbl">Starting…</div>`;
+  try{
+    const r = await faststartRemux(cur.file,(pct,label)=>{
+      $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
+    },{zeroDuration:zero});
 
     const changed = r.moved || !!r.durationZeroed;
-    $('#fill').style.background = 'var(--green)';
+    $('#fill').style.background='var(--green)';
 
-    if (!changed) {
-      // Nothing to do. Do NOT hand back an identical file pretending we fixed it.
-      prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
-        ★ Nothing to fix — this file is already optimal<br>
-        <span style="font-weight:600;font-size:13.5px">moov is already at the front and no patch was
-        requested, so there is literally nothing to change. Upload your original file as it is.</span></div>
-        <p class="lead" style="font-size:13.5px">Downloading a copy would give you a byte-identical
-        file. Tick the duration patch above if you want to try that, otherwise you are done.</p>`;
-      btn.textContent = 'Nothing to change';
-      btn.disabled = true;
+    if(!changed){
+      prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
+        ★ Nothing to change — upload your original<br>
+        <span style="font-weight:500;font-size:13px">moov is already at the front and no patch was
+        requested. A download would be byte-identical to what you already have.</span></div>`;
+      btn.textContent='Nothing to change';
+      results.insertAdjacentHTML('beforeend', checklist());
       return;
     }
 
-    const base = current.file.name.replace(/\.[^.]+$/, '');
-    const name = base + (zero ? '-patched.mp4' : '-faststart.mp4');
+    const name = cur.file.name.replace(/\.[^.]+$/,'') + (zero?'-patched.mp4':'-fixed.mp4');
     const url = URL.createObjectURL(r.blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = name; a.rel = 'noopener';
+    const a=document.createElement('a'); a.href=url; a.download=name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    setTimeout(()=>URL.revokeObjectURL(url),180000);
 
-    const what = [];
-    if (r.moved) what.push(`moov moved to the front (${r.patched} chunk offsets rewritten)`);
-    if (r.durationZeroed) what.push('header duration zeroed — players will show 0:00, which is expected');
+    const did=[];
+    if(r.moved) did.push(`moov moved to the front, ${r.patched} chunk offsets rewritten`);
+    if(r.durationZeroed) did.push('header duration zeroed — players will show 0:00, which is expected');
 
-    prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
-      ✓ <b>${esc(name)}</b> — ${(r.blob.size/1048576).toFixed(1)} MB<br>
-      <span style="font-weight:600;font-size:13.5px">${what.map(esc).join(' · ')}</span></div>
-      <p class="lead" style="font-size:13.5px">Video and audio copied byte-for-byte — no quality change.
-      Upload it with "Allow high-quality uploads" on, and don't edit it after posting.</p>
-      <a class="btn white" id="again" href="${url}" download="${esc(name)}">Download didn't start? Tap here</a>`;
-    btn.textContent = '✓ Done';
-  } catch (err) {
-    btn.disabled = false;
-    prog.innerHTML = `<div class="verdict v-bad" style="margin-top:10px">Couldn't fix it: ${esc(err.message)}
-      <br><span style="font-weight:600;font-size:13.5px">Your original file is untouched.</span></div>`;
+    prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
+      ✓ ${esc(name)} — ${(r.blob.size/1048576).toFixed(1)} MB<br>
+      <span style="font-weight:500;font-size:13px">${did.map(esc).join(' · ')}.
+      Video and audio copied byte-for-byte — no quality change.</span></div>
+      <a class="btn ghost" href="${url}" download="${esc(name)}">Download didn't start? Tap here</a>`;
+    btn.textContent='✓ Done';
+    results.insertAdjacentHTML('beforeend', checklist());
+    results.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(err){
+    btn.disabled=false;
+    prog.innerHTML=`<div class="verdict v-bad" style="margin-top:10px">Couldn't fix it: ${esc(err.message)}
+      <br><span style="font-weight:500;font-size:13px">Your original file is untouched.</span></div>`;
   }
 }
 </script></body></html>
