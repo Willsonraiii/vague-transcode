@@ -162,7 +162,7 @@ async function go(file){
 function show(){
   const {file,p,dx} = cur;
   const bad = dx.criticalCount + (p.vfr?1:0);
-  const fixable = p.moovAtEnd || p.isQuickTime || p.hasEditList;
+  const fixable = p.moovAtEnd || p.isQuickTime || p.hasEditList || p.hasDolbyVisionRPU;
   const fmt = p.hdrFormat==='dolbyvision' ? 'Dolby Vision 8.4'
             : p.hdrFormat==='hlg' ? 'HLG HDR'
             : p.hdrFormat ? 'HDR' : 'SDR';
@@ -181,6 +181,8 @@ function show(){
     p.bitrateMbps<6 ? 'Low — gives their encoder very little to work with.' : null));
   if(p.isQuickTime) list.push(issue('warn','QuickTime branding','qt',
     'This is a QuickTime-branded file, not a standard MP4. Some ingest pipelines treat them differently. Relabelled on fix — no re-encode.'));
+  if(p.hasDolbyVisionRPU) list.push(issue('warn','Dolby Vision','profile '+p.dvProfile,
+    'Profile 8.4 is an HLG base layer plus extra metadata. Platforms handle plain HDR more consistently — removing the DV signalling keeps every bit of the HDR.'));
   if(p.hasEditList) list.push(issue('warn','Edit list present','elst',
     'An edit list can shift the start, skip leading frames, or drift audio against video. Neutralised on fix.'));
   list.push(issue(p.moovAtEnd?'warn':'ok','Container',p.moovAtEnd?'moov at end':'faststart',
@@ -217,6 +219,12 @@ function show(){
          Streams are copied byte-for-byte — ${p.hdr?'HDR, ':''}frame rate, bitrate and audio untouched.</p>`
       : `<p class="tiny">Nothing needs fixing in the container. You can still apply the
          experimental patch below, or just upload your original.</p>`}
+    ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv" checked>
+      <div>Deliver as plain <b>HDR</b>, not Dolby Vision <em>(recommended)</em>
+      <span>Your file is Dolby Vision 8.4 — an HLG base layer plus extra metadata.
+      Removing the Dolby Vision signalling keeps all the HDR but labels the video simply
+      as "HDR", which platforms and players handle more consistently. Lossless: the picture
+      data is not touched.</span></div></label>` : ''}
     <label class="opt"><input type="checkbox" id="patch">
       <div>Also apply the duration patch <em>(experimental)</em>
       <span>Zeroes the header duration, which appears to make TikTok compress less aggressively.
@@ -311,9 +319,10 @@ async function run(){
   try{
     const r = await faststartRemux(cur.file,(pct,label)=>{
       $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
-    },{ zeroDuration:zero, rebrand:true, stripEdits:true });
+    },{ zeroDuration:zero, rebrand:true, stripEdits:true,
+        stripDV: !!($('#nodv') && $('#nodv').checked) });
 
-    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded;
+    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded || (r.dvStripped && r.dvStripped.boxes);
     $('#fill').style.background='var(--green)';
 
     if(!changed){
@@ -336,6 +345,7 @@ async function run(){
     if(r.moved) did.push(`moov moved to the front, ${r.patched} chunk offsets rewritten`);
     if(r.rebranded) did.push('QuickTime rebranded as standard MP4');
     if(r.editsStripped) did.push(`${r.editsStripped} edit list${r.editsStripped>1?'s':''} neutralised`);
+    if(r.dvStripped && r.dvStripped.boxes) did.push('Dolby Vision signalling removed — delivered as plain HDR');
     if(r.durationZeroed) did.push('header duration zeroed — players will show 0:00, which is expected');
 
     prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
