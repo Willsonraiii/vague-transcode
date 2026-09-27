@@ -276,6 +276,28 @@ function show(){
     <button class="btn ghost" onclick="location.reload()">Check a different video</button>
   </div>
 
+  ${p.hdr ? `<div class="card">
+    <div class="step"><i>★</i><b>Find your HDR recipe — A/B test kit</b></div>
+    <p class="tiny">One click builds files that differ in exactly one thing each. Post them all the
+    <b>same way</b> — TikTok Studio (desktop) as "Only me" → flip to Everyone in the app — wait
+    30&nbsp;min, watch at full brightness, then download each post back and drop it into
+    "Did it survive?"</p>
+    <table style="border-collapse:collapse;width:100%">
+      <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">A</td>
+          <td style="padding:4px 0;font-size:13px"><b>Method only</b> — 60/120 fps timescale patch${p.hasDolbyVisionRPU ? ', Dolby Vision kept' : ''}. Our current best recipe.</td></tr>
+      ${p.hasDolbyVisionRPU ? `<tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">B</td>
+          <td style="padding:4px 0;font-size:13px"><b>Method + plain HDR</b> — same as A but the Dolby Vision signalling is stripped, leaving plain HLG. Tests whether TikTok's HDR pipeline prefers HDR without DV.</td></tr>` : ''}
+      <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">C</td>
+          <td style="padding:4px 0;font-size:13px"><b>Untouched</b> — your original file, byte-for-byte. The control.</td></tr>
+    </table>
+    <button class="btn ghost" id="abkit" style="margin-top:10px">⚡ Build the test files</button>
+    <div id="kitprog" class="tiny" style="margin-top:8px"></div>
+    <details style="margin-top:9px"><summary>What each result means</summary>
+      <p class="tiny">• <b>A shows HDR</b> → done. That's your recipe.<br>
+      • <b>B shows HDR, A doesn't</b> → your account needs <b>plain HLG, not Dolby Vision</b> — tell us and the engine default changes.<br>
+      • <b>C shows HDR, A and B don't</b> → our remux is hurting HDR — tell us, that's a bug we hunt.<br>
+      • <b>None show HDR</b> → it's not the file. Next variables: the upload route (share sheet instead of Studio) and the source format (PQ/HDR10 export instead of iPhone DV).</p></details>
+  </div>` : ''}
   ${p.vfr ? `<div class="card">
     <h2>This one would benefit from a re-encode</h2>
     <p class="tiny">It needs locking to constant frame rate.
@@ -283,6 +305,7 @@ function show(){
   </div>`:''}`;
 
   $('#run').onclick = run;
+  const ak = $('#abkit'); if (ak) ak.onclick = buildKit;
   const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method');
   // Run stays clickable when something will actually change: a container fix,
   // the 60/120 fps method, the (SDR-only) duration patch, or the opt-in strip-DV.
@@ -478,6 +501,43 @@ async function mvhdDur(file){
     };
     return (await scan(0)) || (file.size>CH ? await scan(file.size-CH) : null);
   }catch{ return null; }
+}
+
+async function buildKit(){
+  const btn=$('#abkit'), pr=$('#kitprog');
+  if(!cur) return;
+  btn.disabled=true;
+  const base = cur.file.name.replace(/\.[^.]+$/,'');
+  const ext  = cur.file.name.split('.').pop() || 'mp4';
+  const div = cur.p.fps > 90 ? 4 : cur.p.fps > 48 ? 2 : 0;
+  const variants = [
+    { tag:'A-method', label:'A · method only',
+      opts:{ rebrand:true, stripEdits:true, fpsGuard:div } },
+  ];
+  if (cur.p.hasDolbyVisionRPU)
+    variants.push({ tag:'B-plainHDR', label:'B · method + plain HLG (no Dolby Vision)',
+      opts:{ rebrand:true, stripEdits:true, fpsGuard:div, stripDV:true } });
+  variants.push({ tag:'C-untouched', label:'C · your original, untouched', opts:{} });
+  const made=[];
+  for (const v of variants){
+    pr.textContent = `Building ${v.label}…`;
+    try{
+      const r = await faststartRemux(cur.file,(pct,l)=>{ pr.textContent=`${v.label} — ${l}… ${pct}%`; }, v.opts);
+      const blob = v.tag==='C-untouched' ? cur.file : r.blob;
+      const name = v.tag==='C-untouched' ? `${base}-C-untouched.${ext}` : `${base}-${v.tag}.mp4`;
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),180000);
+      made.push(name);
+    }catch(err){ pr.innerHTML += `<br>✗ ${v.label}: ${esc(err.message)}`; }
+  }
+  pr.innerHTML = made.length
+    ? `✓ ${made.length} file${made.length>1?'s':''} downloaded: <b>${made.map(esc).join('</b> · <b>')}</b>.<br>
+       Post them all the SAME way (Studio → "Only me" → flip to Everyone in the app), wait 30 min,
+       then check each at full brightness — and download each back into "Did it survive?".`
+    : 'No files could be built.';
+  btn.disabled=false;
 }
 
 async function run(){
