@@ -226,13 +226,16 @@ function show(){
       as "HDR", which platforms and players handle more consistently. Lossless: the picture
       data is not touched.</span></div></label>` : ''}
     <label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
-      <div>Duration patch <em>(experimental)</em>
-      <span>Sets the movie-header duration to <b>1 tick</b>, so your gallery, Files app and
-      Explorer all show <b>00:00</b> — but the track headers keep their real timing, so the
-      video itself is complete and uploaders still accept it.
-      <br><br><b>An earlier version zeroed the track headers too, which made TikTok refuse the
-      upload.</b> That is fixed — only the movie header is touched now. If an upload still fails,
-      turn this off; nothing else in the fix depends on it.</span></div></label>
+      <div>Duration patch — <em>this is what the paid tools sell</em>
+      <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
+      That is the expected result, not a fault.
+      <br><br><b>⚠ A patched file MUST be uploaded from the phone app using "Files" / attach.</b>
+      TikTok Studio on desktop validates the duration and will refuse it. The gallery picker
+      re-encodes it. Only the Files picker in the app works.</span></div></label>
+    <div id="patchwarn" class="verdict v-bad hide" style="font-size:13.5px">
+      📎 <b>Patched file — desktop upload will be refused.</b>
+      Move it to your phone, open TikTok, tap <b>+</b>, then <b>Files / attach</b> — not the gallery.
+    </div>
     <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
     <button class="btn ghost" onclick="location.reload()">Check a different video</button>
@@ -245,12 +248,33 @@ function show(){
   </div>`:''}`;
 
   $('#run').onclick = run;
+  const pw = $('#patchwarn'), pc = $('#patch');
+  if (pc && pw) pc.onchange = () => pw.classList.toggle('hide', !pc.checked);
   if (!fixable) $('#run').disabled = !$('#patch').checked;
   $('#patch').onchange = e => { if (!fixable) $('#run').disabled = !e.target.checked; };
 }
 
-function checklist(){
+function checklist(patched){
   const hdr = cur && cur.p.hdr;
+  if (patched) return `<div class="card">
+    <div class="step"><i>4</i><b>Upload it — patched files have ONE valid route</b></div>
+    <div class="verdict v-bad" style="font-size:14.5px">
+      ❌ Do NOT use TikTok Studio on desktop — it checks the duration and refuses the file.
+    </div>
+    <ol class="check">
+      <li>Get the file onto your phone <b>losslessly</b><br>
+        <span class="tiny">USB · Telegram "Send as File" · <code>python3 -m http.server 8000</code> ·
+        Drive/Dropbox as a file. Never WhatsApp.</span></li>
+      <li>Open TikTok, tap <b>+</b></li>
+      <li>Choose <b>Files / attach</b> — <b>not</b> your gallery
+        <span class="tiny">The gallery hands TikTok a re-encoded copy. Files passes the original bytes.</span></li>
+      <li>"Allow high-quality uploads" ON · post <b>public</b></li>
+      <li><b>Don't edit after posting</b> — any sound, trim or filter makes TikTok re-process it</li>
+      <li>Wait 30+ min, then check on your phone</li>
+    </ol>
+    <p class="tiny" style="margin-top:10px">The file showing <b>00:00</b> in your gallery is
+       expected — that is the patch working, not a broken file.</p>
+  </div>`;
   return `<div class="card">
     <div class="step"><i>4</i><b>Now upload it — this part matters</b></div>
 
@@ -273,7 +297,13 @@ function checklist(){
     <div class="verdict v-bad" style="margin-top:10px;font-size:13.5px">
       ❌ Never WhatsApp, Messenger or Instagram DM — every one of them re-encodes video.
     </div>
-    <h3 style="margin-top:14px">Then in the TikTok app</h3>
+    <h3 style="margin-top:14px">Then in the TikTok app — this bit matters</h3>
+    <div class="verdict v-bad" style="font-size:13.5px">
+      📎 Add the video with <b>"Files" / attach</b>, <b>NOT</b> from your gallery.
+      <div style="font-weight:500;margin-top:5px">Picking from the photo library makes the OS
+      hand TikTok a re-encoded copy — often 30fps, SDR, lower bitrate. The Files picker passes
+      the original bytes through untouched. This single choice can undo everything above.</div>
+    </div>
     ` : `
     <div class="verdict v-good" style="font-size:14.5px">
       💻 This file is SDR — <b>upload from TikTok Studio on desktop</b>
@@ -373,7 +403,7 @@ async function run(){
         <span style="font-weight:500;font-size:13px">moov is already at the front and no patch was
         requested. A download would be byte-identical to what you already have.</span></div>`;
       btn.textContent='Nothing to change';
-      results.insertAdjacentHTML('beforeend', checklist());
+      results.insertAdjacentHTML('beforeend', checklist(false));
       return;
     }
 
@@ -396,7 +426,7 @@ async function run(){
       Video and audio copied byte-for-byte — no quality change.</span></div>
       <a class="btn ghost" href="${url}" download="${esc(name)}">Download didn't start? Tap here</a>`;
     btn.textContent='✓ Done';
-    results.insertAdjacentHTML('beforeend', checklist());
+    results.insertAdjacentHTML('beforeend', checklist(zero));
     results.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'});
   }catch(err){
     btn.disabled=false;
