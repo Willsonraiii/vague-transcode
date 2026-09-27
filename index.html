@@ -246,15 +246,21 @@ function show(){
       Local players may report the halved rate: that's the patch, not a fault.</span></div></label>` : ''}
     <label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
       <div>${p.hdr
-        ? `Duration patch — <em>experimental on HDR</em>
-           <span><b>⚠ Read this before ticking.</b> Our one patched-HDR test did not render HDR
+        ? `Duration patch — <em>experimental on HDR · likely broken by TikTok's Sept 2026 update</em>
+           <span><b>⚠ After TikTok's September 2026 update, patched (00:00) files can FAIL TO POST</b> —
+           the app's post screen shows no duration and the post is blocked (owner-tested). The
+           60/120 fps method above keeps a real duration and is unaffected — prefer it.<br>
+           <b>Read this before ticking anyway.</b> Our one patched-HDR test did not render HDR
            in-app — but that upload went through the <b>gallery</b>, which re-encodes, so the result
            was confounded. Creators' patched HDR files <b>do</b> deliver full HDR in the feed.
            If you tick this: post once, wait 30 min, then check whether it VISIBLY plays HDR — TikTok shows no HDR tag; on an HDR screen at full brightness, highlights should pop. Slower first render = the HDR pipeline ran.
            If it doesn't render HDR, untick — the frame-rate method above stays the safe part.</span>`
-        : `Duration patch — <em>this is what the paid tools sell</em>
-           <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
-           That is the expected result, not a fault.
+        : `Duration patch — <em>likely broken by TikTok's Sept 2026 update</em>
+           <span><b>⚠ Owner-tested after the update: the app's post screen shows no duration and the
+           post CANNOT be published.</b> Studio refuses 00:00 files too. Kept for experimentation
+           only — the 60/120 fps method above keeps a real duration and is unaffected.<br>
+           What it does: sets the movie-header duration to 1 tick, so the file shows <b>00:00</b>
+           everywhere. That was the expected result, not a fault.
            <br><br><b>⚠ A patched file needs the phone's file route: the Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok).</b>
            TikTok Studio on desktop validates the duration and will refuse it.
            <br><br><b>⚠ Keep patched files OUT of iOS Photos.</b> A 00:00-duration file can
