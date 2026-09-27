@@ -1,0 +1,14 @@
+{
+  "name": "obi-transcode-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "server-transcode.js",
+  "scripts": {
+    "start": "node server-transcode.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
