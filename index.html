@@ -279,9 +279,9 @@ function show(){
   ${p.hdr ? `<div class="card">
     <div class="step"><i>★</i><b>Find your HDR recipe — A/B test kit</b></div>
     <p class="tiny">One click builds files that differ in exactly one thing each. Post them all the
-    <b>same way</b> — TikTok Studio (desktop) as "Only me" → flip to Everyone in the app — wait
-    30&nbsp;min, watch at full brightness, then download each post back and drop it into
-    "Did it survive?"</p>
+    <b>same way</b> — TikTok Studio (laptop or phone desktop-mode browser) as "Only me" →
+    flip to Everyone in the app — wait 30&nbsp;min, watch at full brightness, then download
+    each post back and drop it into "Did it survive?"</p>
     <table style="border-collapse:collapse;width:100%">
       <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">A</td>
           <td style="padding:4px 0;font-size:13px"><b>Method only</b> — 60/120 fps timescale patch${p.hasDolbyVisionRPU ? ', Dolby Vision kept' : ''}. Our current best recipe.</td></tr>
@@ -355,16 +355,16 @@ function checklist(patched){
 
     ${hdr ? `
     <div class="verdict v-info" style="font-size:14.5px">
-      📱 This file is HDR — two routes that keep it
+      💻 This file is HDR — <b>upload from TikTok Studio</b> (laptop, or phone browser
+      in desktop mode)
       <div style="font-weight:500;font-size:13px;margin-top:5px">
-        <b>Route A — Studio "Only me" → flip in the app (recommended if your app has no
-        Files picker).</b> Upload from TikTok Studio on desktop as <b>"Only me"</b>, then
-        open the app → the post → switch visibility to <b>Everyone</b>. Community-verified:
-        60 fps · 1080p · HDR · HEVC all survive. Desktop is a <i>file</i> route (no gallery
-        re-encode) and the app-side flip runs the publish through the app pipeline.<br>
-        <b>Route B — phone, file route:</b> Files picker if your app has one, else the iOS
-        share sheet (Files app → Share → TikTok). Old finding said desktop-web HDR came
-        back SDR — Route A's app-side flip is why the community method still works.</div>
+        <b>The method:</b> Studio upload as <b>"Only me"</b> → open the app → the post →
+        flip visibility to <b>Everyone</b>. Community-verified result: <b>HDR · high
+        quality · high fps</b>, no 30fps conversion. Studio is a <i>file</i> route — the
+        app's own upload path degrades quality, which is exactly why you process the file
+        first and hand it to Studio instead.<br>
+        Phone routes (share sheet, Files picker) are fallbacks only — for accounts where
+        Studio isn't available.</div>
     </div>
     <h3 style="margin-top:12px">Getting it to your phone without wrecking it</h3>
     <ol class="check">
@@ -535,7 +535,8 @@ async function buildKit(){
   pr.innerHTML = made.length
     ? `✓ ${made.length} file${made.length>1?'s':''} downloaded: <b>${made.map(esc).join('</b> · <b>')}</b>.<br>
        Post them all the SAME way (Studio → "Only me" → flip to Everyone in the app), wait 30 min,
-       then check each at full brightness — and download each back into "Did it survive?".`
+       then check each at full brightness — and download each back into "Did it survive?".
+       Studio = laptop browser or phone browser in desktop mode.`
     : 'No files could be built.';
   btn.disabled=false;
 }
