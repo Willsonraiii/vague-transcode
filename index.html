@@ -225,8 +225,8 @@ function show(){
             p.isQuickTime?'relabel <b>QuickTime → MP4</b>':null,
             p.hasEditList?'neutralise the <b>edit list</b>':null].filter(Boolean).join(', ')}.
          Streams are copied byte-for-byte — ${p.hdr?'HDR, ':''}frame rate, bitrate and audio untouched.</p>`
-      : `<p class="tiny">Nothing needs fixing in the container. ${p.hdr
-            ? 'Just upload your original — the duration patch is not offered for HDR files.'
+      : `<p class="tiny">Nothing needs fixing in the container. ${p.fps > 48
+            ? 'The frame-rate method below is still worth applying.'
             : 'You can still apply the experimental patch below, or just upload your original.'}</p>`}
     ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv">
       <div>Strip Dolby Vision, keep HLG <em>(off — testing needed)</em>
@@ -244,12 +244,14 @@ function show(){
       the full frame count survives (the ut0ku/Zilem-style timescale patch, verified in the wild).
       Samples, duration and HDR are untouched — no 00:00, gallery-safe.
       Local players may report the halved rate: that's the patch, not a fault.</span></div></label>` : ''}
-    <label class="opt" style="background:#fff3d6${p.hdr?';opacity:.65':''}"><input type="checkbox" id="patch"${p.hdr?' disabled':''}>
+    <label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
       <div>${p.hdr
-        ? `Duration patch — <em>not available for HDR files</em>
-           <span><b>⚠ Tested result:</b> a duration-patched HDR file does not <b>render</b> as HDR in
-           TikTok's player. The HDR data itself survives their pipeline — but playback never switches
-           into HDR mode for a file whose header reads 00:00. The patch is for SDR content only.</span>`
+        ? `Duration patch — <em>experimental on HDR</em>
+           <span><b>⚠ Read this before ticking.</b> Our one patched-HDR test did not render HDR
+           in-app — but that upload went through the <b>gallery</b>, which re-encodes, so the result
+           was confounded. Creators' patched HDR files <b>do</b> deliver full HDR in the feed.
+           If you tick this: post once, wait 30 min, check for the HDR badge + slower first render.
+           If it doesn't render HDR, untick — the frame-rate method above stays the safe part.</span>`
         : `Duration patch — <em>this is what the paid tools sell</em>
            <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
            That is the expected result, not a fault.
