@@ -108,6 +108,7 @@
 
 <script type="module">
 import { probeFile } from './lib/probe.js';
+import { methodCommand, methodScript } from './lib/method-script.js';
 import { diagnose, identifyToolchain } from './lib/hdr-doctor.js';
 import { plan } from './lib/profiles.js';
 import { faststartRemux } from './lib/remux.js';
@@ -301,6 +302,24 @@ function show(){
       • <b>C shows HDR, A and B don't</b> → our remux is hurting HDR — tell us, that's a bug we hunt.<br>
       • <b>None show HDR</b> → it's not the file. Next variables: the upload route (share sheet instead of Studio) and the source format (PQ/HDR10 export instead of iPhone DV).</p></details>
   </div>` : ''}
+  <div class="card" id="ffcard">
+    <div class="step"><i>🎬</i><b>The FFMPEG method — the true re-encode</b></div>
+    <p class="tiny">The one step a browser tab cannot do: a real <b>x265 re-encode</b> —
+    ${p.hdr ? '10-bit HLG HDR, straight from your HDR source' : 'high-bitrate bt709 (we never fake HDR tags on SDR video)'},
+    20&nbsp;Mbps, ${Math.round(p.fps)}&nbsp;fps, TikTok's own timescale
+    (${p.fps >= 55 ? 19200 : p.fps >= 28 ? 15360 : 19200}), faststart — a completely fresh, clean file.
+    That's what the method creators run. So we build the exact command for <b>this</b> file
+    into a drag-and-drop script: ffmpeg (installs itself if missing) runs it on your machine
+    at full speed. Nothing is uploaded anywhere.</p>
+    <button class="btn go" id="dlmethod" style="width:100%;margin-top:4px">⬇ Download the method script</button>
+    <div class="tiny" style="margin-top:8px">Also available:
+      <a href="#" id="dlmethod-mac">macOS</a> ·
+      <a href="#" id="dlmethod-linux">Linux</a> ·
+      <a href="#" id="copymethod">copy the raw command</a></div>
+    <div id="methodnote" class="tiny" style="margin-top:6px;color:#4da3ff"></div>
+    <details style="margin-top:9px"><summary>The exact command for your file</summary>
+      <pre class="tiny" id="methodcmd" style="white-space:pre-wrap;background:#f6f8fa;padding:8px;border-radius:6px"></pre></details>
+  </div>
   ${p.vfr ? `<div class="card">
     <h2>This one would benefit from a re-encode</h2>
     <p class="tiny">It needs locking to constant frame rate.
@@ -309,6 +328,42 @@ function show(){
 
   $('#run').onclick = run;
   const ak = $('#abkit'); if (ak) ak.onclick = buildKit;
+
+  // FFMPEG-method card: platform-detected script download (runs locally)
+  {
+    const dm = $('#dlmethod');
+    if (dm) {
+      const ua = navigator.userAgent;
+      const plat = /Win/i.test(ua) ? 'win' : /Mac|iPhone|iPad/i.test(ua) ? 'mac' : 'linux';
+      const meta = { win: ['.bat', 'Windows'], mac: ['.command', 'macOS'], linux: ['.sh', 'Linux'] }[plat];
+      dm.textContent = `⬇ Download the method script (${meta[1]})`;
+      const save = (text, name) => {
+        const b = new Blob([text], { type: 'text/plain' });
+        const u = URL.createObjectURL(b);
+        const a = document.createElement('a'); a.href = u; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(u), 4000);
+      };
+      const note = t => { const n = $('#methodnote'); if (n) n.innerHTML = t; };
+      dm.onclick = () => {
+        save(methodScript(cur.p, {}, plat), 'vague-method' + meta[0]);
+        if (plat === 'mac') note('macOS: the first time, right-click the file → <b>Open</b> (Apple quarantines downloaded scripts). Then drag your video onto it.');
+        else if (plat === 'win') note('Drag your video onto the .bat. If ffmpeg is missing it installs itself, then drag again.');
+        else note('In a terminal: <b>chmod +x vague-method.sh</b> once, then <b>./vague-method.sh yourvideo.mp4</b>.');
+      };
+      const mm = $('#dlmethod-mac');
+      if (mm) mm.onclick = e => { e.preventDefault(); save(methodScript(cur.p, {}, 'mac'), 'vague-method.command'); note('macOS: right-click → <b>Open</b> the first time, then drag your video onto it.'); };
+      const ml = $('#dlmethod-linux');
+      if (ml) ml.onclick = e => { e.preventDefault(); save(methodScript(cur.p, {}, 'linux'), 'vague-method.sh'); note('In a terminal: <b>chmod +x vague-method.sh</b> once, then <b>./vague-method.sh yourvideo.mp4</b>.'); };
+      const cm = $('#copymethod');
+      if (cm) cm.onclick = async e => {
+        e.preventDefault();
+        try { await navigator.clipboard.writeText(methodCommand(cur.p)); note('Command copied — paste it into a terminal with ffmpeg installed.'); }
+        catch { note('Copy it from the box below.'); }
+      };
+      const mc = $('#methodcmd'); if (mc) mc.textContent = methodCommand(cur.p);
+    }
+  }
   const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method'), ic = $('#isom');
   // Run stays clickable when something will actually change: a container fix,
   // the fps method, the signature match, the duration patch, or strip-DV.
