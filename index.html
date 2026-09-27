@@ -76,9 +76,10 @@
 
     <div class="card">
       <h2>What nobody else will tell you</h2>
-      <p><strong>Every platform re-encodes every upload.</strong> TikTok <em>accepts</em> up to 4K
-         and 120&nbsp;fps — then serves viewers what its delivery ladder decides. On our reference
-         that measured about 1080p at 2–2.5&nbsp;Mbps. No tool prevents the re-encode.</p>
+      <p><strong>Every platform re-encodes every upload.</strong> TikTok accepts up to 4K and
+         120&nbsp;fps — and, measured on our own account (Sept 2026), <em>delivered</em> a 4K60
+         HDR upload back as <strong>4K&nbsp;60&nbsp;HDR</strong>. The re-encode still happens;
+         the source you feed it decides how good it looks.</p>
       <p>Tools claiming "no compression" are describing the file they hand back to you — not what
          your viewers actually receive. Whether <em>your</em> account is served above 1080p is
          measurable: post, download it back, and use <strong>Did it survive?</strong> below.</p>
@@ -88,9 +89,9 @@
 
     <div class="card">
       <h2>Need more than the container fixed?</h2>
-      <p>Want 1080p out of a 4K Dolby Vision master? TikTok accepts the 4K as-is — but if you want
-         to test your own downscale against theirs, that re-encode can't happen in a browser
-         (a canvas is SDR only, so it destroys HDR).</p>
+      <p>TikTok delivers 4K uploads as 4K (measured) — there's usually no reason to downscale at
+         all anymore. If you ever want to anyway, that re-encode can't happen in a browser
+         (a canvas is SDR only, so it destroys HDR); use the desktop CLI.</p>
       <p>The desktop tool uses ffmpeg and <code>dovi_tool</code> to do it properly: extract the DV
          metadata, encode the base layer, inject it back, and verify it survived.</p>
       <span class="pill">Linux · macOS · Windows</span><span class="pill">free</span><span class="pill">open source</span>
@@ -176,7 +177,7 @@ function show(){
     p.vfr ? 'Variable frame rate. TikTok will re-time this — your 60fps export commonly lands at 30fps.'
           : 'Constant. This will be preserved.'));
   list.push(issue('ok','Resolution',`${p.width}×${p.height}`,
-    big ? "4K — accepted by TikTok (verified). Delivery above 1080p hasn't been measured on our account — check what yours is served with “Did it survive?”."
+    big ? "4K — accepted AND delivered: our 4K60 HDR test post came back from TikTok as 4K 60 HDR (measured Sept 2026). The old “TikTok only delivers 1080p” claim did not hold."
         : 'Matches TikTok\u2019s delivery resolution exactly. Nothing to downscale.'));
   list.push(issue('ok','Codec',`${p.codec||'?'} ${p.bitDepth}-bit`));
   list.push(issue(p.hdr?'ok':'warn','Colour',fmt,`${p.colorPrimaries||'untagged'} / ${p.colorTransfer||'untagged'}`));
@@ -356,7 +357,10 @@ function checklist(patched){
       <li><b>Don't edit after posting.</b> No sounds, trims, filters or text — any edit makes
           TikTok re-process the file and undoes all of this. Caption and hashtags are fine.</li>
       <li>Wait <b>30+ minutes</b> — HDR renditions are generated after the first SDR one</li>
-      <li>Check <b>on your phone</b>, never desktop web — the web player never shows HDR</li>
+      <li>Check <b>on your phone</b>, never desktop web — the web player never shows HDR<br>
+          <span class="tiny">No HDR/Dolby <i>badge</i> in the app doesn't mean HDR was lost — our 4K60
+          test post showed no badge in-app, yet downloaded back as 4K 60 HDR. The download-back
+          check below is the truth.</span></li>
     </ol>
     <p class="tiny" style="margin-top:10px">Then download it back and drop it in
        <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
