@@ -77,9 +77,9 @@
     <div class="card">
       <h2>What nobody else will tell you</h2>
       <p><strong>Every platform re-encodes every upload.</strong> TikTok accepts up to 4K and
-         120&nbsp;fps — and, measured on our own account (Sept 2026), <em>delivered</em> a 4K60
-         HDR upload back as <strong>4K&nbsp;60&nbsp;HDR</strong>. The re-encode still happens;
-         the source you feed it decides how good it looks.</p>
+         120&nbsp;fps — and our 4K60 test post came back from TikTok as <strong>4K&nbsp;60</strong>
+         (measured, Sept 2026). The re-encode still happens; the source you feed it decides how
+         good it looks.</p>
       <p>Tools claiming "no compression" are describing the file they hand back to you — not what
          your viewers actually receive. Whether <em>your</em> account is served above 1080p is
          measurable: post, download it back, and use <strong>Did it survive?</strong> below.</p>
@@ -177,7 +177,7 @@ function show(){
     p.vfr ? 'Variable frame rate. TikTok will re-time this — your 60fps export commonly lands at 30fps.'
           : 'Constant. This will be preserved.'));
   list.push(issue('ok','Resolution',`${p.width}×${p.height}`,
-    big ? "4K — accepted AND delivered: our 4K60 HDR test post came back from TikTok as 4K 60 HDR (measured Sept 2026). The old “TikTok only delivers 1080p” claim did not hold."
+    big ? "4K — accepted AND delivered: our 4K60 test post came back from TikTok as 4K 60 (measured Sept 2026). The old “TikTok only delivers 1080p” claim did not hold. HDR tags survived in the downloaded file, but in-app HDR playback never engaged on that (patched) upload — see the upload checklist."
         : 'Matches TikTok\u2019s delivery resolution exactly. Nothing to downscale.'));
   list.push(issue('ok','Codec',`${p.codec||'?'} ${p.bitDepth}-bit`));
   list.push(issue(p.hdr?'ok':'warn','Colour',fmt,`${p.colorPrimaries||'untagged'} / ${p.colorTransfer||'untagged'}`));
@@ -243,11 +243,14 @@ function show(){
            <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
            That is the expected result, not a fault.
            <br><br><b>⚠ A patched file needs the phone's file route: the Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok).</b>
-           TikTok Studio on desktop validates the duration and will refuse it. The gallery picker
-           re-encodes it. Only the Files picker in the app works.</span>`}</div></label>
+           TikTok Studio on desktop validates the duration and will refuse it.
+           <br><br><b>⚠ Keep patched files OUT of iOS Photos.</b> A 00:00-duration file can
+           destabilise the gallery — owner-tested: Photos force-closed repeatedly until the file
+           was removed. Store it in the Files app and hand it to TikTok from there.</span>`}</div></label>
     <div id="patchwarn" class="verdict v-bad hide" style="font-size:13.5px">
       📎 <b>Patched file — desktop upload will be refused.</b>
       Move it to your phone, then pass the file itself — Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok). Not the gallery: it re-encodes the duration back in.
+      <b>Keep it out of Photos</b> — a 00:00 file can crash the gallery (tested).
     </div>
     <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
@@ -283,9 +286,11 @@ function checklist(patched){
       ❌ Do NOT use TikTok Studio on desktop — it checks the duration and refuses the file.
     </div>
     <ol class="check">
-      <li>Get the file onto your phone <b>losslessly</b><br>
+      <li>Get the file onto your phone <b>losslessly</b> — and <b>keep it OUT of Photos</b><br>
         <span class="tiny">USB · Telegram "Send as File" · <code>python3 -m http.server 8000</code> ·
-        Drive/Dropbox as a file. Never WhatsApp.</span></li>
+        Drive/Dropbox as a file. Never WhatsApp.<br>
+        A 00:00-duration file saved into Photos can crash the gallery app (owner-tested: Photos
+        force-closed until the file was removed). Store it in the Files app.</span></li>
       <li>Pass the <b>file itself</b> to TikTok — not a gallery pick<br>
         <span class="tiny">App versions differ. If your picker shows a <b>Files / browse</b> option,
         use it — the original bytes pass through.<br>
@@ -358,9 +363,10 @@ function checklist(patched){
           TikTok re-process the file and undoes all of this. Caption and hashtags are fine.</li>
       <li>Wait <b>30+ minutes</b> — HDR renditions are generated after the first SDR one</li>
       <li>Check <b>on your phone</b>, never desktop web — the web player never shows HDR<br>
-          <span class="tiny">No HDR/Dolby <i>badge</i> in the app doesn't mean HDR was lost — our 4K60
-          test post showed no badge in-app, yet downloaded back as 4K 60 HDR. The download-back
-          check below is the truth.</span></li>
+          <span class="tiny">Judge HDR by what the app <i>plays</i>, not only by tags. Creators' HDR
+          posts show a badge and a slower first render (a separate HDR pipeline). Our patched 4K60
+          post: no badge, instant playback — the HDR pipeline never engaged. The download-back check
+          below reads the delivered file's tags — that's the other half of the truth.</span></li>
     </ol>
     <p class="tiny" style="margin-top:10px">Then download it back and drop it in
        <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
