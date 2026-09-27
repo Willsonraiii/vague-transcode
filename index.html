@@ -228,15 +228,18 @@ function show(){
       : `<p class="tiny">Nothing needs fixing in the container. ${p.fps > 48
             ? 'The frame-rate method below is still worth applying.'
             : 'You can still apply the experimental patch below, or just upload your original.'}</p>`}
-    ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv">
-      <div>Strip Dolby Vision, keep HLG <em>(off — testing needed)</em>
-      <span>Your file is Dolby Vision 8.4: an HLG base layer plus metadata. Removing the DV
-      signalling leaves plain HLG HDR.
-      <br><br><b>⚠ Leave this OFF unless you are testing.</b> It was briefly on by default, and
-      HDR stopped surviving upload. TikTok may use the Dolby Vision box to decide that a file
-      is HDR at all — stripping it may drop you out of their HDR pipeline. The "HDR" tag you
-      see on other people's videos is what TikTok <i>delivers</i>, not what they uploaded.
-      Lossless either way.</span></div></label>` : ''}
+    ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv" checked>
+      <div>Deliver as <b>plain HLG</b> — strip Dolby Vision <em>(recommended)</em>
+      <span><b>Measured:</b> every HDR file TikTok actually delivers is plain HLG — their encoder
+      strips Dolby Vision itself (verified on two delivered posts: 10-bit bt2020/HLG, DV gone).
+      Matching their output format removes the last difference between your upload and a
+      creator-grade one. Lossless: same bytes, relabelled signalling.</span></div></label>` : ''}
+    <label class="opt" style="background:#eef9ef"><input type="checkbox" id="isom" checked>
+      <div>Match TikTok's delivery signature <em>(recommended)</em>
+      <span>Sets the container brand to <b>isom</b> (the brand TikTok's own muxer writes —
+      delivered files never carry mp42/qt) and the video timescale to <b>19200</b> (their standard,
+      rescaled exactly — timing, fps and duration unchanged). Your file stops looking like it
+      passed through a third-party tool.</span></div></label>
     ${p.fps > 48 ? `<label class="opt" style="background:#eef7ff"><input type="checkbox" id="method" checked>
       <div>60/120 fps method — <em>what the paid tools actually do</em>
       <span>Divides the container's timescale by ${p.fps > 90 ? 4 : 2}, so TikTok's encoder reads your
@@ -286,9 +289,9 @@ function show(){
     <div id="kitprog" class="tiny" style="margin-top:8px"></div>
     <table style="border-collapse:collapse;width:100%;margin-top:10px">
       <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">A</td>
-          <td style="padding:4px 0;font-size:13px"><b>Method only</b> — 60/120 fps timescale patch${p.hasDolbyVisionRPU ? ', Dolby Vision kept' : ''}. Our current best recipe.</td></tr>
+          <td style="padding:4px 0;font-size:13px"><b>The full recipe</b> — fps method + isom signature + timescale 19200${p.hasDolbyVisionRPU ? ' + plain HLG (DV stripped — TikTok delivers plain HLG)' : ''}. Matches everything measured on working HDR posts.</td></tr>
       ${p.hasDolbyVisionRPU ? `<tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">B</td>
-          <td style="padding:4px 0;font-size:13px"><b>Method + plain HDR</b> — same as A but the Dolby Vision signalling is stripped, leaving plain HLG. Tests whether TikTok's HDR pipeline prefers HDR without DV.</td></tr>` : ''}
+          <td style="padding:4px 0;font-size:13px"><b>Same, but Dolby Vision kept</b> — tests whether the DV box helps or hurts vs the plain-HLG recipe.</td></tr>` : ''}
       <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">C</td>
           <td style="padding:4px 0;font-size:13px"><b>Untouched</b> — your original file, byte-for-byte. The control.</td></tr>
     </table>
@@ -306,11 +309,11 @@ function show(){
 
   $('#run').onclick = run;
   const ak = $('#abkit'); if (ak) ak.onclick = buildKit;
-  const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method');
+  const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method'), ic = $('#isom');
   // Run stays clickable when something will actually change: a container fix,
-  // the 60/120 fps method, the (SDR-only) duration patch, or the opt-in strip-DV.
+  // the fps method, the signature match, the duration patch, or strip-DV.
   const syncRun = () => {
-    if (!fixable) $('#run').disabled = !((pc && !pc.disabled && pc.checked) || (nc && nc.checked) || (mc && mc.checked));
+    if (!fixable) $('#run').disabled = !((pc && !pc.disabled && pc.checked) || (nc && nc.checked) || (mc && mc.checked) || (ic && ic.checked));
   };
   if (pc) pc.onchange = () => {
     if (pw) pw.classList.toggle('hide', !pc.checked);
@@ -318,6 +321,7 @@ function show(){
   };
   if (nc) nc.onchange = syncRun;
   if (mc) mc.onchange = syncRun;
+  if (ic) ic.onchange = syncRun;
   syncRun();
 }
 
@@ -511,12 +515,12 @@ async function buildKit(){
   const ext  = cur.file.name.split('.').pop() || 'mp4';
   const div = cur.p.fps > 90 ? 4 : cur.p.fps > 48 ? 2 : 0;
   const variants = [
-    { tag:'A-method', label:'A · method only',
-      opts:{ rebrand:true, stripEdits:true, fpsGuard:div } },
+    { tag:'A-recipe', label:'A · full recipe (method + signature + plain HLG)',
+      opts:{ rebrand:true, stripEdits:true, fpsGuard:div, isoSignature:true, stripDV: cur.p.hasDolbyVisionRPU } },
   ];
   if (cur.p.hasDolbyVisionRPU)
-    variants.push({ tag:'B-plainHDR', label:'B · method + plain HLG (no Dolby Vision)',
-      opts:{ rebrand:true, stripEdits:true, fpsGuard:div, stripDV:true } });
+    variants.push({ tag:'B-keepDV', label:'B · same but Dolby Vision kept',
+      opts:{ rebrand:true, stripEdits:true, fpsGuard:div, isoSignature:true, stripDV:false } });
   variants.push({ tag:'C-untouched', label:'C · your original, untouched', opts:{} });
   const made=[];
   for (const v of variants){
@@ -552,9 +556,10 @@ async function run(){
     const r = await faststartRemux(cur.file,(pct,label)=>{
       $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
     },{ zeroDuration:zero, rebrand:true, stripEdits:true,
-        stripDV: !!($('#nodv') && $('#nodv').checked), fpsGuard: divider });
+        stripDV: !!($('#nodv') && $('#nodv').checked), fpsGuard: divider,
+        isoSignature: !!($('#isom') && $('#isom').checked) });
 
-    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded || (r.dvStripped && r.dvStripped.boxes) || (r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd));
+    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded || (r.dvStripped && r.dvStripped.boxes) || (r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd)) || (r.isoSigned && r.isoSigned.tracks);
     $('#fill').style.background='var(--green)';
 
     if(!changed){
@@ -581,6 +586,10 @@ async function run(){
     if(r.durationZeroed) did.push('header duration set to 1 tick — players will show 0:00, which is expected');
     if(r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd))
       did.push(`frame-rate method applied — timescale ÷${r.fpsGuarded.divider}: headers now declare ${Math.round(cur.p.fps / r.fpsGuarded.divider)} fps, all ${cur.p.fps} fps samples intact`);
+    if(r.isoSigned && r.isoSigned.tracks)
+      did.push(`signature matched — brand isom, video timescale 19200 (×${r.isoSigned.factor})`);
+    if(r.rebranded && !(r.isoSigned && r.isoSigned.tracks))
+      did.push('rebranded as standard MP4 (isom)');
 
     prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
       ✓ ${esc(name)} — ${(r.blob.size/1048576).toFixed(1)} MB<br>
@@ -609,7 +618,25 @@ async function run(){
       if(cur.p.hasEditList)
         V('Edit list', 'present', after.hasEditList ? '⚠ still present' : 'neutralised ✓');
       if(cur.p.isQuickTime || after.isQuickTime)
-        V('Branding', esc(cur.p.brand||'qt'), after.isQuickTime?'⚠ still QuickTime':esc(after.brand||'mp42')+' ✓');
+        V('Branding', esc(cur.p.brand||'qt'), after.isQuickTime?'⚠ still QuickTime':esc(after.brand||'isom')+' ✓');
+      {
+        // NB: engine order is isoTimescale THEN fpsGuard — deliberate. iso rescales
+        // timescale AND stts deltas together (fps-neutral); the guard then divides
+        // the timescale alone, which is what makes players declare 30 fps. Doing it
+        // the other way round would rescale the deltas too and undo the method.
+        const tIn = (cur.p._debug.tracks||[]).find(t=>t.codec==='hevc'||t.codec==='h264');
+        const tOut = (after._debug.tracks||[]).find(t=>t.codec==='hevc'||t.codec==='h264');
+        const div = (r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd)) ? r.fpsGuarded.divider : 1;
+        const expect = tIn ? tIn.timescale / div : null;
+        if (r.isoSigned && r.isoSigned.tracks)
+          V('Video timescale', `${tIn?tIn.timescale:'—'}`,
+            `19200 ✓${div>1?` → ÷${div} (fps method) = ${tOut?tOut.timescale:'?'}`:''}`);
+        else if (tIn && tOut && tOut.timescale === expect)
+          V('Video timescale', `${tIn.timescale}`,
+            div>1 ? `${tOut.timescale} — ÷${div} (fps method)` : `${tOut.timescale} — unchanged${r.isoSigned?' (non-integral, skipped safely)':''}`);
+        else if (tIn && tOut)
+          V('Video timescale', `${tIn.timescale}`, `⚠ ${tOut.timescale}`);
+      }
       const guarded = r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd);
       V('Frame rate · colour', `${cur.p.fps} fps · ${cur.p.hdr?'HDR':'SDR'}`,
         guarded
