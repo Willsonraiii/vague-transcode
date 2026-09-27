@@ -1,5 +1,10 @@
 # Obi transcode server — easiest setup
 
+> **Optional.** The site works fully without this — container fixes and the
+> 10-bit/HDR re-encode both run without a server (see `index.html`'s
+> "Download re-encode script" button). Only set this up if you specifically
+> need to preserve Dolby Vision RPU while changing fps/bitrate/scale.
+
 Everything (ffmpeg, dovi_tool, node) is baked into one Dockerfile, so you
 never have to install anything manually on the server itself — the
 Dockerfile does the exact steps you already ran on Mint, automatically,
@@ -18,9 +23,8 @@ Restart your terminal or `source ~/.bashrc` after.
 fly auth signup   # or: fly auth login if you already have an account
 ```
 
-**3. From inside this `obi-server` folder, launch it:**
+**3. From the repo root, launch it:**
 ```bash
-cd obi-server
 fly launch
 ```
 It'll ask a few questions:
@@ -44,11 +48,15 @@ Should return `{"ok":true}`.
 
 **5. Put that URL into your website**
 
-In `site-integration.md`'s fetch snippet, replace:
+`index.html` doesn't call this server yet — `runFfmpegOptimize`/`downloadMethodScript`
+currently only handle the browser-WASM and native-script paths. To wire in real
+Dolby-Vision-preserving re-encodes, add a fetch to your deployed URL, e.g.:
 ```js
-fetch('https://YOUR-SERVER-URL/api/transcode', ...)
+const res = await fetch('https://obi-transcode.fly.dev/api/transcode', {
+  method: 'POST',
+  body: formDataWithVideoAndOpts,
+});
 ```
-with your real `https://obi-transcode.fly.dev/api/transcode`.
 
 ## Redeploying after changes
 
