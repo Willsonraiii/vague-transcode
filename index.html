@@ -250,7 +250,7 @@ function show(){
            <span><b>⚠ Read this before ticking.</b> Our one patched-HDR test did not render HDR
            in-app — but that upload went through the <b>gallery</b>, which re-encodes, so the result
            was confounded. Creators' patched HDR files <b>do</b> deliver full HDR in the feed.
-           If you tick this: post once, wait 30 min, check for the HDR badge + slower first render.
+           If you tick this: post once, wait 30 min, then check whether it VISIBLY plays HDR — TikTok shows no HDR tag; on an HDR screen at full brightness, highlights should pop. Slower first render = the HDR pipeline ran.
            If it doesn't render HDR, untick — the frame-rate method above stays the safe part.</span>`
         : `Duration patch — <em>this is what the paid tools sell</em>
            <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
@@ -387,10 +387,10 @@ function checklist(patched){
           TikTok re-process the file and undoes all of this. Caption and hashtags are fine.</li>
       <li>Wait <b>30+ minutes</b> — HDR renditions are generated after the first SDR one</li>
       <li>Check <b>on your phone</b>, never desktop web — the web player never shows HDR<br>
-          <span class="tiny">Judge HDR by what the app <i>plays</i>, not only by tags. Creators' HDR
-          posts show a badge and a slower first render (a separate HDR pipeline). Our patched 4K60
-          post: no badge, instant playback — the HDR pipeline never engaged. The download-back check
-          below reads the delivered file's tags — that's the other half of the truth.</span></li>
+          <span class="tiny">TikTok shows <b>no HDR tag</b> — judge by the visible effect: on an HDR
+          screen at full brightness, highlights should pop, and the first render is often slower
+          (the HDR pipeline). Our patched 4K60 post played instantly with no visible HDR — the
+          pipeline never engaged. The download-back check below is the other half of the truth.</span></li>
     </ol>
     <p class="tiny" style="margin-top:10px">Then download it back and drop it in
        <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
