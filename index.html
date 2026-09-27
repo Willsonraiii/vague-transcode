@@ -237,6 +237,13 @@ function show(){
       is HDR at all — stripping it may drop you out of their HDR pipeline. The "HDR" tag you
       see on other people's videos is what TikTok <i>delivers</i>, not what they uploaded.
       Lossless either way.</span></div></label>` : ''}
+    ${p.fps > 48 ? `<label class="opt" style="background:#eef7ff"><input type="checkbox" id="method" checked>
+      <div>60/120 fps method — <em>what the paid tools actually do</em>
+      <span>Divides the container's timescale by ${p.fps > 90 ? 4 : 2}, so TikTok's encoder reads your
+      ${p.fps} fps file as ${Math.round(p.fps / (p.fps > 90 ? 4 : 2))} fps and decimates <b>nothing</b> —
+      the full frame count survives (the ut0ku/Zilem-style timescale patch, verified in the wild).
+      Samples, duration and HDR are untouched — no 00:00, gallery-safe.
+      Local players may report the halved rate: that's the patch, not a fault.</span></div></label>` : ''}
     <label class="opt" style="background:#fff3d6${p.hdr?';opacity:.65':''}"><input type="checkbox" id="patch"${p.hdr?' disabled':''}>
       <div>${p.hdr
         ? `Duration patch — <em>not available for HDR files</em>
@@ -268,17 +275,18 @@ function show(){
   </div>`:''}`;
 
   $('#run').onclick = run;
-  const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv');
+  const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method');
   // Run stays clickable when something will actually change: a container fix,
-  // the (SDR-only) duration patch, or the opt-in strip-DV.
+  // the 60/120 fps method, the (SDR-only) duration patch, or the opt-in strip-DV.
   const syncRun = () => {
-    if (!fixable) $('#run').disabled = !((pc && !pc.disabled && pc.checked) || (nc && nc.checked));
+    if (!fixable) $('#run').disabled = !((pc && !pc.disabled && pc.checked) || (nc && nc.checked) || (mc && mc.checked));
   };
   if (pc) pc.onchange = () => {
     if (pw) pw.classList.toggle('hide', !pc.checked);
     syncRun();
   };
   if (nc) nc.onchange = syncRun;
+  if (mc) mc.onchange = syncRun;
   syncRun();
 }
 
@@ -460,12 +468,14 @@ async function run(){
   prog.innerHTML=`<div class="bar"><i id="fill"></i></div><div class="tiny" id="lbl">Starting…</div>`;
   const t0=performance.now();
   try{
+    const method = $('#method') && $('#method').checked;
+    const divider = method ? (cur.p.fps > 90 ? 4 : cur.p.fps > 48 ? 2 : 0) : 0;
     const r = await faststartRemux(cur.file,(pct,label)=>{
       $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
     },{ zeroDuration:zero, rebrand:true, stripEdits:true,
-        stripDV: !!($('#nodv') && $('#nodv').checked) });
+        stripDV: !!($('#nodv') && $('#nodv').checked), fpsGuard: divider });
 
-    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded || (r.dvStripped && r.dvStripped.boxes);
+    const changed = r.moved || !!r.durationZeroed || r.editsStripped || r.rebranded || (r.dvStripped && r.dvStripped.boxes) || (r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd));
     $('#fill').style.background='var(--green)';
 
     if(!changed){
@@ -490,6 +500,8 @@ async function run(){
     if(r.editsStripped) did.push(`${r.editsStripped} edit list${r.editsStripped>1?'s':''} neutralised`);
     if(r.dvStripped && r.dvStripped.boxes) did.push('Dolby Vision signalling removed — delivered as plain HDR');
     if(r.durationZeroed) did.push('header duration set to 1 tick — players will show 0:00, which is expected');
+    if(r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd))
+      did.push(`frame-rate method applied — timescale ÷${r.fpsGuarded.divider}: headers now declare ${Math.round(cur.p.fps / r.fpsGuarded.divider)} fps, all ${cur.p.fps} fps samples intact`);
 
     prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
       ✓ ${esc(name)} — ${(r.blob.size/1048576).toFixed(1)} MB<br>
@@ -519,8 +531,11 @@ async function run(){
         V('Edit list', 'present', after.hasEditList ? '⚠ still present' : 'neutralised ✓');
       if(cur.p.isQuickTime || after.isQuickTime)
         V('Branding', esc(cur.p.brand||'qt'), after.isQuickTime?'⚠ still QuickTime':esc(after.brand||'mp42')+' ✓');
+      const guarded = r.fpsGuarded && (r.fpsGuarded.mvhd || r.fpsGuarded.mdhd);
       V('Frame rate · colour', `${cur.p.fps} fps · ${cur.p.hdr?'HDR':'SDR'}`,
-        `${after.fps} fps · ${after.hdr?'HDR':'SDR'} — untouched ✓`);
+        guarded
+          ? `declares ${after.fps} fps (method ÷${r.fpsGuarded.divider}) · ${after.hdr?'HDR':'SDR'} — samples unchanged ✓`
+          : `${after.fps} fps · ${after.hdr?'HDR':'SDR'} — untouched ✓`);
       const same = r.blob.size===cur.file.size;
       V('Media data', `${cur.file.size.toLocaleString()} bytes`,
         same ? `${r.blob.size.toLocaleString()} bytes — byte-identical ✓`
