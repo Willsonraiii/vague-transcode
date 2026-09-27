@@ -225,10 +225,13 @@ function show(){
       Removing the Dolby Vision signalling keeps all the HDR but labels the video simply
       as "HDR", which platforms and players handle more consistently. Lossless: the picture
       data is not touched.</span></div></label>` : ''}
-    <label class="opt"><input type="checkbox" id="patch">
-      <div>Also apply the duration patch <em>(experimental)</em>
-      <span>Zeroes the header duration, which appears to make TikTok compress less aggressively.
-      Players will show 0:00 — that's expected. Unproven, and may stop working.</span></div></label>
+    <label class="opt" style="background:#ffe9e9"><input type="checkbox" id="patch">
+      <div>⚠ Duration patch <em>(risky — off by default)</em>
+      <span><b>This has been observed to break uploads.</b> It zeroes the movie-header duration,
+      which some tools claim makes TikTok compress less. In testing it has also caused TikTok to
+      show 00:00 and refuse the upload entirely. Unproven either way. If your upload fails or
+      stalls, turn this off and re-do the file. The rest of the fix is safe and does not depend
+      on it.</span></div></label>
     <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
     <button class="btn ghost" onclick="location.reload()">Check a different video</button>
@@ -246,15 +249,53 @@ function show(){
 }
 
 function checklist(){
+  const hdr = cur && cur.p.hdr;
   return `<div class="card">
-    <div class="step"><i>4</i><b>Now upload it properly</b></div>
+    <div class="step"><i>4</i><b>Now upload it — this part matters</b></div>
+
+    ${hdr ? `
+    <div class="verdict v-info" style="font-size:14.5px">
+      📱 This file is HDR — <b>upload it from the phone app</b>
+      <div style="font-weight:500;font-size:13px;margin-top:5px">
+        TikTok's HDR pipeline only runs on the app upload path. The same file posted from
+        desktop web comes back as SDR. Get it onto your phone first.</div>
+    </div>
+    <h3 style="margin-top:12px">Getting it to your phone without wrecking it</h3>
     <ol class="check">
-      <li><b>TikTok Studio on desktop</b>, or the app from your Files — not a re-transfer</li>
-      <li>Turn on <b>"Allow high-quality uploads"</b><br><span class="tiny">Phone → Profile → Menu → Settings and privacy → Content preferences</span></li>
+      <li><b>USB cable</b> — plain file copy, byte-identical</li>
+      <li><b>Telegram → Saved Messages → "Send as File"</b><br>
+          <span class="tiny">Must be <i>File</i>, not <i>Video</i>. Sending as video re-encodes it.</span></li>
+      <li><b>Local web server</b> — on your PC run <code>python3 -m http.server 8000</code>,
+          then open <code>http://YOUR-PC-IP:8000</code> on the phone</li>
+      <li><b>Google Drive / Dropbox</b> — upload as a <i>file</i>, not through photo backup</li>
+    </ol>
+    <div class="verdict v-bad" style="margin-top:10px;font-size:13.5px">
+      ❌ Never WhatsApp, Messenger or Instagram DM — every one of them re-encodes video.
+    </div>
+    <h3 style="margin-top:14px">Then in the TikTok app</h3>
+    ` : `
+    <div class="verdict v-good" style="font-size:14.5px">
+      💻 This file is SDR — <b>upload from TikTok Studio on desktop</b>
+      <div style="font-weight:500;font-size:13px;margin-top:5px">
+        Desktop web is a single compression pass and accepts files up to 4 GB. Uploading from
+        the phone app adds a second re-encode before TikTok even sees it.</div>
+    </div>
+    <h3 style="margin-top:14px">Then</h3>
+    `}
+
+    <ol class="check">
+      <li>Turn on <b>"Allow high-quality uploads"</b><br>
+          <span class="tiny">Phone → Profile → Menu → Settings and privacy → Content preferences.
+          It applies to desktop uploads too.</span></li>
       <li>Post <b>public</b>, not "Only me" — private posts take a different processing path</li>
-      <li><b>Don't edit after posting.</b> No sounds, trims, filters or text — any edit makes TikTok re-process the file and undoes this</li>
-      <li>Wait <b>30+ minutes</b>, then check <b>on your phone</b> — desktop web never shows HDR</li>
-    </ol></div>`;
+      <li><b>Don't edit after posting.</b> No sounds, trims, filters or text — any edit makes
+          TikTok re-process the file and undoes all of this. Caption and hashtags are fine.</li>
+      <li>Wait <b>30+ minutes</b> — HDR renditions are generated after the first SDR one</li>
+      <li>Check <b>on your phone</b>, never desktop web — the web player never shows HDR</li>
+    </ol>
+    <p class="tiny" style="margin-top:10px">Then download it back and drop it in
+       <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
+  </div>`;
 }
 
 /* ---------------- compare: what TikTok actually delivered ---------------- */
