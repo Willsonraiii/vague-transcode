@@ -326,10 +326,16 @@ function checklist(patched){
 
     ${hdr ? `
     <div class="verdict v-info" style="font-size:14.5px">
-      📱 This file is HDR — <b>upload it from the phone app</b>
+      📱 This file is HDR — two routes that keep it
       <div style="font-weight:500;font-size:13px;margin-top:5px">
-        TikTok's HDR pipeline only runs on the app upload path. The same file posted from
-        desktop web comes back as SDR. Get it onto your phone first.</div>
+        <b>Route A — Studio "Only me" → flip in the app (recommended if your app has no
+        Files picker).</b> Upload from TikTok Studio on desktop as <b>"Only me"</b>, then
+        open the app → the post → switch visibility to <b>Everyone</b>. Community-verified:
+        60 fps · 1080p · HDR · HEVC all survive. Desktop is a <i>file</i> route (no gallery
+        re-encode) and the app-side flip runs the publish through the app pipeline.<br>
+        <b>Route B — phone, file route:</b> Files picker if your app has one, else the iOS
+        share sheet (Files app → Share → TikTok). Old finding said desktop-web HDR came
+        back SDR — Route A's app-side flip is why the community method still works.</div>
     </div>
     <h3 style="margin-top:12px">Getting it to your phone without wrecking it</h3>
     <ol class="check">
@@ -363,7 +369,9 @@ function checklist(patched){
       💻 This file is SDR — <b>upload from TikTok Studio on desktop</b>
       <div style="font-weight:500;font-size:13px;margin-top:5px">
         Desktop web is a single compression pass and accepts files up to 4 GB. Uploading from
-        the phone app adds a second re-encode before TikTok even sees it.</div>
+        the phone app adds a second re-encode before TikTok even sees it.<br>
+        Community method: post as <b>"Only me"</b>, then flip to <b>Everyone</b> in the app —
+        reported to keep 60 fps · HDR · HEVC intact.</div>
     </div>
     <h3 style="margin-top:14px">Then</h3>
     `}
@@ -372,7 +380,9 @@ function checklist(patched){
       <li>Turn on <b>"Allow high-quality uploads"</b><br>
           <span class="tiny">Phone → Profile → Menu → Settings and privacy → Content preferences.
           It applies to desktop uploads too.</span></li>
-      <li>Post <b>public</b>, not "Only me" — private posts take a different processing path</li>
+      <li>Visibility: <b>direct public</b> on the phone route — or <b>"Only me" → flip to
+          Everyone in the app</b> on the Studio route (that flip is part of the method, not
+          a leftover from the old "never private" advice)</li>
       <li><b>Don't edit after posting.</b> No sounds, trims, filters or text — any edit makes
           TikTok re-process the file and undoes all of this. Caption and hashtags are fine.</li>
       <li>Wait <b>30+ minutes</b> — HDR renditions are generated after the first SDR one</li>
