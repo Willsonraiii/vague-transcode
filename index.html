@@ -76,18 +76,21 @@
 
     <div class="card">
       <h2>What nobody else will tell you</h2>
-      <p><strong>Every platform re-encodes every upload.</strong> TikTok delivers about 1080p at
-         2–2.5&nbsp;Mbps no matter what you send it. No tool prevents that.</p>
+      <p><strong>Every platform re-encodes every upload.</strong> TikTok <em>accepts</em> up to 4K
+         and 120&nbsp;fps — then serves viewers what its delivery ladder decides. On our reference
+         that measured about 1080p at 2–2.5&nbsp;Mbps. No tool prevents the re-encode.</p>
       <p>Tools claiming "no compression" are describing the file they hand back to you — not what
-         your viewers actually receive.</p>
+         your viewers actually receive. Whether <em>your</em> account is served above 1080p is
+         measurable: post, download it back, and use <strong>Did it survive?</strong> below.</p>
       <p class="lead">What you <em>can</em> control: the quality of the source their encoder works
          from, and whether your frame rate and colour survive the trip. That's this.</p>
     </div>
 
     <div class="card">
       <h2>Need more than the container fixed?</h2>
-      <p>Downscaling 4K to 1080p while keeping Dolby Vision can't be done in a browser — a canvas is
-         SDR only, so any in-browser re-encode destroys HDR.</p>
+      <p>Want 1080p out of a 4K Dolby Vision master? TikTok accepts the 4K as-is — but if you want
+         to test your own downscale against theirs, that re-encode can't happen in a browser
+         (a canvas is SDR only, so it destroys HDR).</p>
       <p>The desktop tool uses ffmpeg and <code>dovi_tool</code> to do it properly: extract the DV
          metadata, encode the base layer, inject it back, and verify it survived.</p>
       <span class="pill">Linux · macOS · Windows</span><span class="pill">free</span><span class="pill">open source</span>
@@ -172,8 +175,8 @@ function show(){
   list.push(issue(p.vfr?'bad':'ok','Frame rate',`${p.fps} fps ${p.vfr?'VFR':'CFR'}`,
     p.vfr ? 'Variable frame rate. TikTok will re-time this — your 60fps export commonly lands at 30fps.'
           : 'Constant. This will be preserved.'));
-  list.push(issue(big?'warn':'ok','Resolution',`${p.width}×${p.height}`,
-    big ? "Above TikTok's 1080p ceiling. They'll downscale it with a fast, low-quality filter — a proper downscale beforehand looks better."
+  list.push(issue('ok','Resolution',`${p.width}×${p.height}`,
+    big ? "4K — accepted by TikTok (verified). Delivery above 1080p hasn't been measured on our account — check what yours is served with “Did it survive?”."
         : 'Matches TikTok\u2019s delivery resolution exactly. Nothing to downscale.'));
   list.push(issue('ok','Codec',`${p.codec||'?'} ${p.bitDepth}-bit`));
   list.push(issue(p.hdr?'ok':'warn','Colour',fmt,`${p.colorPrimaries||'untagged'} / ${p.colorTransfer||'untagged'}`));
@@ -181,8 +184,8 @@ function show(){
     p.bitrateMbps<6 ? 'Low — gives their encoder very little to work with.' : null));
   if(p.isQuickTime) list.push(issue('warn','QuickTime branding','qt',
     'This is a QuickTime-branded file, not a standard MP4. Some ingest pipelines treat them differently. Relabelled on fix — no re-encode.'));
-  if(p.hasDolbyVisionRPU) list.push(issue('warn','Dolby Vision','profile '+p.dvProfile,
-    'Profile 8.4 is an HLG base layer plus extra metadata. Platforms handle plain HDR more consistently — removing the DV signalling keeps every bit of the HDR.'));
+  if(p.hasDolbyVisionRPU) list.push(issue('ok','Dolby Vision','profile '+p.dvProfile,
+    'Profile 8.4 — an HLG base layer plus dynamic metadata. Keep it: TikTok most likely uses this to route the file into its HDR pipeline.'));
   if(p.hasEditList) list.push(issue('warn','Edit list present','elst',
     'An edit list can shift the start, skip leading frames, or drift audio against video. Neutralised on fix.'));
   list.push(issue(p.moovAtEnd?'warn':'ok','Container',p.moovAtEnd?'moov at end':'faststart',
@@ -204,7 +207,7 @@ function show(){
       <div class="spec"><small>Your file</small><b>${p.width}×${p.height}</b></div>
       <div class="spec"><small>Frame rate</small><b>${p.fps} fps</b></div>
       <div class="spec"><small>Colour</small><b>${esc(fmt)}</b></div>
-      <div class="spec"><small>TikTok delivers</small><b>1080p · ~2.4 Mbps</b></div>
+      <div class="spec"><small>TikTok accepts</small><b>4K · 120 fps</b></div>
     </div>
     ${list.join('')}
     <details><summary>Raw probe — what the file actually says</summary><pre>${esc(raw(p))}</pre></details>
@@ -217,21 +220,30 @@ function show(){
             p.isQuickTime?'relabel <b>QuickTime → MP4</b>':null,
             p.hasEditList?'neutralise the <b>edit list</b>':null].filter(Boolean).join(', ')}.
          Streams are copied byte-for-byte — ${p.hdr?'HDR, ':''}frame rate, bitrate and audio untouched.</p>`
-      : `<p class="tiny">Nothing needs fixing in the container. You can still apply the
-         experimental patch below, or just upload your original.</p>`}
-    ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv" checked>
-      <div>Deliver as plain <b>HDR</b>, not Dolby Vision <em>(recommended)</em>
-      <span>Your file is Dolby Vision 8.4 — an HLG base layer plus extra metadata.
-      Removing the Dolby Vision signalling keeps all the HDR but labels the video simply
-      as "HDR", which platforms and players handle more consistently. Lossless: the picture
-      data is not touched.</span></div></label>` : ''}
-    <label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
-      <div>Duration patch — <em>this is what the paid tools sell</em>
-      <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
-      That is the expected result, not a fault.
-      <br><br><b>⚠ A patched file MUST be uploaded from the phone app using "Files" / attach.</b>
-      TikTok Studio on desktop validates the duration and will refuse it. The gallery picker
-      re-encodes it. Only the Files picker in the app works.</span></div></label>
+      : `<p class="tiny">Nothing needs fixing in the container. ${p.hdr
+            ? 'Just upload your original — the duration patch is not offered for HDR files.'
+            : 'You can still apply the experimental patch below, or just upload your original.'}</p>`}
+    ${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv">
+      <div>Strip Dolby Vision, keep HLG <em>(off — testing needed)</em>
+      <span>Your file is Dolby Vision 8.4: an HLG base layer plus metadata. Removing the DV
+      signalling leaves plain HLG HDR.
+      <br><br><b>⚠ Leave this OFF unless you are testing.</b> It was briefly on by default, and
+      HDR stopped surviving upload. TikTok may use the Dolby Vision box to decide that a file
+      is HDR at all — stripping it may drop you out of their HDR pipeline. The "HDR" tag you
+      see on other people's videos is what TikTok <i>delivers</i>, not what they uploaded.
+      Lossless either way.</span></div></label>` : ''}
+    <label class="opt" style="background:#fff3d6${p.hdr?';opacity:.65':''}"><input type="checkbox" id="patch"${p.hdr?' disabled':''}>
+      <div>${p.hdr
+        ? `Duration patch — <em>not available for HDR files</em>
+           <span><b>⚠ Tested result:</b> a duration-patched HDR file does not <b>render</b> as HDR in
+           TikTok's player. The HDR data itself survives their pipeline — but playback never switches
+           into HDR mode for a file whose header reads 00:00. The patch is for SDR content only.</span>`
+        : `Duration patch — <em>this is what the paid tools sell</em>
+           <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
+           That is the expected result, not a fault.
+           <br><br><b>⚠ A patched file MUST be uploaded from the phone app using "Files" / attach.</b>
+           TikTok Studio on desktop validates the duration and will refuse it. The gallery picker
+           re-encodes it. Only the Files picker in the app works.</span>`}</div></label>
     <div id="patchwarn" class="verdict v-bad hide" style="font-size:13.5px">
       📎 <b>Patched file — desktop upload will be refused.</b>
       Move it to your phone, open TikTok, tap <b>+</b>, then <b>Files / attach</b> — not the gallery.
@@ -241,17 +253,25 @@ function show(){
     <button class="btn ghost" onclick="location.reload()">Check a different video</button>
   </div>
 
-  ${big||p.vfr ? `<div class="card">
+  ${p.vfr ? `<div class="card">
     <h2>This one would benefit from a re-encode</h2>
-    <p class="tiny">${p.vfr?'It needs locking to constant frame rate. ':''}${big?'It should be downscaled to 1080p with a proper filter instead of letting TikTok do it. ':''}
+    <p class="tiny">It needs locking to constant frame rate.
     A browser can't do that without destroying HDR. The desktop tool can.</p>
   </div>`:''}`;
 
   $('#run').onclick = run;
-  const pw = $('#patchwarn'), pc = $('#patch');
-  if (pc && pw) pc.onchange = () => pw.classList.toggle('hide', !pc.checked);
-  if (!fixable) $('#run').disabled = !$('#patch').checked;
-  $('#patch').onchange = e => { if (!fixable) $('#run').disabled = !e.target.checked; };
+  const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv');
+  // Run stays clickable when something will actually change: a container fix,
+  // the (SDR-only) duration patch, or the opt-in strip-DV.
+  const syncRun = () => {
+    if (!fixable) $('#run').disabled = !((pc && !pc.disabled && pc.checked) || (nc && nc.checked));
+  };
+  if (pc) pc.onchange = () => {
+    if (pw) pw.classList.toggle('hide', !pc.checked);
+    syncRun();
+  };
+  if (nc) nc.onchange = syncRun;
+  syncRun();
 }
 
 function checklist(patched){
