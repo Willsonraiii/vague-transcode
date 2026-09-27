@@ -225,13 +225,14 @@ function show(){
       Removing the Dolby Vision signalling keeps all the HDR but labels the video simply
       as "HDR", which platforms and players handle more consistently. Lossless: the picture
       data is not touched.</span></div></label>` : ''}
-    <label class="opt" style="background:#ffe9e9"><input type="checkbox" id="patch">
-      <div>⚠ Duration patch <em>(risky — off by default)</em>
-      <span><b>This has been observed to break uploads.</b> It zeroes the movie-header duration,
-      which some tools claim makes TikTok compress less. In testing it has also caused TikTok to
-      show 00:00 and refuse the upload entirely. Unproven either way. If your upload fails or
-      stalls, turn this off and re-do the file. The rest of the fix is safe and does not depend
-      on it.</span></div></label>
+    <label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
+      <div>Duration patch <em>(experimental)</em>
+      <span>Sets the movie-header duration to <b>1 tick</b>, so your gallery, Files app and
+      Explorer all show <b>00:00</b> — but the track headers keep their real timing, so the
+      video itself is complete and uploaders still accept it.
+      <br><br><b>An earlier version zeroed the track headers too, which made TikTok refuse the
+      upload.</b> That is fixed — only the movie header is touched now. If an upload still fails,
+      turn this off; nothing else in the fix depends on it.</span></div></label>
     <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
     <button class="btn ghost" onclick="location.reload()">Check a different video</button>
