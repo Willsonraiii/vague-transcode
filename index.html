@@ -282,7 +282,9 @@ function show(){
     <b>same way</b> — TikTok Studio (laptop or phone desktop-mode browser) as "Only me" →
     flip to Everyone in the app — wait 30&nbsp;min, watch at full brightness, then download
     each post back and drop it into "Did it survive?"</p>
-    <table style="border-collapse:collapse;width:100%">
+    <button class="btn go" id="abkit" style="width:100%;margin-top:4px">⚡ Build the test files (3 downloads)</button>
+    <div id="kitprog" class="tiny" style="margin-top:8px"></div>
+    <table style="border-collapse:collapse;width:100%;margin-top:10px">
       <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">A</td>
           <td style="padding:4px 0;font-size:13px"><b>Method only</b> — 60/120 fps timescale patch${p.hasDolbyVisionRPU ? ', Dolby Vision kept' : ''}. Our current best recipe.</td></tr>
       ${p.hasDolbyVisionRPU ? `<tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">B</td>
@@ -290,8 +292,6 @@ function show(){
       <tr><td style="padding:4px 10px 4px 0;font-weight:700;font-size:13px">C</td>
           <td style="padding:4px 0;font-size:13px"><b>Untouched</b> — your original file, byte-for-byte. The control.</td></tr>
     </table>
-    <button class="btn ghost" id="abkit" style="margin-top:10px">⚡ Build the test files</button>
-    <div id="kitprog" class="tiny" style="margin-top:8px"></div>
     <details style="margin-top:9px"><summary>What each result means</summary>
       <p class="tiny">• <b>A shows HDR</b> → done. That's your recipe.<br>
       • <b>B shows HDR, A doesn't</b> → your account needs <b>plain HLG, not Dolby Vision</b> — tell us and the engine default changes.<br>
