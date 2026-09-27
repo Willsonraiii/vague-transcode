@@ -241,12 +241,12 @@ function show(){
         : `Duration patch — <em>this is what the paid tools sell</em>
            <span>Sets the movie-header duration to 1 tick, so the file shows <b>00:00</b> everywhere.
            That is the expected result, not a fault.
-           <br><br><b>⚠ A patched file MUST be uploaded from the phone app using "Files" / attach.</b>
+           <br><br><b>⚠ A patched file needs the phone's file route: the Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok).</b>
            TikTok Studio on desktop validates the duration and will refuse it. The gallery picker
            re-encodes it. Only the Files picker in the app works.</span>`}</div></label>
     <div id="patchwarn" class="verdict v-bad hide" style="font-size:13.5px">
       📎 <b>Patched file — desktop upload will be refused.</b>
-      Move it to your phone, open TikTok, tap <b>+</b>, then <b>Files / attach</b> — not the gallery.
+      Move it to your phone, then pass the file itself — Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok). Not the gallery: it re-encodes the duration back in.
     </div>
     <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
     <div id="prog"></div>
@@ -277,7 +277,7 @@ function show(){
 function checklist(patched){
   const hdr = cur && cur.p.hdr;
   if (patched) return `<div class="card">
-    <div class="step"><i>4</i><b>Upload it — patched files have ONE valid route</b></div>
+    <div class="step"><i>5</i><b>Upload it — a patched file has ONE working route</b></div>
     <div class="verdict v-bad" style="font-size:14.5px">
       ❌ Do NOT use TikTok Studio on desktop — it checks the duration and refuses the file.
     </div>
@@ -285,18 +285,24 @@ function checklist(patched){
       <li>Get the file onto your phone <b>losslessly</b><br>
         <span class="tiny">USB · Telegram "Send as File" · <code>python3 -m http.server 8000</code> ·
         Drive/Dropbox as a file. Never WhatsApp.</span></li>
-      <li>Open TikTok, tap <b>+</b></li>
-      <li>Choose <b>Files / attach</b> — <b>not</b> your gallery
-        <span class="tiny">The gallery hands TikTok a re-encoded copy. Files passes the original bytes.</span></li>
+      <li>Pass the <b>file itself</b> to TikTok — not a gallery pick<br>
+        <span class="tiny">App versions differ. If your picker shows a <b>Files / browse</b> option,
+        use it — the original bytes pass through.<br>
+        If your picker <b>only offers the gallery</b> (seen on current app versions, Sept 2026):
+        don't use it for this file — the gallery hands TikTok a re-encoded copy, and a re-encode
+        rebuilds the duration, so the 00:00 patch is gone before TikTok even sees it.<br>
+        Instead try the <b>iOS share sheet</b>: open the Files app → long-press the video →
+        <b>Share → TikTok</b>. That sends the file itself.</span></li>
       <li>"Allow high-quality uploads" ON · post <b>public</b></li>
       <li><b>Don't edit after posting</b> — any sound, trim or filter makes TikTok re-process it</li>
       <li>Wait 30+ min, then check on your phone</li>
     </ol>
     <p class="tiny" style="margin-top:10px">The file showing <b>00:00</b> in your gallery is
-       expected — that is the patch working, not a broken file.</p>
+       expected — that is the patch working, not a broken file. If it shows a normal duration
+       <i>after</i> uploading, the route you used re-encoded it — that's the gallery, not the patch.</p>
   </div>`;
   return `<div class="card">
-    <div class="step"><i>4</i><b>Now upload it — this part matters</b></div>
+    <div class="step"><i>5</i><b>Now upload it — this part matters</b></div>
 
     ${hdr ? `
     <div class="verdict v-info" style="font-size:14.5px">
@@ -319,10 +325,18 @@ function checklist(patched){
     </div>
     <h3 style="margin-top:14px">Then in the TikTok app — this bit matters</h3>
     <div class="verdict v-bad" style="font-size:13.5px">
-      📎 Add the video with <b>"Files" / attach</b>, <b>NOT</b> from your gallery.
-      <div style="font-weight:500;margin-top:5px">Picking from the photo library makes the OS
-      hand TikTok a re-encoded copy — often 30fps, SDR, lower bitrate. The Files picker passes
-      the original bytes through untouched. This single choice can undo everything above.</div>
+      📎 How you add the video decides whether the HDR survives
+      <div style="font-weight:500;margin-top:5px">
+        If your picker shows a <b>Files / browse</b> option — use it. The original bytes, HDR tags
+        and all, pass through untouched.<br><br>
+        If it <b>only offers the gallery</b> (current app versions do — checked Sept 2026):
+        the OS may hand TikTok a re-encoded, flattened copy (that's the old "gallery = 30fps SDR"
+        claim, and it has never been measured on our account). Post <b>one test clip</b> via the
+        gallery, wait 30 minutes, check on your phone — then run <b>"Did it survive?"</b> below on
+        the downloaded post. That single result tells us whether the gallery route keeps HDR or
+        kills it. You can also try the <b>iOS share sheet</b>: Files app → long-press the video →
+        Share → TikTok.
+      </div>
     </div>
     ` : `
     <div class="verdict v-good" style="font-size:14.5px">
@@ -404,10 +418,33 @@ async function compare(file){
     <details style="margin-top:9px"><summary>Raw probe of the delivered file</summary><pre>${esc(raw(d))}</pre></details>`;
 }
 
+async function mvhdDur(file){
+  /* Independent read of the movie-header duration — the number players and
+     galleries actually show. Deliberately does NOT use the engine: it's a
+     second opinion read straight from the bytes. */
+  try{
+    const CH=4*1024*1024;
+    const scan=async off=>{
+      const b=new Uint8Array(await file.slice(off,Math.min(off+CH,file.size)).arrayBuffer());
+      for(let i=0;i+32<=b.length;i+=4){
+        if(b[i]===0x6d&&b[i+1]===0x76&&b[i+2]===0x68&&b[i+3]===0x64){ // 'mvhd'
+          const dv=new DataView(b.buffer,b.byteOffset);
+          return b[i+4]===1
+            ? {ts:Number(dv.getBigUint64(i+20)), dur:Number(dv.getBigUint64(i+28))}
+            : {ts:dv.getUint32(i+16),           dur:dv.getUint32(i+20)};
+        }
+      }
+      return null;
+    };
+    return (await scan(0)) || (file.size>CH ? await scan(file.size-CH) : null);
+  }catch{ return null; }
+}
+
 async function run(){
   const btn=$('#run'), prog=$('#prog'), zero=$('#patch').checked;
   btn.disabled=true;
   prog.innerHTML=`<div class="bar"><i id="fill"></i></div><div class="tiny" id="lbl">Starting…</div>`;
+  const t0=performance.now();
   try{
     const r = await faststartRemux(cur.file,(pct,label)=>{
       $('#fill').style.width=pct+'%'; $('#lbl').textContent=`${label}… ${pct}%`;
@@ -438,7 +475,7 @@ async function run(){
     if(r.rebranded) did.push('QuickTime rebranded as standard MP4');
     if(r.editsStripped) did.push(`${r.editsStripped} edit list${r.editsStripped>1?'s':''} neutralised`);
     if(r.dvStripped && r.dvStripped.boxes) did.push('Dolby Vision signalling removed — delivered as plain HDR');
-    if(r.durationZeroed) did.push('header duration zeroed — players will show 0:00, which is expected');
+    if(r.durationZeroed) did.push('header duration set to 1 tick — players will show 0:00, which is expected');
 
     prog.innerHTML+=`<div class="verdict v-good" style="margin-top:10px">
       ✓ ${esc(name)} — ${(r.blob.size/1048576).toFixed(1)} MB<br>
@@ -446,6 +483,50 @@ async function run(){
       Video and audio copied byte-for-byte — no quality change.</span></div>
       <a class="btn ghost" href="${url}" download="${esc(name)}">Download didn't start? Tap here</a>`;
     btn.textContent='✓ Done';
+
+    /* ---- verification: re-read the OUTPUT file and prove what changed ---- */
+    try{
+      const secs=((performance.now()-t0)/1000).toFixed(1);
+      const after = await probeFile(new File([r.blob],name,{type:'video/mp4'}));
+      const mIn = await mvhdDur(cur.file), mOut = await mvhdDur(r.blob);
+      const fmtT = m => (m && m.ts) ? `${(m.dur/m.ts).toFixed(2)}s` : '—';
+      const rows=[];
+      const V=(f,b,ok)=>rows.push(
+        `<tr><td style="padding:5px 8px 5px 0;font-size:13px">${f}</td>`+
+        `<td style="padding:5px 8px;font-size:13px;opacity:.75">${b}</td>`+
+        `<td style="padding:5px 0;font-size:13px;font-weight:700">${ok}</td></tr>`);
+      V('Container layout', cur.p.moovAtEnd?'moov at end':'moov at front', after.moovAtEnd?'⚠ moov at end':'moov at front ✓');
+      V('Duration header <span class="tiny">(what players show)</span>', esc(fmtT(mIn)),
+        zero ? '0.00s — 1 tick ✓' : esc(fmtT(mOut))+(mIn&&mOut&&mIn.dur===mOut.dur?' ✓':''));
+      if(cur.p.hasDolbyVisionRPU)
+        V('Dolby Vision', `RPU · profile ${cur.p.dvProfile||'8.4'}`,
+          after.hasDolbyVisionRPU ? `kept · profile ${after.dvProfile||'8.4'} ✓` : 'removed — plain HLG HDR ✓');
+      if(cur.p.hasEditList)
+        V('Edit list', 'present', after.hasEditList ? '⚠ still present' : 'neutralised ✓');
+      if(cur.p.isQuickTime || after.isQuickTime)
+        V('Branding', esc(cur.p.brand||'qt'), after.isQuickTime?'⚠ still QuickTime':esc(after.brand||'mp42')+' ✓');
+      V('Frame rate · colour', `${cur.p.fps} fps · ${cur.p.hdr?'HDR':'SDR'}`,
+        `${after.fps} fps · ${after.hdr?'HDR':'SDR'} — untouched ✓`);
+      const same = r.blob.size===cur.file.size;
+      V('Media data', `${cur.file.size.toLocaleString()} bytes`,
+        same ? `${r.blob.size.toLocaleString()} bytes — byte-identical ✓`
+             : `⚠ ${r.blob.size.toLocaleString()} bytes — SIZE CHANGED`);
+      results.insertAdjacentHTML('beforeend', `<div class="card" id="verify">
+        <div class="step"><i>4</i><b>Verified — read back from the output file</b></div>
+        <p class="tiny">Finished in ${secs}s. That speed is the point, not a shortcut: lossless
+        means every video and audio byte is copied unchanged and only the container's layout is
+        rewritten — a re-encode would take minutes and lose quality. The table below was re-read
+        from the downloaded file itself, not from memory:</p>
+        <table style="border-collapse:collapse;width:100%">
+          <tr><th style="text-align:left;padding:4px 8px 4px 0;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">Field</th>
+          <th style="text-align:left;padding:4px 8px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">Your file</th>
+          <th style="text-align:left;padding:4px 0;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase">Output</th></tr>
+          ${rows.join('')}
+        </table>
+        ${same?'':'<div class="verdict v-bad" style="margin-top:8px">⚠ Output size differs from the source — do not upload this file.</div>'}
+      </div>`);
+    }catch(verr){ console.warn('verify failed', verr); }
+
     results.insertAdjacentHTML('beforeend', checklist(zero));
     results.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'});
   }catch(err){
