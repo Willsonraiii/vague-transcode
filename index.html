@@ -329,11 +329,26 @@ async function runFfmpegOptimize(){
   try {
     const result = await rtxTimingWithFFmpeg(file, p, (pct, label) => {
       const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
-      if (fillEl) fillEl.style.width = pct + '%';
+      if (fillEl) fillEl.style.width = Math.min(55, pct * 0.55) + '%';
       if (lblEl) lblEl.textContent = `${label}… ${pct}%`;
     });
 
-    const { blob, factor } = result;
+    // Match the observed RTXFury split: the movie header reports 00:00 for
+    // gallery/preview apps, while the media track keeps its real sample
+    // timeline so TikTok can read the frames during ingest. At the same time,
+    // remove Dolby Vision signalling and leave the 10-bit HLG base layer.
+    const finalized = await faststartRemux(
+      new File([result.blob], 'rtx-timing.mp4', { type: 'video/mp4' }),
+      (pct, label) => {
+        const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
+        if (fillEl) fillEl.style.width = (55 + pct * 0.45) + '%';
+        if (lblEl) lblEl.textContent = `${label}… ${Math.round(55 + pct * 0.45)}%`;
+      },
+      { zeroDuration: 'safe', rebrand: true, stripEdits: true, stripDV: true }
+    );
+
+    const { blob } = { blob: finalized.blob };
+    const factor = result.factor;
     const name = file.name.replace(/\.[^.]+$/, '') + '-rtx-optimized.mp4';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name;
@@ -343,7 +358,7 @@ async function runFfmpegOptimize(){
     prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
       ✓ ${esc(name)} — ${(blob.size/1048576).toFixed(1)} MB<br>
       FFmpeg copied the original video packets and applied the ${factor}× RTX timing method.
-      No zero-duration patch and no video re-encode were used.
+      Movie header is set to 00:00 while the media timeline remains intact; no video re-encode was used and Dolby Vision signalling was converted to plain HLG.
       Upload this file directly through TikTok Studio.
     </div>`;
     btn.textContent = '✓ Optimized and downloaded';
@@ -676,5 +691,5 @@ pipeline never engaged. The download-back check below is the other half of the t
 <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
 </div>`;
 }
-</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a421edadfa16988e',t:'MTc5MDU4OTkxMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body></html>
+</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a422356d7c8a7b80',t:'MTc5MDU5Mjg1Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body></html>
