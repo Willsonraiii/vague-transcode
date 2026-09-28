@@ -107,7 +107,7 @@ import { probeFile } from './lib/probe.js';
 import { diagnose, identifyToolchain } from './lib/hdr-doctor.js';
 import { plan } from './lib/profiles.js';
 import { faststartRemux } from './lib/remux.js';
-import { optimizeWithFFmpeg } from './lib/wasm-encode.js';
+import { optimizeWithFFmpeg, timestampBypassWithFFmpeg } from './lib/wasm-encode.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -328,13 +328,25 @@ async function runFfmpegOptimize(){
   prog.innerHTML = `<div class="bar"><i id="ffFill" style="width:0%"></i></div><div class="tiny" id="ffLbl">Loading FFmpeg in your browser…</div>`;
 
   try {
-    const result = await optimizeWithFFmpeg(file, p, (pct, label) => {
+    // FFmpeg copies the original packets while scaling timestamps. The
+    // one-tick movie-header patch is applied afterwards by the MP4 patcher.
+    const timing = await timestampBypassWithFFmpeg(file, p, (pct, label) => {
       const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
       if (fillEl) fillEl.style.width = pct + '%';
       if (lblEl) lblEl.textContent = `${label}… ${pct}%`;
-    }, { targetFps: Math.round(p.fps) || 30 });
-
-    const { blob, reencoded } = result;
+    });
+    const patched = await faststartRemux(
+      new File([timing.blob], 'timing-output.mp4', { type: 'video/mp4' }),
+      (pct, label) => {
+        const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
+        if (fillEl) fillEl.style.width = Math.max(0, 50 + pct / 2) + '%';
+        if (lblEl) lblEl.textContent = `${label}… ${Math.round(50 + pct / 2)}%`;
+      },
+      { zeroDuration: 'safe', rebrand: true, stripEdits: true, stripDV: false }
+    );
+    const { blob } = { blob: patched.blob };
+    const reencoded = false;
+    const factor = timing.factor;
     const name = file.name.replace(/\.[^.]+$/, '') + '-optimized.mp4';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name;
@@ -345,7 +357,7 @@ async function runFfmpegOptimize(){
       ✓ ${esc(name)} — ${(blob.size/1048576).toFixed(1)} MB<br>
       ${reencoded
         ? 'FFmpeg locked the variable frame rate to constant frame rate.'
-        : 'FFmpeg remuxed the file without re-encoding video — HDR, 10-bit and Dolby Vision samples are preserved.'}
+        : `FFmpeg timestamp method applied (${factor}×). Original video packets were preserved; the output may show 00:00 locally and should be uploaded directly to TikTok Studio.`}
     </div>`;
     btn.textContent = '✓ Optimized and downloaded';
   } catch (err) {
@@ -678,4 +690,4 @@ pipeline never engaged. The download-back check below is the other half of the t
 <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
 </div>`;
 }
-</script></body></html>
+</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a42155b19d79c6af',t:'MTc5MDU4MzY4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body></html>
