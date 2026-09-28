@@ -107,7 +107,7 @@ import { probeFile } from './lib/probe.js';
 import { diagnose, identifyToolchain } from './lib/hdr-doctor.js';
 import { plan } from './lib/profiles.js';
 import { faststartRemux } from './lib/remux.js';
-import { optimizeWithFFmpeg, timestampBypassWithFFmpeg } from './lib/wasm-encode.js';
+import { rtxTimingWithFFmpeg } from './lib/wasm-encode.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -323,31 +323,18 @@ syncRun();
 async function runFfmpegOptimize(){
   const btn = $('#ffmpegOptimize'), prog = $('#ffmpegProg');
   const { p, file } = cur;
-
   btn.disabled = true;
   prog.innerHTML = `<div class="bar"><i id="ffFill" style="width:0%"></i></div><div class="tiny" id="ffLbl">Loading FFmpeg in your browser…</div>`;
 
   try {
-    // FFmpeg copies the original packets while scaling timestamps. The
-    // one-tick movie-header patch is applied afterwards by the MP4 patcher.
-    const timing = await timestampBypassWithFFmpeg(file, p, (pct, label) => {
+    const result = await rtxTimingWithFFmpeg(file, p, (pct, label) => {
       const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
       if (fillEl) fillEl.style.width = pct + '%';
       if (lblEl) lblEl.textContent = `${label}… ${pct}%`;
     });
-    const patched = await faststartRemux(
-      new File([timing.blob], 'timing-output.mp4', { type: 'video/mp4' }),
-      (pct, label) => {
-        const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
-        if (fillEl) fillEl.style.width = Math.max(0, 50 + pct / 2) + '%';
-        if (lblEl) lblEl.textContent = `${label}… ${Math.round(50 + pct / 2)}%`;
-      },
-      { zeroDuration: 'safe', rebrand: true, stripEdits: true, stripDV: false }
-    );
-    const { blob } = { blob: patched.blob };
-    const reencoded = false;
-    const factor = timing.factor;
-    const name = file.name.replace(/\.[^.]+$/, '') + '-optimized.mp4';
+
+    const { blob, factor } = result;
+    const name = file.name.replace(/\.[^.]+$/, '') + '-rtx-optimized.mp4';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
@@ -355,9 +342,9 @@ async function runFfmpegOptimize(){
 
     prog.innerHTML += `<div class="verdict v-good" style="margin-top:10px">
       ✓ ${esc(name)} — ${(blob.size/1048576).toFixed(1)} MB<br>
-      ${reencoded
-        ? 'FFmpeg locked the variable frame rate to constant frame rate.'
-        : `FFmpeg timestamp method applied (${factor}×). Original video packets were preserved; the output may show 00:00 locally and should be uploaded directly to TikTok Studio.`}
+      FFmpeg copied the original video packets and applied the ${factor}× RTX timing method.
+      No zero-duration patch and no video re-encode were used.
+      Upload this file directly through TikTok Studio.
     </div>`;
     btn.textContent = '✓ Optimized and downloaded';
   } catch (err) {
@@ -365,7 +352,6 @@ async function runFfmpegOptimize(){
     btn.disabled = false;
   }
 }
-
 /* ---------------- compare: what TikTok actually delivered ---------------- */
 const drop2=$('#drop2'), file2=$('#file2');
 drop2.onclick=()=>file2.click();
@@ -690,4 +676,5 @@ pipeline never engaged. The download-back check below is the other half of the t
 <b>"Did it survive?"</b> above to see exactly what TikTok delivered.</p>
 </div>`;
 }
-</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a42155b19d79c6af',t:'MTc5MDU4MzY4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body></html>
+</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a421edadfa16988e',t:'MTc5MDU4OTkxMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body></html>
