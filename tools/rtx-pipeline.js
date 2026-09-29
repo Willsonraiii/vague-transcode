@@ -242,11 +242,15 @@ if (!Number.isInteger(TARGET_VIDEO_TIMESCALE / sourceVideoMdhd.timescale)) {
 // ---------------------------------------------------------------------------
 
 const inputBlob = new Blob([source], { type: 'video/mp4' });
+// stripDV: the RTXFury output does NOT carry the Dolby Vision config record —
+// it presents as plain HLG HDR, and that is what makes TikTok deliver an HDR
+// (HLG) result. Our first TikTok test kept the DV record and TikTok did NOT
+// deliver HDR. rebrand: the reference major brand is isom.
 const remuxed = await faststartRemux(inputBlob, () => {}, {
   stripEdits: false,
-  stripDV: false,
+  stripDV: true,
   zeroDuration: false,
-  rebrand: false,
+  rebrand: true,
   isoSignature: true,
 });
 const b = Buffer.from(await remuxed.blob.arrayBuffer());
@@ -442,6 +446,8 @@ console.log(JSON.stringify({
   inputBytes: source.length,
   outputBytes: output.length,
   sizeGrowth: output.length - source.length,
+  dvStripped: remuxed.dvStripped,
+  rebranded: remuxed.rebranded,
   derived: {
     sourceVideoTimescale: sourceVideoMdhd.timescale,
     sourceFps,
