@@ -223,6 +223,22 @@ Notes:
   4K upload needs roughly 1.5-2 GB RAM on the server. Keep this in mind when
   picking the free VM shape (Oracle Always Free ARM has enough).
 
+### Input acceptance + bitrate guidance (2026-09-29)
+ACCEPTABLE (optimizable): 4K 120fps (max, tested) down to any lower
+resolution/fps combination - 4K60, 1080p120, 1080p60, 720p etc. Conditions:
+MP4/MOV, has an audio track, fps above 30 (60 -> x2, 120 -> x4), video
+timescale divides 19200 (phones: 600/1200/2400/4800 - all fine), file under
+600 MB. The pipeline is lossless: output quality = input quality exactly.
+BITRATE GUIDANCE (recommended capture ranges, not TikTok's official spec):
+- 1080p 60fps HEVC 10-bit HDR: 25-35 Mbps (below ~16 Mbps TikTok's re-encode
+  visibly degrades)
+- 4K 60fps HEVC 10-bit HDR/DV: 45-80 Mbps
+- 120fps sources: use the phone's max quality setting
+Rule: record at the highest quality the phone offers - our pipeline never
+re-encodes, so TikTok receives exactly what was recorded.
+600 MB limit = max length by bitrate: 30 Mbps ~ 2.6 min, 40 Mbps ~ 2 min,
+50 Mbps ~ 1.6 min, 25 Mbps ~ 3.2 min.
+
 ### Remaining open questions / known differences
 1. Reference track 1 mdhd duration (ours: 963072 stts sum) - needs the full
    reference dump to confirm.
