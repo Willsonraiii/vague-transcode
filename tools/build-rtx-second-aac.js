@@ -596,29 +596,64 @@ const sttsScaled = sttsBefore.map((e) => ({
   count: e.count,
   duration: u32(e.duration * speedFactor, 'scaled stts duration'),
 }));
-const scaledSum = sttsScaled.reduce((a, e) => a + e.count * e.duration, 0);
 
-const lastEntry = sttsScaled[sttsScaled.length - 1];
-const newLastDuration = targetTotal - (scaledSum - lastEntry.duration);
-if (newLastDuration <= 0) {
-  throw new Error(
-    `Trim target ${targetTotal} is behind the last sample start ${scaledSum - lastEntry.duration}.`,
-  );
+const stsz1 = readStsz(input, stbl1.stsz);
+const sizes1 = stsz1.uniform ? new Array(stsz1.count).fill(stsz1.sampleSize) : stsz1.sizes;
+const N = stsz1.count;
+
+const stsc1 = readStsc(input, stbl1.stsc);
+const chunkOffsets1 = readChunkOffsets(input, stbl1.stco, stbl1.co64);
+const perSampleOffsets = sampleOffsets(stsc1, chunkOffsets1, sizes1, N);
+
+// Flatten the scaled durations, drop samples that start at/after the edit end,
+// trim the boundary sample, and stretch the last sample if the audio is short.
+const flatDurations = [];
+for (const e of sttsScaled) {
+  for (let i = 0; i < e.count; i++) flatDurations.push(e.duration);
+}
+if (flatDurations.length !== N) {
+  throw new Error(`stts sample count ${flatDurations.length} != stsz count ${N}.`);
 }
 
-const trimMode = newLastDuration <= lastEntry.duration ? 'trim' : 'extend';
-if (trimMode === 'extend') {
+const keptDurations = [];
+let droppedSamples = 0;
+let cursor = 0;
+for (let i = 0; i < flatDurations.length; i++) {
+  if (cursor >= targetTotal) {
+    droppedSamples = flatDurations.length - i;
+    break;
+  }
+  if (cursor + flatDurations[i] > targetTotal) {
+    // boundary sample: keep the part inside the edit window
+    keptDurations.push(targetTotal - cursor);
+    droppedSamples = flatDurations.length - i - 1;
+    cursor = targetTotal;
+    break;
+  }
+  keptDurations.push(flatDurations[i]);
+  cursor += flatDurations[i];
+}
+if (!keptDurations.length) {
+  throw new Error('The audio edit window contains no complete sample.');
+}
+if (cursor < targetTotal) {
+  keptDurations[keptDurations.length - 1] += targetTotal - cursor;
+  cursor = targetTotal;
+}
+
+const keptCount = keptDurations.length;
+if (droppedSamples > 0) {
   console.error(
-    `warning: edit end ${targetTotal} exceeds scaled media ${scaledSum}; extending the last sample to ${newLastDuration}.`,
+    `warning: ${droppedSamples} trailing audio sample(s) start at/after the edit end and are dropped.`,
   );
 }
 
-const sttsTrimmed = sttsScaled.slice(0, -1).slice();
-if (lastEntry.count > 1) {
-  sttsTrimmed.push({ count: lastEntry.count - 1, duration: lastEntry.duration });
-  sttsTrimmed.push({ count: 1, duration: newLastDuration });
-} else {
-  sttsTrimmed.push({ count: 1, duration: newLastDuration });
+// Merge consecutive equal durations into stts entries.
+const sttsTrimmed = [];
+for (const d of keptDurations) {
+  const last = sttsTrimmed[sttsTrimmed.length - 1];
+  if (last && last.duration === d) last.count += 1;
+  else sttsTrimmed.push({ count: 1, duration: d });
 }
 const mediaTotalAfter = sttsTrimmed.reduce((a, e) => a + e.count * e.duration, 0);
 if (mediaTotalAfter !== targetTotal) {
@@ -629,27 +664,27 @@ if (mediaTotalAfter !== targetTotal) {
 // Sample data (shared, not duplicated)
 // ---------------------------------------------------------------------------
 
-const stsz1 = readStsz(input, stbl1.stsz);
-const sizes1 = stsz1.uniform ? new Array(stsz1.count).fill(stsz1.sampleSize) : stsz1.sizes;
-const N = stsz1.count;
-if (N < 2) throw new Error('Audio track needs at least two samples for the reference chunk layout.');
-
-const stsc1 = readStsc(input, stbl1.stsc);
-const chunkOffsets1 = readChunkOffsets(input, stbl1.stco, stbl1.co64);
-const perSampleOffsets = sampleOffsets(stsc1, chunkOffsets1, sizes1, N);
+const keptSizes = sizes1.slice(0, keptCount);
+const keptOffsets = perSampleOffsets.slice(0, keptCount);
 
 // Reference chunk layout: one sample per chunk, final chunk holds two samples.
-const track1ChunkCount = N - 1;
+let track1ChunkCount;
 const stscShared = [{ firstChunk: 1, samplesPerChunk: 1, sampleDescriptionIndex: 1 }];
-if (track1ChunkCount > 1) {
+if (keptCount === 1) {
+  track1ChunkCount = 1;
+} else if (keptCount === 2) {
+  track1ChunkCount = 1;
+  stscShared[0].samplesPerChunk = 2;
+} else {
+  track1ChunkCount = keptCount - 1;
   stscShared.push({ firstChunk: track1ChunkCount, samplesPerChunk: 2, sampleDescriptionIndex: 1 });
 }
-const sharedChunkOffsets = perSampleOffsets.slice(0, track1ChunkCount); // first sample of each chunk
+const sharedChunkOffsets = keptOffsets.slice(0, track1ChunkCount); // first sample of each chunk
 
 const fillerBytes = Buffer.alloc(filler.length * fillerCount);
 for (let i = 0; i < fillerCount; i++) filler.copy(fillerBytes, i * filler.length);
 
-const track2Sizes = sizes1.concat(new Array(fillerCount).fill(filler.length));
+const track2Sizes = keptSizes.concat(new Array(fillerCount).fill(filler.length));
 const track2SampleCount = track2Sizes.length;
 
 const track2Stts = sttsTrimmed.slice();
@@ -679,7 +714,7 @@ const trak1New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
   mdhdDuration: mediaTotalAfter,
   sttsEntries: sttsTrimmed,
   stscEntries: stscShared,
-  stszSizes: null,
+  stszSizes: keptSizes,
   stcoOffsets: sharedChunkOffsets,
   ctts: null,
 });
@@ -822,12 +857,12 @@ console.log(JSON.stringify({
   fillerLayout,
   track1: {
     trackId: tkhd.trackId,
-    sampleCount: N,
+    sampleCount: keptCount,
+    droppedSamples,
     sttsBefore: fmtEntries(sttsBefore),
     sttsAfter: fmtEntries(sttsTrimmed),
     mediaDurationBefore: sttsBefore.reduce((a, e) => a + e.count * e.duration, 0),
     mediaDurationAfter: mediaTotalAfter,
-    trimMode,
     mdhdDuration: mediaTotalAfter,
     elst: { duration: editDuration, mediaTime: mediaTime },
     chunkCount: track1ChunkCount,
