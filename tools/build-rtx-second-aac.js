@@ -357,14 +357,13 @@ function buildCtts(sampleCount, offset) {
  *   ctts          {count, offset} or null
  * Returns { buffer, stco: {type, count, width} } — stco located by signature.
  */
-function buildAudioTrak(b, srcTrak, srcStbl, opts) {
+function buildAudioTrak(b, srcTrak, srcStblBox, srcStbl, opts) {
   const use64 = Boolean(srcStbl.co64);
   const offsetBox = buildChunkOffsets(opts.stcoOffsets, use64);
 
   function rebuildStbl() {
     const parts = [];
-    readBoxes(b, srcStbl.stbl ? srcStbl.stbl.content : srcTrak.stbl.content,
-              srcStbl.stbl ? srcStbl.stbl.end : srcTrak.stbl.end, (box) => {
+    readBoxes(b, srcStblBox.content, srcStblBox.end, (box) => {
       if (box.type === 'stsd') { parts.push(copyBox(b, box)); return; }
       if (box.type === 'stts') {
         parts.push(buildStts(opts.sttsEntries));
@@ -673,7 +672,7 @@ const newTrackId = trakInfos.reduce(
 // Build both traks (chunk offsets still placeholders)
 // ---------------------------------------------------------------------------
 
-const trak1New = buildAudioTrak(input, audio1.box, stbl1, {
+const trak1New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
   trackId: tkhd.trackId,
   tkhdDuration: editDuration,
   elst: 'keep',
@@ -690,7 +689,7 @@ const track2Elst =
   startMode === 'zero' ? { duration: editDuration, mediaTime: 0 } :
   { duration: editDuration, mediaTime };
 
-const trak2New = buildAudioTrak(input, audio1.box, stbl1, {
+const trak2New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
   trackId: newTrackId,
   tkhdDuration: editDuration,
   elst: track2Elst,
