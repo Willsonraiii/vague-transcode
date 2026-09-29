@@ -1,46 +1,51 @@
 /**
- * RTXFury second-AAC-track experiment.
+ * RTXFury second-AAC-track experiment (v2 — matched to the real reference
+ * box dump of rtxfury-matching-1790458373247510.mp4, 2026-09-29).
  *
  * Input:  an MP4 that has already been through the documented video-side
  *         experiment chain (faststartRemux(isoSignature) ->
  *         applyRtxDurationExperiment -> patchVideoEditList ->
- *         tools/split-last-stts.js -> tools/patch-rtx-movie-time.js) and has
+ *         tools/split-last-stts.js -> tools/patch-rtx-movie-time.js) with
  *         exactly one audio ('soun') track still at source timing.
  *
  * Output: the same file with
- *   1. the existing AAC track's timing scaled by the speed factor (default 2,
- *      matching the "[src 60fps x2]" slowdown), i.e. every stts delta and the
- *      mdhd duration are doubled while the 48000 Hz timescale is kept, and
- *      the audio edit list / tkhd duration are recomputed from the scaled
- *      media duration;
- *   2. a NEW second audio track that reproduces the observed RTXFury layout:
- *        - the same 471-ish AAC sample payloads as track 1 (copied bytes),
- *        - followed by N filler samples of an exact 8-byte payload
- *          (default 4239 x 0000000400000000, 1 tick each),
- *        - stts = scaled track-1 entries + one filler entry,
- *        - its own stsc/stsz/stco tables pointing at the appended data,
- *        - the same edit list values as track 1.
+ *   1. the existing AAC track scaled by the speed factor (default 2) with the
+ *      FINAL SAMPLE TRIMMED so the media timeline ends exactly at the edit
+ *      list end (reference: 471x1024 -> 470x2048 + 1x512, because
+ *      4224 + 19976ms * 48 = 963072 = 470*2048 + 512);
+ *   2. the audio track re-chunked like the reference (one sample per chunk,
+ *      last chunk holding two: stsc [(1,1),(N-1,2)], N-1 chunk offsets);
+ *   3. a NEW second audio trak that shares the first track's chunk offsets
+ *      (NO duplicated payload bytes) plus one appended filler chunk of
+ *      4239 samples x 8 bytes (default payload 0000000400000000, 1 tick
+ *      each) — exactly the observed RTXFury layout:
+ *        stts  470x2048, 1x512, 4239x1
+ *        stsc  (1,1),(470,2),(471,4239)
+ *        stco  471 entries (470 shared + 1 filler block)
+ *        mdhd  duration = edit duration in media ticks (958848)
+ *        tkhd  duration = edit duration (19976)
+ *        NO edts/elst, NO ctts  (plain track: DTS 0, pts == dts,
+ *        no skip-samples side data)
+ *        sgpd/sbgp copied from track 1;
+ *   4. filler bytes appended at EOF OUTSIDE the declared mdat, matching the
+ *      reference (mdat size unchanged; demuxers read via stco). Use
+ *      --filler-layout mdat to extend the mdat instead (v1 behaviour).
  *
- * Start modes for the second track (how it begins playback at DTS 0 without
- * skip-samples side data, as observed in the RTXFury reference):
- *   ctts  (default) keep elst media_time and add a ctts composition offset
- *                   equal to media_time so FFmpeg's mov demuxer keeps every
- *                   packet inside the edit window (see mov_fix_index in
- *                   libavformat/mov.c: a positive elst media_time otherwise
- *                   rewrites leading samples to negative DTS + skip_samples).
- *   zero            set the second track's elst media_time to 0 instead.
- *   clone           exact behavioural clone of track 1 (no ctts) — produces
- *                   the negative-DTS + skip-samples behaviour for A/B tests.
+ * Start modes (--start-mode):
+ *   plain (default) no elst, no ctts on track 2 — REFERENCE-MATCHED.
+ *   zero            elst (editDuration, 0) — fallback experiment.
+ *   clone           elst copied from track 1 (negative DTS + skip) — A/B.
+ *   ctts            elst + ctts offset (v1 theory, disproven by the
+ *                   reference dump; kept only for comparison).
  *
- * The media time of the first track is TRUSTED from the input elst (it is the
- * already-patched RTXFury target value, 4224 for the reference source). The
- * generic version of this tool must instead derive it from the source priming.
+ * The elst duration/media_time of track 1 are TRUSTED from the input (they
+ * are the already-patched RTXFury targets 19976/4224 in this pipeline).
  *
  * Usage:
  *   node tools/build-rtx-second-aac.js INPUT.mp4 OUTPUT.mp4 \
- *     [--start-mode ctts|zero|clone] [--filler-count 4239] \
+ *     [--start-mode plain|zero|clone|ctts] [--filler-count 4239] \
  *     [--filler-duration 1] [--filler-hex 0000000400000000] \
- *     [--speed-factor 2]
+ *     [--speed-factor 2] [--filler-layout eof|mdat]
  */
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -92,30 +97,18 @@ function u32(value, label) {
   return value;
 }
 
-/**
- * Deep-scan one trak for the boxes this tool needs. All offsets are absolute
- * positions inside the full input buffer.
- */
 function scanTrak(b, trak) {
-  const result = {
-    handler: null,
-    tkhd: null,
-    mdhd: null,
-    elst: null,
-    stbl: null,
-  };
+  const result = { handler: null, tkhd: null, mdhd: null, elst: null, stbl: null };
 
   function scan(start, end) {
     readBoxes(b, start, end, (box) => {
       if (box.type === 'hdlr') {
         result.handler = b.toString('ascii', box.content + 8, box.content + 12);
       }
-
       if (box.type === 'tkhd') result.tkhd = box;
       if (box.type === 'mdhd') result.mdhd = box;
       if (box.type === 'elst') result.elst = box;
       if (box.type === 'stbl') result.stbl = box;
-
       if (['trak', 'mdia', 'minf', 'stbl', 'edts'].includes(box.type)) {
         scan(box.content, box.end);
       }
@@ -127,8 +120,7 @@ function scanTrak(b, trak) {
 }
 
 function scanStbl(b, stbl) {
-  const result = { stsd: null, stts: null, ctts: null, stsc: null, stsz: null, stco: null, co64: null, dropped: [] };
-
+  const result = { stsd: null, stts: null, ctts: null, stsc: null, stsz: null, stco: null, co64: null };
   readBoxes(b, stbl.content, stbl.end, (box) => {
     if (box.type === 'stsd') result.stsd = box;
     if (box.type === 'stts') result.stts = box;
@@ -137,25 +129,21 @@ function scanStbl(b, stbl) {
     if (box.type === 'stsz') result.stsz = box;
     if (box.type === 'stco') result.stco = box;
     if (box.type === 'co64') result.co64 = box;
-    if (box.type === 'sgpd' || box.type === 'sbgp') result.dropped.push(box.type);
   });
-
   return result;
 }
 
 function mdhdInfo(b, box) {
   const version = b[box.content];
-
   if (version === 1) {
     return {
       version,
       timescale: b.readUInt32BE(box.content + 20),
-      duration: Number(b.readBigUInt64BE(box.content + 28)),
-      durationOffset: box.content + 28,
+      duration: Number(b.readBigUInt64BE(box.content + 24)),
+      durationOffset: box.content + 24,
       durationBytes: 8,
     };
   }
-
   return {
     version,
     timescale: b.readUInt32BE(box.content + 12),
@@ -167,7 +155,6 @@ function mdhdInfo(b, box) {
 
 function tkhdInfo(b, box) {
   const version = b[box.content];
-
   if (version === 1) {
     return {
       version,
@@ -178,7 +165,6 @@ function tkhdInfo(b, box) {
       durationBytes: 8,
     };
   }
-
   return {
     version,
     trackId: b.readUInt32BE(box.content + 12),
@@ -192,29 +178,18 @@ function tkhdInfo(b, box) {
 function elstInfo(b, box) {
   const version = b[box.content];
   const count = b.readUInt32BE(box.content + 4);
-
-  if (count !== 1) {
-    throw new Error(`Expected exactly one elst entry, found ${count}.`);
-  }
-
+  if (count !== 1) throw new Error(`Expected exactly one elst entry, found ${count}.`);
   if (version === 1) {
     return {
       version,
       duration: Number(b.readBigUInt64BE(box.content + 8)),
       mediaTime: Number(b.readBigInt64BE(box.content + 16)),
-      durationOffset: box.content + 8,
-      mediaTimeOffset: box.content + 16,
-      durationBytes: 8,
     };
   }
-
   return {
     version,
     duration: b.readUInt32BE(box.content + 8),
     mediaTime: b.readInt32BE(box.content + 12),
-    durationOffset: box.content + 8,
-    mediaTimeOffset: box.content + 12,
-    durationBytes: 4,
   };
 }
 
@@ -222,31 +197,23 @@ function readStts(b, box) {
   const count = b.readUInt32BE(box.content + 4);
   const entries = [];
   let at = box.content + 8;
-
   for (let i = 0; i < count; i++) {
     entries.push({ count: b.readUInt32BE(at), duration: b.readUInt32BE(at + 4) });
     at += 8;
   }
-
   return entries;
 }
 
 function readStsz(b, box) {
   const sampleSize = b.readUInt32BE(box.content + 4);
   const count = b.readUInt32BE(box.content + 8);
-
-  if (sampleSize !== 0) {
-    return { uniform: true, sampleSize, count, sizes: null };
-  }
-
+  if (sampleSize !== 0) return { uniform: true, sampleSize, count, sizes: null };
   const sizes = [];
   let at = box.content + 12;
-
   for (let i = 0; i < count; i++) {
     sizes.push(b.readUInt32BE(at));
     at += 4;
   }
-
   return { uniform: false, sampleSize: 0, count, sizes };
 }
 
@@ -254,7 +221,6 @@ function readStsc(b, box) {
   const count = b.readUInt32BE(box.content + 4);
   const entries = [];
   let at = box.content + 8;
-
   for (let i = 0; i < count; i++) {
     entries.push({
       firstChunk: b.readUInt32BE(at),
@@ -263,20 +229,17 @@ function readStsc(b, box) {
     });
     at += 12;
   }
-
   return entries;
 }
 
-function readChunkOffsets(b, info) {
-  const box = info.stco || info.co64;
+function readChunkOffsets(b, stco, co64) {
+  const box = stco || co64;
   if (!box) throw new Error('Audio track has no stco/co64 table.');
-
   const count = b.readUInt32BE(box.content + 4);
   const offsets = [];
   let at = box.content + 8;
-
   for (let i = 0; i < count; i++) {
-    if (info.stco) {
+    if (stco) {
       offsets.push(b.readUInt32BE(at));
       at += 4;
     } else {
@@ -284,69 +247,90 @@ function readChunkOffsets(b, info) {
       at += 8;
     }
   }
-
   return offsets;
 }
 
-/** Absolute file offset of every sample, from stsc + stco + stsz. */
 function sampleOffsets(stscEntries, chunkOffsets, sizes, sampleCount) {
   const offsets = new Array(sampleCount);
   let sample = 0;
-
   for (let chunk = 0; chunk < chunkOffsets.length && sample < sampleCount; chunk++) {
     const chunkNumber = chunk + 1;
     let samplesPerChunk = stscEntries.length
       ? stscEntries[stscEntries.length - 1].samplesPerChunk
       : 1;
-
     for (let e = 0; e < stscEntries.length; e++) {
-      const next = e + 1 < stscEntries.length
-        ? stscEntries[e + 1].firstChunk
-        : Infinity;
-
+      const next = e + 1 < stscEntries.length ? stscEntries[e + 1].firstChunk : Infinity;
       if (chunkNumber >= stscEntries[e].firstChunk && chunkNumber < next) {
         samplesPerChunk = stscEntries[e].samplesPerChunk;
         break;
       }
     }
-
     let at = chunkOffsets[chunk];
-
     for (let k = 0; k < samplesPerChunk && sample < sampleCount; k++) {
       offsets[sample] = at;
       at += sizes[sample];
       sample++;
     }
   }
-
   if (sample !== sampleCount) {
-    throw new Error(
-      `Sample tables inconsistent: mapped ${sample} of ${sampleCount} samples.`,
-    );
+    throw new Error(`Sample tables inconsistent: mapped ${sample} of ${sampleCount} samples.`);
   }
-
   return offsets;
 }
 
-/** Copy a box byte-for-byte and run in-place writes against the copy. */
 function copyBox(b, box, patch) {
   const out = Buffer.from(b.subarray(box.start, box.end));
   if (patch) patch(out, box.content - box.start);
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Box builders
+// ---------------------------------------------------------------------------
+
 function buildStts(entries) {
   const content = Buffer.alloc(8 + entries.length * 8);
   content.writeUInt32BE(entries.length, 4);
-
   let at = 8;
   for (const e of entries) {
     content.writeUInt32BE(u32(e.count, 'stts count'), at);
     content.writeUInt32BE(u32(e.duration, 'stts duration'), at + 4);
     at += 8;
   }
-
   return makeBox('stts', content);
+}
+
+function buildStsc(entries) {
+  const content = Buffer.alloc(8 + entries.length * 12);
+  content.writeUInt32BE(entries.length, 4);
+  let at = 8;
+  for (const e of entries) {
+    content.writeUInt32BE(u32(e.firstChunk, 'stsc firstChunk'), at);
+    content.writeUInt32BE(u32(e.samplesPerChunk, 'stsc samplesPerChunk'), at + 4);
+    content.writeUInt32BE(u32(e.sampleDescriptionIndex || 1, 'stsc sdi'), at + 8);
+    at += 12;
+  }
+  return makeBox('stsc', content);
+}
+
+function buildStsz(sizes) {
+  const content = Buffer.alloc(12 + sizes.length * 4);
+  content.writeUInt32BE(0, 4);
+  content.writeUInt32BE(u32(sizes.length, 'stsz count'), 8);
+  let at = 12;
+  for (const size of sizes) {
+    content.writeUInt32BE(u32(size, 'stsz size'), at);
+    at += 4;
+  }
+  return makeBox('stsz', content);
+}
+
+function buildChunkOffsets(offsets, use64) {
+  const width = use64 ? 8 : 4;
+  const content = Buffer.alloc(8 + offsets.length * width);
+  content.writeUInt32BE(u32(offsets.length, 'stco count'), 4);
+  const box = makeBox(use64 ? 'co64' : 'stco', content);
+  return { box, type: use64 ? 'co64' : 'stco', count: offsets.length, width, entriesAt: 16 };
 }
 
 function buildCtts(sampleCount, offset) {
@@ -357,43 +341,139 @@ function buildCtts(sampleCount, offset) {
   return makeBox('ctts', content);
 }
 
-function buildStsc(sampleCount) {
-  const content = Buffer.alloc(20);
-  content.writeUInt32BE(1, 4);
-  content.writeUInt32BE(1, 8);
-  content.writeUInt32BE(u32(sampleCount, 'stsc samples per chunk'), 12);
-  content.writeUInt32BE(1, 16);
-  return makeBox('stsc', content);
-}
+/**
+ * Rebuild one audio trak from the source audio trak.
+ * opts:
+ *   trackId       new track id for tkhd
+ *   tkhdDuration  tkhd duration (movie timescale ticks)
+ *   elst          null = omit edts entirely; 'keep' = copy unchanged;
+ *                 {duration, mediaTime} = write these values
+ *   mdhdDuration  mdhd duration (media timescale ticks)
+ *   sttsEntries   replacement stts entries
+ *   stscEntries   replacement stsc entries
+ *   stszSizes     replacement stsz sizes (null = keep source stsz)
+ *   stcoOffsets   replacement chunk offsets (placeholder values allowed;
+ *                 patchStco() rewrites them after assembly)
+ *   ctts          {count, offset} or null
+ * Returns { buffer, stco: {type, count, width} } — stco located by signature.
+ */
+function buildAudioTrak(b, srcTrak, srcStblBox, srcStbl, opts) {
+  const use64 = Boolean(srcStbl.co64);
+  const offsetBox = buildChunkOffsets(opts.stcoOffsets, use64);
 
-function buildStsz(sizes) {
-  const content = Buffer.alloc(12 + sizes.length * 4);
-  content.writeUInt32BE(0, 4);
-  content.writeUInt32BE(u32(sizes.length, 'stsz count'), 8);
-
-  let at = 12;
-  for (const size of sizes) {
-    content.writeUInt32BE(u32(size, 'stsz size'), at);
-    at += 4;
+  function rebuildStbl() {
+    const parts = [];
+    readBoxes(b, srcStblBox.content, srcStblBox.end, (box) => {
+      if (box.type === 'stsd') { parts.push(copyBox(b, box)); return; }
+      if (box.type === 'stts') {
+        parts.push(buildStts(opts.sttsEntries));
+        if (opts.ctts) parts.push(buildCtts(opts.ctts.count, opts.ctts.offset));
+        return;
+      }
+      if (box.type === 'ctts') return; // replaced above when requested
+      if (box.type === 'stsc') { parts.push(buildStsc(opts.stscEntries)); return; }
+      if (box.type === 'stsz') {
+        if (opts.stszSizes) parts.push(buildStsz(opts.stszSizes));
+        else parts.push(copyBox(b, box));
+        return;
+      }
+      if (box.type === 'stco' || box.type === 'co64') { parts.push(offsetBox.box); return; }
+      parts.push(copyBox(b, box)); // sgpd/sbgp and everything else are kept
+    });
+    return makeBox('stbl', concat(parts));
   }
 
-  return makeBox('stsz', content);
+  function rebuildMinf(minf) {
+    const parts = [];
+    readBoxes(b, minf.content, minf.end, (box) => {
+      if (box.type === 'stbl') { parts.push(rebuildStbl()); return; }
+      parts.push(copyBox(b, box));
+    });
+    return makeBox('minf', concat(parts));
+  }
+
+  function rebuildMdia(mdia) {
+    const parts = [];
+    readBoxes(b, mdia.content, mdia.end, (box) => {
+      if (box.type === 'mdhd') {
+        parts.push(copyBox(b, box, (out, content) => {
+          const version = out[content];
+          if (version === 1) out.writeBigUInt64BE(BigInt(opts.mdhdDuration), content + 24);
+          else out.writeUInt32BE(u32(opts.mdhdDuration, 'mdhd duration'), content + 16);
+        }));
+        return;
+      }
+      if (box.type === 'minf') { parts.push(rebuildMinf(box)); return; }
+      parts.push(copyBox(b, box));
+    });
+    return makeBox('mdia', concat(parts));
+  }
+
+  const trakParts = [];
+  readBoxes(b, srcTrak.content, srcTrak.end, (box) => {
+    if (box.type === 'tkhd') {
+      trakParts.push(copyBox(b, box, (out, content) => {
+        const version = out[content];
+        out.writeUInt32BE(u32(opts.trackId, 'track id'), content + (version === 1 ? 20 : 12));
+        if (version === 1) out.writeBigUInt64BE(BigInt(opts.tkhdDuration), content + 28);
+        else out.writeUInt32BE(u32(opts.tkhdDuration, 'tkhd duration'), content + 20);
+        const altGroupOffset = content + (version === 1 ? 44 : 36);
+        if (out.readUInt16BE(altGroupOffset) !== 0) out.writeUInt16BE(0, altGroupOffset);
+      }));
+      return;
+    }
+
+    if (box.type === 'edts') {
+      if (opts.elst === null) return; // plain mode: no edit list at all
+      const parts = [];
+      readBoxes(b, box.content, box.end, (child) => {
+        if (child.type === 'elst') {
+          if (opts.elst === 'keep') { parts.push(copyBox(b, child)); return; }
+          parts.push(copyBox(b, child, (out, content) => {
+            const version = out[content];
+            if (version === 1) {
+              out.writeBigUInt64BE(BigInt(opts.elst.duration), content + 8);
+              out.writeBigInt64BE(BigInt(opts.elst.mediaTime), content + 16);
+            } else {
+              out.writeUInt32BE(u32(opts.elst.duration, 'elst duration'), content + 8);
+              out.writeInt32BE(opts.elst.mediaTime, content + 12);
+            }
+          }));
+          return;
+        }
+        parts.push(copyBox(b, child));
+      });
+      trakParts.push(makeBox('edts', concat(parts)));
+      return;
+    }
+
+    if (box.type === 'mdia') { trakParts.push(rebuildMdia(box)); return; }
+    trakParts.push(copyBox(b, box));
+  });
+
+  return { buffer: makeBox('trak', concat(trakParts)), stco: { type: offsetBox.type, count: offsetBox.count, width: offsetBox.width } };
 }
 
-function buildStco(offset) {
-  const content = Buffer.alloc(12);
-  content.writeUInt32BE(1, 4);
-  content.writeUInt32BE(u32(offset, 'stco offset'), 8);
-  const box = makeBox('stco', content);
-  return { box, valueAt: 8 + 8 };
-}
-
-function buildCo64(offset) {
-  const content = Buffer.alloc(16);
-  content.writeUInt32BE(1, 4);
-  content.writeBigUInt64BE(BigInt(offset), 8);
-  const box = makeBox('co64', content);
-  return { box, valueAt: 8 + 8 };
+/** Locate the freshly built stco/co64 box inside a trak buffer and rewrite
+ *  its entries. Placeholder build must have a unique (type, count) pair. */
+function patchStco(trakBuffer, stcoMeta, values) {
+  if (values.length !== stcoMeta.count) {
+    throw new Error(`stco patch length mismatch: ${values.length} != ${stcoMeta.count}`);
+  }
+  const wantedSize = 8 + 4 + 4 + stcoMeta.count * stcoMeta.width;
+  let entryAt = -1;
+  for (let o = 8; o + wantedSize <= trakBuffer.length; o++) {
+    if (trakBuffer.readUInt32BE(o) !== wantedSize) continue;
+    if (trakBuffer.toString('ascii', o + 4, o + 8) !== stcoMeta.type) continue;
+    if (trakBuffer.readUInt32BE(o + 12) !== stcoMeta.count) continue;
+    entryAt = o + 16;
+    break;
+  }
+  if (entryAt < 0) throw new Error('Built chunk offset box not found in trak buffer.');
+  values.forEach((v, i) => {
+    if (stcoMeta.width === 8) trakBuffer.writeBigUInt64BE(BigInt(v), entryAt + i * 8);
+    else trakBuffer.writeUInt32BE(u32(v, 'chunk offset'), entryAt + i * 4);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -402,32 +482,28 @@ function buildCo64(offset) {
 
 const args = process.argv.slice(2);
 const positional = [];
-
-let startMode = 'ctts';
+let startMode = 'plain';
 let fillerCount = 4239;
 let fillerDuration = 1;
 let fillerHex = '0000000400000000';
 let speedFactor = 2;
+let fillerLayout = 'eof';
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
-
   if (arg === '--start-mode') {
     startMode = args[++i];
-    if (!['ctts', 'zero', 'clone'].includes(startMode)) {
+    if (!['plain', 'zero', 'clone', 'ctts'].includes(startMode)) {
       throw new Error(`Unknown start mode: ${startMode}`);
     }
-  } else if (arg === '--filler-count') {
-    fillerCount = Number(args[++i]);
-  } else if (arg === '--filler-duration') {
-    fillerDuration = Number(args[++i]);
-  } else if (arg === '--filler-hex') {
-    fillerHex = args[++i].replace(/\s+/g, '');
-  } else if (arg === '--speed-factor') {
-    speedFactor = Number(args[++i]);
-  } else {
-    positional.push(arg);
-  }
+  } else if (arg === '--filler-count') fillerCount = Number(args[++i]);
+  else if (arg === '--filler-duration') fillerDuration = Number(args[++i]);
+  else if (arg === '--filler-hex') fillerHex = args[++i].replace(/\s+/g, '');
+  else if (arg === '--speed-factor') speedFactor = Number(args[++i]);
+  else if (arg === '--filler-layout') {
+    fillerLayout = args[++i];
+    if (!['eof', 'mdat'].includes(fillerLayout)) throw new Error(`Unknown filler layout: ${fillerLayout}`);
+  } else positional.push(arg);
 }
 
 const inputPath = positional[0];
@@ -436,13 +512,16 @@ const outputPath = positional[1];
 if (!inputPath || !outputPath) {
   console.error(
     'Usage: node tools/build-rtx-second-aac.js INPUT.mp4 OUTPUT.mp4 ' +
-    '[--start-mode ctts|zero|clone] [--filler-count 4239] ' +
-    '[--filler-duration 1] [--filler-hex 0000000400000000] [--speed-factor 2]',
+    '[--start-mode plain|zero|clone|ctts] [--filler-count 4239] ' +
+    '[--filler-duration 1] [--filler-hex 0000000400000000] [--speed-factor 2] ' +
+    '[--filler-layout eof|mdat]',
   );
   process.exit(1);
 }
 
-if (!Number.isInteger(fillerCount) || fillerCount < 1 || !Number.isInteger(fillerDuration) || fillerDuration < 1 || !Number.isInteger(speedFactor) || speedFactor < 1) {
+if (!Number.isInteger(fillerCount) || fillerCount < 1 ||
+    !Number.isInteger(fillerDuration) || fillerDuration < 1 ||
+    !Number.isInteger(speedFactor) || speedFactor < 1) {
   throw new Error('filler-count, filler-duration and speed-factor must be positive integers.');
 }
 
@@ -459,407 +538,204 @@ const input = await readFile(inputPath);
 
 let moov = null;
 const topBoxes = [];
-
 readBoxes(input, 0, input.length, (box) => {
   topBoxes.push(box);
   if (box.type === 'moov') moov = box;
 });
-
 if (!moov) throw new Error('No moov box found.');
-
 const lastBox = topBoxes[topBoxes.length - 1];
 
 let mvhdBox = null;
 const trakBoxes = [];
-
 readBoxes(input, moov.content, moov.end, (box) => {
   if (box.type === 'mvhd') mvhdBox = box;
   if (box.type === 'trak') trakBoxes.push(box);
 });
-
 if (!mvhdBox) throw new Error('No mvhd box found.');
 
 const mvhdVersion = input[mvhdBox.content];
-const movieTimescale = input.readUInt32BE(
-  mvhdBox.content + (mvhdVersion === 1 ? 20 : 12),
-);
-const mvhdNextTrackIdOffset =
-  mvhdBox.content + (mvhdVersion === 1 ? 108 : 96);
+const movieTimescale = input.readUInt32BE(mvhdBox.content + (mvhdVersion === 1 ? 20 : 12));
+const mvhdNextTrackIdOffset = mvhdBox.content + (mvhdVersion === 1 ? 108 : 96);
 
 const trakInfos = trakBoxes.map((box) => ({ box, info: scanTrak(input, box) }));
 const audioTraks = trakInfos.filter((t) => t.info.handler === 'soun');
-
 if (audioTraks.length !== 1) {
-  throw new Error(
-    `Expected exactly one audio track, found ${audioTraks.length}.`,
-  );
+  throw new Error(`Expected exactly one audio track, found ${audioTraks.length}.`);
 }
 
 const audio1 = audioTraks[0];
 const a1 = audio1.info;
-
-if (!a1.tkhd || !a1.mdhd || !a1.elst || !a1.stbl) {
-  throw new Error('Audio track is missing tkhd/mdhd/elst/stbl.');
-}
+if (!a1.tkhd || !a1.mdhd || !a1.stbl) throw new Error('Audio track is missing tkhd/mdhd/stbl.');
+if (!a1.elst) throw new Error('Audio track has no edit list — this experiment expects the patched elst.');
 
 const stbl1 = scanStbl(input, a1.stbl);
 if (!stbl1.stts || !stbl1.stsz || !stbl1.stsc || !(stbl1.stco || stbl1.co64)) {
   throw new Error('Audio stbl is missing stts/stsz/stsc/stco.');
 }
-if (stbl1.ctts) {
-  throw new Error(
-    'Audio track unexpectedly has a ctts box — not supported by this experiment.',
-  );
-}
-if (!stbl1.stsd) {
-  throw new Error('Audio stbl has no stsd box.');
-}
+if (stbl1.ctts) throw new Error('Audio track unexpectedly has a ctts box.');
+if (!stbl1.stsd) throw new Error('Audio stbl has no stsd box.');
 
 // ---------------------------------------------------------------------------
-// Read + scale the first audio track's timing
+// Timing: scale, then trim/extend the final sample so the media timeline ends
+// exactly at the edit-list end (reference: 470x2048 + 1x512 = 4224 + 19976ms*48)
 // ---------------------------------------------------------------------------
 
 const mdhd = mdhdInfo(input, a1.mdhd);
 const tkhd = tkhdInfo(input, a1.tkhd);
 const elst = elstInfo(input, a1.elst);
-
 const sttsBefore = readStts(input, stbl1.stts);
-const mediaTotalBefore = sttsBefore.reduce((a, e) => a + e.count * e.duration, 0);
 
-if (mdhd.duration !== mediaTotalBefore) {
-  console.error(
-    `warning: audio mdhd duration ${mdhd.duration} != stts total ${mediaTotalBefore}; using stts total.`,
-  );
-}
+const mediaTime = elst.mediaTime;         // trusted (RTXFury target 4224)
+const editDuration = elst.duration;       // trusted (RTXFury target 19976)
+if (mediaTime < 0) throw new Error(`Audio elst media_time is negative: ${mediaTime}`);
+
+const editDurationTicks = Math.round((editDuration * mdhd.timescale) / movieTimescale);
+const targetTotal = mediaTime + editDurationTicks;
 
 const sttsScaled = sttsBefore.map((e) => ({
   count: e.count,
   duration: u32(e.duration * speedFactor, 'scaled stts duration'),
 }));
-const mediaTotalAfter = mediaTotalBefore * speedFactor;
+const scaledSum = sttsScaled.reduce((a, e) => a + e.count * e.duration, 0);
 
-// The elst media time is trusted from the input: for the reference pipeline it
-// has already been set to the RTXFury target (4224) by patch-rtx-movie-time.
-const mediaTime = elst.mediaTime;
-if (mediaTime < 0) {
-  throw new Error(`Audio elst media_time is negative: ${mediaTime}`);
+const lastEntry = sttsScaled[sttsScaled.length - 1];
+const newLastDuration = targetTotal - (scaledSum - lastEntry.duration);
+if (newLastDuration <= 0) {
+  throw new Error(
+    `Trim target ${targetTotal} is behind the last sample start ${scaledSum - lastEntry.duration}.`,
+  );
 }
 
-const editDuration = Math.round(
-  ((mediaTotalAfter - mediaTime) * movieTimescale) / mdhd.timescale,
-);
+const trimMode = newLastDuration <= lastEntry.duration ? 'trim' : 'extend';
+if (trimMode === 'extend') {
+  console.error(
+    `warning: edit end ${targetTotal} exceeds scaled media ${scaledSum}; extending the last sample to ${newLastDuration}.`,
+  );
+}
+
+const sttsTrimmed = sttsScaled.slice(0, -1).slice();
+if (lastEntry.count > 1) {
+  sttsTrimmed.push({ count: lastEntry.count - 1, duration: lastEntry.duration });
+  sttsTrimmed.push({ count: 1, duration: newLastDuration });
+} else {
+  sttsTrimmed.push({ count: 1, duration: newLastDuration });
+}
+const mediaTotalAfter = sttsTrimmed.reduce((a, e) => a + e.count * e.duration, 0);
+if (mediaTotalAfter !== targetTotal) {
+  throw new Error(`Trimmed total ${mediaTotalAfter} != target ${targetTotal}.`);
+}
 
 // ---------------------------------------------------------------------------
-// Collect the first track's sample payloads
+// Sample data (shared, not duplicated)
 // ---------------------------------------------------------------------------
 
 const stsz1 = readStsz(input, stbl1.stsz);
-const sizes1 = stsz1.uniform
-  ? new Array(stsz1.count).fill(stsz1.sampleSize)
-  : stsz1.sizes;
+const sizes1 = stsz1.uniform ? new Array(stsz1.count).fill(stsz1.sampleSize) : stsz1.sizes;
+const N = stsz1.count;
+if (N < 2) throw new Error('Audio track needs at least two samples for the reference chunk layout.');
+
 const stsc1 = readStsc(input, stbl1.stsc);
-const chunkOffsets1 = readChunkOffsets(input, stbl1);
-const sampleOffsets1 = sampleOffsets(stsc1, chunkOffsets1, sizes1, stsz1.count);
+const chunkOffsets1 = readChunkOffsets(input, stbl1.stco, stbl1.co64);
+const perSampleOffsets = sampleOffsets(stsc1, chunkOffsets1, sizes1, N);
 
-const realPayload = Buffer.alloc(mediaTotalBefore >= 0 ? sizes1.reduce((a, s) => a + s, 0) : 0);
-{
-  let cursor = 0;
-  for (let i = 0; i < sizes1.length; i++) {
-    input.copy(realPayload, cursor, sampleOffsets1[i], sampleOffsets1[i] + sizes1[i]);
-    cursor += sizes1[i];
-  }
+// Reference chunk layout: one sample per chunk, final chunk holds two samples.
+const track1ChunkCount = N - 1;
+const stscShared = [{ firstChunk: 1, samplesPerChunk: 1, sampleDescriptionIndex: 1 }];
+if (track1ChunkCount > 1) {
+  stscShared.push({ firstChunk: track1ChunkCount, samplesPerChunk: 2, sampleDescriptionIndex: 1 });
 }
+const sharedChunkOffsets = perSampleOffsets.slice(0, track1ChunkCount); // first sample of each chunk
 
-// ---------------------------------------------------------------------------
-// Build the second track's sample tables and data
-// ---------------------------------------------------------------------------
-
-const fillerBytes = filler.length * fillerCount;
-const track2Data = Buffer.alloc(realPayload.length + fillerBytes);
-realPayload.copy(track2Data, 0);
-for (let i = 0; i < fillerCount; i++) {
-  filler.copy(track2Data, realPayload.length + i * filler.length);
-}
+const fillerBytes = Buffer.alloc(filler.length * fillerCount);
+for (let i = 0; i < fillerCount; i++) filler.copy(fillerBytes, i * filler.length);
 
 const track2Sizes = sizes1.concat(new Array(fillerCount).fill(filler.length));
 const track2SampleCount = track2Sizes.length;
 
-const track2Stts = sttsScaled.map((e) => ({ ...e }));
-const lastScaled = track2Stts[track2Stts.length - 1];
-if (lastScaled && lastScaled.duration === fillerDuration) {
-  lastScaled.count += fillerCount;
-} else {
-  track2Stts.push({ count: fillerCount, duration: fillerDuration });
-}
+const track2Stts = sttsTrimmed.slice();
+const lastTrimmed = track2Stts[track2Stts.length - 1];
+if (lastTrimmed.duration === fillerDuration) lastTrimmed.count += fillerCount;
+else track2Stts.push({ count: fillerCount, duration: fillerDuration });
+const track2SttsSum = track2Stts.reduce((a, e) => a + e.count * e.duration, 0);
 
-const track2MediaDuration = mediaTotalAfter + fillerCount * fillerDuration;
-
-const track2MediaTime = startMode === 'zero' ? 0 : mediaTime;
-const track2EditDuration = startMode === 'zero'
-  ? Math.round((mediaTotalAfter * movieTimescale) / mdhd.timescale)
-  : editDuration;
+const track2Stsc = stscShared.concat([{
+  firstChunk: track1ChunkCount + 1,
+  samplesPerChunk: fillerCount,
+  sampleDescriptionIndex: 1,
+}]);
 
 const newTrackId = trakInfos.reduce(
-  (max, t) => Math.max(max, tkhdInfo(input, t.info.tkhd).trackId),
-  0,
+  (max, t) => Math.max(max, tkhdInfo(input, t.info.tkhd).trackId), 0,
 ) + 1;
 
 // ---------------------------------------------------------------------------
-// Assemble the new trak for the second audio track
+// Build both traks (chunk offsets still placeholders)
 // ---------------------------------------------------------------------------
 
-const use64 = Boolean(stbl1.co64);
-let track2Stco = null;
-
-function rebuildStbl2() {
-  const parts = [];
-  let sttsSeen = false;
-
-  readBoxes(input, a1.stbl.content, a1.stbl.end, (box) => {
-    if (box.type === 'stsd') {
-      parts.push(copyBox(input, box));
-      return;
-    }
-
-    if (box.type === 'stts') {
-      parts.push(buildStts(track2Stts));
-      if (startMode === 'ctts') {
-        parts.push(buildCtts(track2SampleCount, track2MediaTime));
-      }
-      sttsSeen = true;
-      return;
-    }
-
-    if (box.type === 'stsc') {
-      parts.push(buildStsc(track2SampleCount));
-      return;
-    }
-
-    if (box.type === 'stsz') {
-      parts.push(buildStsz(track2Sizes));
-      return;
-    }
-
-    if (box.type === 'stco' || box.type === 'co64') {
-      track2Stco = use64 ? buildCo64(0) : buildStco(0);
-      parts.push(track2Stco.box);
-      return;
-    }
-
-    if (box.type === 'sgpd' || box.type === 'sbgp') {
-      // Roll/priming groups of track 1 are not copied to track 2.
-      return;
-    }
-
-    parts.push(copyBox(input, box));
-  });
-
-  if (!sttsSeen) throw new Error('stts disappeared while rebuilding stbl.');
-
-  return makeBox('stbl', concat(parts));
-}
-
-function rebuildMinf2(minf) {
-  const parts = [];
-
-  readBoxes(input, minf.content, minf.end, (box) => {
-    if (box.type === 'stbl') {
-      parts.push(rebuildStbl2());
-      return;
-    }
-    parts.push(copyBox(input, box));
-  });
-
-  return makeBox('minf', concat(parts));
-}
-
-function rebuildMdia2(mdia) {
-  const parts = [];
-
-  readBoxes(input, mdia.content, mdia.end, (box) => {
-    if (box.type === 'mdhd') {
-      parts.push(copyBox(input, box, (out, content) => {
-        const version = out[content];
-        if (version === 1) out.writeBigUInt64BE(BigInt(track2MediaDuration), content + 28);
-        else out.writeUInt32BE(u32(track2MediaDuration, 'trak2 mdhd duration'), content + 16);
-      }));
-      return;
-    }
-
-    if (box.type === 'minf') {
-      parts.push(rebuildMinf2(box));
-      return;
-    }
-
-    parts.push(copyBox(input, box));
-  });
-
-  return makeBox('mdia', concat(parts));
-}
-
-const trak2Parts = [];
-
-readBoxes(input, audio1.box.content, audio1.box.end, (box) => {
-  if (box.type === 'tkhd') {
-    trak2Parts.push(copyBox(input, box, (out, content) => {
-      const version = out[content];
-      out.writeUInt32BE(u32(newTrackId, 'trak2 track id'), content + (version === 1 ? 20 : 12));
-      if (version === 1) out.writeBigUInt64BE(BigInt(track2EditDuration), content + 28);
-      else out.writeUInt32BE(u32(track2EditDuration, 'trak2 tkhd duration'), content + 20);
-      // Two tracks in the same alternate group would let players pick only one.
-      const altGroupOffset = content + (version === 1 ? 44 : 36);
-      if (out.readUInt16BE(altGroupOffset) !== 0) {
-        out.writeUInt16BE(0, altGroupOffset);
-      }
-    }));
-    return;
-  }
-
-  if (box.type === 'edts') {
-    const parts = [];
-    readBoxes(input, box.content, box.end, (child) => {
-      if (child.type === 'elst') {
-        parts.push(copyBox(input, child, (out, content) => {
-          const version = out[content];
-          if (version === 1) {
-            out.writeBigUInt64BE(BigInt(track2EditDuration), content + 8);
-            out.writeBigInt64BE(BigInt(track2MediaTime), content + 16);
-          } else {
-            out.writeUInt32BE(u32(track2EditDuration, 'trak2 elst duration'), content + 8);
-            out.writeInt32BE(track2MediaTime, content + 12);
-          }
-        }));
-        return;
-      }
-      parts.push(copyBox(input, child));
-    });
-    trak2Parts.push(makeBox('edts', concat(parts)));
-    return;
-  }
-
-  if (box.type === 'mdia') {
-    trak2Parts.push(rebuildMdia2(box));
-    return;
-  }
-
-  trak2Parts.push(copyBox(input, box));
+const trak1New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
+  trackId: tkhd.trackId,
+  tkhdDuration: editDuration,
+  elst: 'keep',
+  mdhdDuration: mediaTotalAfter,
+  sttsEntries: sttsTrimmed,
+  stscEntries: stscShared,
+  stszSizes: null,
+  stcoOffsets: sharedChunkOffsets,
+  ctts: null,
 });
 
-// The moov grows by exactly the size of the new trak. The stco entry's VALUE
-// never changes any box size, so the delta is known before trak2 is assembled.
-const moovDelta = 8 + trak2Parts.reduce((a, p) => a + p.length, 0);
+const track2Elst =
+  startMode === 'plain' ? null :
+  startMode === 'zero' ? { duration: editDuration, mediaTime: 0 } :
+  { duration: editDuration, mediaTime };
 
-let mdatMode;
-let track2DataStart;
+const trak2New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
+  trackId: newTrackId,
+  tkhdDuration: editDuration,
+  elst: track2Elst,
+  mdhdDuration: editDurationTicks, // reference: 958848 = edit duration in media ticks
+  sttsEntries: track2Stts,
+  stscEntries: track2Stsc,
+  stszSizes: track2Sizes,
+  stcoOffsets: sharedChunkOffsets.concat([0]), // filler offset placeholder
+  ctts: startMode === 'ctts' ? { count: track2SampleCount, offset: mediaTime } : null,
+});
 
-if (lastBox.type === 'mdat') {
-  // Extend the final mdat so the new samples live inside it (single mdat).
-  mdatMode = 'extended';
-  track2DataStart = lastBox.end + moovDelta;
-} else {
-  // Append a new mdat after the existing boxes.
-  mdatMode = 'appended';
-  track2DataStart = input.length + moovDelta + 8;
-}
-
-if (track2DataStart + track2Data.length > 0xffffffff && !use64) {
-  throw new Error('Second track data does not fit in 32-bit stco offsets.');
-}
-
-const trak2 = makeBox('trak', concat(trak2Parts));
-
-if (trak2.length !== moovDelta) {
-  throw new Error(
-    `trak2 size check failed: expected ${moovDelta}, built ${trak2.length}.`,
-  );
-}
-
-// The leaf stco buffer was frozen by the nested makeBox/concat calls above, so
-// write the real chunk offset into the assembled trak2 instead. This must
-// happen before the moov parts are concatenated.
-{
-  const wantedType = use64 ? 'co64' : 'stco';
-  const wantedSize = use64 ? 24 : 20;
-  let entryAt = -1;
-
-  for (let o = 8; o + wantedSize <= trak2.length; o++) {
-    if (trak2.readUInt32BE(o) !== wantedSize) continue;
-    if (trak2.toString('ascii', o + 4, o + 8) !== wantedType) continue;
-    if (trak2.readUInt32BE(o + 12) !== 1) continue; // entry count
-    entryAt = o + 16;
-    break;
-  }
-
-  if (entryAt < 0) {
-    throw new Error('Track 2 chunk offset box not found after assembly.');
-  }
-
-  if (use64) {
-    trak2.writeBigUInt64BE(BigInt(track2DataStart), entryAt);
-  } else {
-    trak2.writeUInt32BE(track2DataStart, entryAt);
-  }
-}
+const moovDelta = trak1New.buffer.length - (audio1.box.end - audio1.box.start) + trak2New.buffer.length;
 
 // ---------------------------------------------------------------------------
-// Patch the first audio track in place (timing x factor, offsets + delta)
+// Resolve real chunk offsets now that the layout shift is known
 // ---------------------------------------------------------------------------
 
-const trak1Patched = Buffer.from(input.subarray(audio1.box.start, audio1.box.end));
-const shift1 = (absolute) => absolute - audio1.box.start;
+const shiftedShared = sharedChunkOffsets.map((o) => o + moovDelta);
+patchStco(trak1New.buffer, trak1New.stco, shiftedShared);
 
-// stts: scale every duration in place (entry count is unchanged).
-{
-  let at = stbl1.stts.content + 8;
-  for (let i = 0; i < sttsBefore.length; i++) {
-    trak1Patched.writeUInt32BE(
-      u32(sttsBefore[i].duration * speedFactor, 'stts duration'),
-      at - audio1.box.start + 4,
-    );
-    at += 8;
-  }
-}
-
-// mdhd duration.
-if (mdhd.durationBytes === 8) {
-  trak1Patched.writeBigUInt64BE(BigInt(mediaTotalAfter), shift1(mdhd.durationOffset));
+let fillerOffset;
+if (fillerLayout === 'eof') {
+  fillerOffset = input.length + moovDelta; // after every existing byte
 } else {
-  trak1Patched.writeUInt32BE(u32(mediaTotalAfter, 'mdhd duration'), shift1(mdhd.durationOffset));
+  if (lastBox.type !== 'mdat') throw new Error('filler-layout mdat requires mdat as the last box.');
+  fillerOffset = lastBox.end + moovDelta;
 }
-
-// elst duration + media time (duration recomputed from scaled media).
-if (elst.durationBytes === 8) {
-  trak1Patched.writeBigUInt64BE(BigInt(editDuration), shift1(elst.durationOffset));
-  trak1Patched.writeBigInt64BE(BigInt(mediaTime), shift1(elst.mediaTimeOffset));
-} else {
-  trak1Patched.writeUInt32BE(u32(editDuration, 'elst duration'), shift1(elst.durationOffset));
-  trak1Patched.writeInt32BE(mediaTime, shift1(elst.mediaTimeOffset));
+if (fillerOffset + fillerBytes.length > 0xffffffff && trak1New.stco.width === 4) {
+  throw new Error('Filler data does not fit in 32-bit chunk offsets.');
 }
-
-// tkhd duration.
-if (tkhd.durationBytes === 8) {
-  trak1Patched.writeBigUInt64BE(BigInt(editDuration), shift1(tkhd.durationOffset));
-} else {
-  trak1Patched.writeUInt32BE(u32(editDuration, 'tkhd duration'), shift1(tkhd.durationOffset));
-}
+patchStco(trak2New.buffer, trak2New.stco, shiftedShared.concat([fillerOffset]));
 
 // ---------------------------------------------------------------------------
-// Patch every remaining trak's chunk offsets (+ delta)
+// Assemble the new moov
 // ---------------------------------------------------------------------------
 
 function patchOffsetsInCopy(box) {
   const out = Buffer.from(input.subarray(box.start, box.end));
-
   function scan(start, end) {
     readBoxes(input, start, end, (child) => {
       const local = (absolute) => absolute - box.start;
-
       if (child.type === 'stco') {
         const count = input.readUInt32BE(child.content + 4);
         let at = child.content + 8;
         for (let i = 0; i < count; i++) {
-          const value = input.readUInt32BE(at) + moovDelta;
-          out.writeUInt32BE(u32(value, 'stco offset'), local(at));
+          out.writeUInt32BE(u32(input.readUInt32BE(at) + moovDelta, 'stco offset'), local(at));
           at += 4;
         }
       } else if (child.type === 'co64') {
@@ -870,43 +746,14 @@ function patchOffsetsInCopy(box) {
           at += 8;
         }
       }
-
-      if (['trak', 'mdia', 'minf', 'stbl', 'edts'].includes(child.type)) {
-        scan(child.content, child.end);
-      }
+      if (['trak', 'mdia', 'minf', 'stbl', 'edts'].includes(child.type)) scan(child.content, child.end);
     });
   }
-
   scan(box.content, box.end);
   return out;
 }
 
-// The audio track's own offsets also shift; patch them inside trak1Patched.
-{
-  const box = stbl1.stco || stbl1.co64;
-  const count = input.readUInt32BE(box.content + 4);
-  let at = box.content + 8;
-  for (let i = 0; i < count; i++) {
-    if (stbl1.stco) {
-      const value = input.readUInt32BE(at) + moovDelta;
-      trak1Patched.writeUInt32BE(u32(value, 'audio stco offset'), shift1(at));
-      at += 4;
-    } else {
-      trak1Patched.writeBigUInt64BE(
-        input.readBigUInt64BE(at) + BigInt(moovDelta),
-        shift1(at),
-      );
-      at += 8;
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Assemble the new moov
-// ---------------------------------------------------------------------------
-
 const moovParts = [];
-
 readBoxes(input, moov.content, moov.end, (box) => {
   if (box.type === 'mvhd') {
     const mv = Buffer.from(input.subarray(box.start, box.end));
@@ -914,26 +761,21 @@ readBoxes(input, moov.content, moov.end, (box) => {
     moovParts.push(mv);
     return;
   }
-
   if (box.type === 'trak') {
     if (box.start === audio1.box.start) {
-      moovParts.push(trak1Patched);
-      moovParts.push(trak2);
+      moovParts.push(trak1New.buffer);
+      moovParts.push(trak2New.buffer);
       return;
     }
     moovParts.push(patchOffsetsInCopy(box));
     return;
   }
-
   moovParts.push(Buffer.from(input.subarray(box.start, box.end)));
 });
 
 const newMoov = makeBox('moov', concat(moovParts));
-
 if (newMoov.length !== moov.size + moovDelta) {
-  throw new Error(
-    `Moov size check failed: expected ${moov.size + moovDelta}, built ${newMoov.length}.`,
-  );
+  throw new Error(`Moov size check failed: expected ${moov.size + moovDelta}, built ${newMoov.length}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -941,34 +783,28 @@ if (newMoov.length !== moov.size + moovDelta) {
 // ---------------------------------------------------------------------------
 
 let output;
-
-if (mdatMode === 'extended') {
+if (fillerLayout === 'eof') {
+  // Reference behaviour: filler bytes appended past the declared mdat, mdat
+  // size field untouched. Demuxers reach them through the chunk offsets.
   output = concat([
     input.subarray(0, moov.start),
     newMoov,
     input.subarray(moov.end),
-    track2Data,
+    fillerBytes,
   ]);
-
-  const sizeFieldAt = lastBox.start + moovDelta;
-  if (lastBox.header === 8) {
-    output.writeUInt32BE(
-      u32(lastBox.size + track2Data.length, 'mdat size'),
-      sizeFieldAt,
-    );
-  } else {
-    output.writeBigUInt64BE(
-      BigInt(lastBox.size + track2Data.length),
-      sizeFieldAt + 8,
-    );
-  }
 } else {
   output = concat([
     input.subarray(0, moov.start),
     newMoov,
     input.subarray(moov.end),
-    makeBox('mdat', track2Data),
+    fillerBytes,
   ]);
+  const sizeFieldAt = lastBox.start + moovDelta;
+  if (lastBox.header === 8) {
+    output.writeUInt32BE(u32(lastBox.size + fillerBytes.length, 'mdat size'), sizeFieldAt);
+  } else {
+    output.writeBigUInt64BE(BigInt(lastBox.size + fillerBytes.length), sizeFieldAt + 8);
+  }
 }
 
 await writeFile(outputPath, output);
@@ -978,41 +814,48 @@ const fmtEntries = (entries) => entries.map((e) => `${e.count}x${e.duration}`).j
 console.log(JSON.stringify({
   inputBytes: input.length,
   outputBytes: output.length,
+  sizeGrowth: output.length - input.length,
   speedFactor,
   audioTimescale: mdhd.timescale,
   movieTimescale,
   startMode,
+  fillerLayout,
   track1: {
     trackId: tkhd.trackId,
-    sampleCount: stsz1.count,
+    sampleCount: N,
     sttsBefore: fmtEntries(sttsBefore),
-    sttsAfter: fmtEntries(sttsScaled),
-    mediaDurationBefore: mediaTotalBefore,
+    sttsAfter: fmtEntries(sttsTrimmed),
+    mediaDurationBefore: sttsBefore.reduce((a, e) => a + e.count * e.duration, 0),
     mediaDurationAfter: mediaTotalAfter,
-    elstBefore: { duration: elst.duration, mediaTime: elst.mediaTime },
-    elstAfter: { duration: editDuration, mediaTime },
+    trimMode,
+    mdhdDuration: mediaTotalAfter,
+    elst: { duration: editDuration, mediaTime: mediaTime },
+    chunkCount: track1ChunkCount,
+    stsc: stscShared.map((e) => `${e.firstChunk}:${e.samplesPerChunk}`).join(', '),
   },
   track2: {
     trackId: newTrackId,
     sampleCount: track2SampleCount,
-    copiedSamples: stsz1.count,
+    stts: fmtEntries(track2Stts),
+    sttsSum: track2SttsSum,
+    mdhdDuration: editDurationTicks,
+    elst: track2Elst,
+    ctts: startMode === 'ctts' ? { count: track2SampleCount, offset: mediaTime } : null,
+    stsc: track2Stsc.map((e) => `${e.firstChunk}:${e.samplesPerChunk}`).join(', '),
+    stcoCount: track1ChunkCount + 1,
+    sharedChunkOffsets: true,
     fillerCount,
     fillerDuration,
     fillerHex,
-    stts: fmtEntries(track2Stts),
-    mediaDuration: track2MediaDuration,
-    elst: { duration: track2EditDuration, mediaTime: track2MediaTime },
-    ctts: startMode === 'ctts' ? { count: track2SampleCount, offset: track2MediaTime } : null,
-    dataStart: track2DataStart,
-    dataBytes: track2Data.length,
-    droppedBoxes: stbl1.dropped,
+    fillerOffset,
   },
-  mdat: { mode: mdatMode, addedBytes: track2Data.length },
   moovDelta,
   nextTrackId: newTrackId + 1,
   notes: [
-    'Track 1 elst media_time is trusted from the input (RTXFury target 4224 for the reference source).',
-    'Track 2 payload bytes are a fresh copy of track 1 samples plus fillers (offsets are not shared with track 1).',
-    'sgpd/sbgp roll groups are not copied to track 2.',
+    'Track 1 elst values are trusted from the input (RTXFury targets 19976/4224).',
+    'Final sample trimmed so media ends exactly at the edit end (media_time + edit duration in ticks).',
+    'Track 2 shares track 1 chunk offsets; no audio payload bytes are duplicated.',
+    'Filler bytes appended at EOF outside the declared mdat (reference behaviour) when fillerLayout=eof.',
+    'sgpd/sbgp are kept on both tracks.',
   ],
 }, null, 2));
