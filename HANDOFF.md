@@ -179,6 +179,10 @@ What made the difference after the first failed test:
 Still to verify later (not blocking): final delivered fps/quality stats of the
 posted video, SDR fallback behaviour, other sources (120fps), other lengths.
 
+SECOND video confirmed (2026-09-29): 1790688068207837.MP4 also passed the
+full pipeline + user validation (user: "yeah worked"). The method is now
+confirmed on two different real videos.
+
 The processing method is now VALIDATED end to end. Remaining work is the
 online service (see ONLINE-SERVICE-PLAN.md) and deployment.
 
