@@ -200,6 +200,29 @@ online service (see ONLINE-SERVICE-PLAN.md) and deployment.
   progress % from the worker, cancellation.
 - Existing servers untouched (server-lossless.js baseline still on 3002 etc.).
 
+### Resolution / FPS support verified (2026-09-29, per the 4K 120FPS max requirement)
+The pipeline is resolution- and codec-agnostic (pure container math - it never
+touches pixels), verified end to end:
+- 4K 3840x2160 60fps: speed x2 derived, stts 179x640+1x320, copyts PASS,
+  output 30/1 5.98s, track 2 packets 0,0,2048. PASS
+- 4K 3840x2160 120fps (timescale 1200): speed x4 derived automatically,
+  copyts PASS, output 30/1. PASS
+- 720x1280 60fps HEVC Main 10: PASS. (1080x1920 HEVC 10-bit HLG was already
+  proven by the real TikTok Studio HDR success.)
+- Audio edit duration and filler rules scale with the actual audio sample
+  count (10x rule) - no hardcoded counts anywhere in tools/rtx-pipeline.js.
+Notes:
+- A 30fps source would derive speed x1 (no slowdown); the method targets
+  >30fps sources like RTXFury ("src 60fps x2").
+- The pipeline requires the source video timescale to divide 19200 exactly
+  (600/1200/2400/4800 OK; e.g. 90000 is rejected with a clear error).
+- Test-environment note: this sandbox (2 GB RAM, 2 cores) cannot ENCODE 4K
+  10-bit HEVC (x265 OOM) - test inputs were made with x264 where needed.
+  That is a test-only limit; the pipeline itself never encodes.
+- Deployment note: the pipeline holds the file in memory ~2-3x, so a 600 MB
+  4K upload needs roughly 1.5-2 GB RAM on the server. Keep this in mind when
+  picking the free VM shape (Oracle Always Free ARM has enough).
+
 ### Remaining open questions / known differences
 1. Reference track 1 mdhd duration (ours: 963072 stts sum) - needs the full
    reference dump to confirm.
