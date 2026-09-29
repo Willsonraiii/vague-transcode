@@ -182,6 +182,24 @@ posted video, SDR fallback behaviour, other sources (120fps), other lengths.
 The processing method is now VALIDATED end to end. Remaining work is the
 online service (see ONLINE-SERVICE-PLAN.md) and deployment.
 
+### Online backend service v1 (2026-09-29, branch online-rtx-service)
+- NEW server-rtx-online.js + public/index.html (commit 7fda562): the validated
+  pipeline behind a job web API on port 3005.
+  - POST /api/jobs (multipart "video", 600 MB cap) -> {id}
+  - GET /api/jobs/:id -> queued|processing|done|failed
+  - GET /api/jobs/:id/download -> optimized.mp4, then ALL job files deleted
+  - GET /health (checks ffprobe), GET / = mobile upload page with progress bar
+  - One job at a time (others queue), 1-hour TTL cleanup, orphaned job dirs
+    purged on restart, disk-space guard (needs ~2 GB free), random 32-hex ids,
+    no shell interpolation (spawn arg arrays), uploads outside the web root.
+- Tested end-to-end in the sandbox: upload -> done -> download validates
+  (copyts PASS, track-2 packets 0,0,2048) -> job dir count returns to 0.
+  Bad id 400, unknown job 404, wrong file type 400.
+- NOT done yet (per ONLINE-SERVICE-PLAN): deployment (Oracle Always Free
+  first), HTTPS via reverse proxy, an access token before public exposure,
+  progress % from the worker, cancellation.
+- Existing servers untouched (server-lossless.js baseline still on 3002 etc.).
+
 ### Remaining open questions / known differences
 1. Reference track 1 mdhd duration (ours: 963072 stts sum) - needs the full
    reference dump to confirm.
