@@ -1,348 +1,228 @@
-# Continuation Prompt — Vague / RTXFury-Style Online Optimizer
+# Continuation Prompt — Vague / RTXFury-Style Online Optimizer (FINAL MIGRATION, 2026-09-29)
 
-Copy the text below into a new chat or give it to another agent. The agent must read
-this file, `HANDOFF.md`, and `ONLINE-SERVICE-PLAN.md` before changing code.
+Give this file to the next agent, together with the file
+`vague-transcode-all-work.bundle` (git bundle — contains every branch and
+commit). The agent must read this file, `HANDOFF.md`, and
+`ONLINE-SERVICE-PLAN.md` (both are inside the bundle's repository too)
+before changing anything.
 
 ---
 
-## Role and instruction
+## 1. Role and rules (unchanged discipline)
 
-Continue the Vague Transcode project from the existing repository history. Do not
-restart the history, do not repeat already-failed browser-only experiments, and do
-not blindly patch MP4 metadata. The project is trying to build an online personal
-video optimizer that follows the observed RTXFury workflow and output as closely as
-technically possible.
+- Continue the Vague Transcode project. Do not restart history, do not repeat
+  failed approaches (list at the end), do not blindly patch MP4 metadata.
+- Before changing repository or processing code, state the exact change and
+  wait for user confirmation unless the user approved the step.
+- Keep experiments in branches. Never merge experiment PRs into `main`
+  without the user's explicit decision.
+- Validate every MP4 with ffprobe + `ffmpeg -v error -copyts -vsync 0 -i FILE
+  -map 0 -c copy -f null -`.
+- NEVER claim TikTok success without the user confirming it in TikTok Studio.
 
-Before making any repository or processing-code change, state the exact change and
-wait for confirmation unless the user has explicitly approved that implementation
-step. Keep all experiments isolated in branches. Never claim TikTok success without
-TikTok Studio validation.
+## 2. Project status in one paragraph
 
-**Environment note (2026-09-29 session):** the second-AAC-track experiment was
-implemented and validated in an Arena sandbox clone of the GitHub repo
-(`/home/user/vague-transcode`, branch `rtx-audio-track-experiment`, commit
-`ff9a716`). The sandbox has no GitHub credentials, so the commit exists there and
-as `/home/user/rtx-work/0001-Add-RTXFury-second-AAC-track-experiment-tool.patch`
-plus `/home/user/rtx-work/rtx-audio-track-experiment.bundle`. To land it on the
-user's Linux laptop, either apply the patch / fetch the bundle there, or re-run the
-same steps. The tool file itself is `tools/build-rtx-second-aac.js` (new file only;
-no existing code was modified).
+The RTXFury-style optimization method is FULLY VALIDATED on two real iPhone
+videos, including TikTok Studio DELIVERING HDR on the output (user-confirmed
+2026-09-29). A complete online backend (upload → job queue → validated
+pipeline → progress → download → auto-delete, access token, two optimization
+options, Docker + deploy guide) is BUILT AND TESTED in a sandbox but NOT yet
+synced to the user's laptop/GitHub and NOT yet deployed. The next agent's
+first job is the sync (section 5), then deployment (section 7).
 
-## User's final objective
+## 3. Where the work lives (CRITICAL — read carefully)
 
-Build a cloud-hosted personal web service usable from any device, especially a phone:
+Three copies exist, and they are NOT equal:
 
-```text
-Phone / any browser
-        ↓ upload video
-Online processing server
-        ↓ server-side lossless MP4/timing/container processing
-Temporary output
-        ↓ browser downloads result
-User uploads downloaded MP4 to TikTok Studio
-        ↓
-Server deletes temporary files
+| Copy | State |
+|---|---|
+| **git bundle** `vague-transcode-all-work.bundle` (from the previous chat) | ✅ AUTHORITATIVE — all branches, 16 commits ahead of GitHub |
+| Previous chat's workspace `/home/user/vague-transcode` | ✅ same as bundle (source the bundle was built from) |
+| GitHub `Willsonraiii/vague-transcode` | ❌ BEHIND: `main` e3ca2c3, `online-server-lossless` c075f11, `rtx-audio-track-experiment` 6c5002b, `rtx-final-sample-experiment` 6c5002b. None of the 2026-09-29 work is pushed. |
+| User's laptop `/home/willson/Desktop/vague-transcode` | ❌ BEHIND: has the v1 second-AAC tool commit (local, content of ff9a716) and possibly user-made commits of the same files under different messages. Branch `rtx-audio-track-experiment`. |
+
+The bundle is the single source of truth. Its branches:
+- `main` e3ca2c3 (untouched)
+- `online-server-lossless` c075f11 (untouched)
+- `rtx-final-sample-experiment` 6c5002b (untouched)
+- `rtx-audio-track-experiment` 7c0d45b (validated method)
+- `online-rtx-service` 86d70a0 (HEAD of all work: method + backend + docs)
+
+Commit chain on `online-rtx-service` (all 2026-09-29):
+ff9a716 v1 second-AAC tool → 7056364 reference-matched v2 → 2092c92 stbl fix
+→ 7c0d45b drop trailing audio samples → 2bba639 generic pipeline tool →
+f4fa650 stripDV+rebrand (HDR fix) → 98a66ed mvhd v1 unknown duration →
+30814a5 TikTok success + docs preserved → 01abae8 backend v1 docs → 7fda562
+backend v1 (server-rtx-online.js + public/index.html) → 2a1c209 4K/120fps
+verification → 38f72a0 acceptance+bitrate guidance → 33594c2 second-video
+confirmation → 1c34192 backend v2 (token/progress/cancel/timeout/Docker/
+DEPLOY.md) → a10bf3c backend v2 docs → 86d70a0 two optimization options.
+
+In a NEW sandbox the agent can restore everything from the uploaded bundle:
+```bash
+git clone vague-transcode-all-work.bundle vague-transcode
+cd vague-transcode && git remote set-url origin https://github.com/Willsonraiii/vague-transcode.git
+git fetch origin   # GitHub refs visible for comparison; no push credentials
 ```
 
-The user's Linux laptop is for development and deployment only. The finished service
-must not depend on the laptop staying powered on. The user does not intend to sell
-the service; personal use is the target. A free cloud tier is preferred. Maximum
-input size is approximately 600 MB per video.
+## 4. The validated method (what tools/rtx-pipeline.js does)
 
-Temporary-storage policy:
-- Store original and output only while a job is active or awaiting download.
-- Delete successful originals and outputs after download.
-- Delete failed, cancelled, and abandoned jobs automatically.
-- Do not keep a permanent video archive.
+One command: `node tools/rtx-pipeline.js INPUT.mp4 OUTPUT.mp4`
+(plus optional `--keep-dv`, `--audio-elst-ms N`, `--filler-count N`).
 
-## Website/workflow being followed
+From any source MP4 (with audio, fps>30, video timescale divides 19200):
+1. `lib/remux.js` faststartRemux: moov to front, video timescale → 19200,
+   chunk offsets rewritten, `stripDV` (Dolby Vision → plain HLG) and
+   `rebrand` (major brand isom) — UNLESS `--keep-dv`.
+2. Timing derived per input: fps→speed (60→x2, 120→x4), video stts scaled,
+   final-sample split (`tools/split-last-stts.js`), video elst duration
+   (ceil to ms, movie timescale 1000) and media_time from first ctts
+   offset × speed, audio elst from source priming × speed (duration =
+   video elst − 8 ms, UNCONFIRMED rule, overridable).
+3. `tools/build-rtx-second-aac.js` (v2, reference-matched): audio stts scaled
+   with final-sample TRIM to the edit end (471×1024 → 470×2048 + 1×512),
+   re-chunked one-sample-per-chunk (last chunk 2), audio elst kept,
+   tkhd/mdhd = edit values; SECOND audio track: plain (NO elst, NO ctts —
+   DTS 0, pts==dts, 2048 durations), SHARES track 1's chunk offsets (no
+   duplicated bytes), fillers appended at EOF outside the declared mdat
+   (count = 9 × audio samples by the 10x rule, payload 0000000400000000,
+   1 tick each), mdhd = edit duration in ticks, sgpd/sbgp kept; mvhd →
+   version 1, 120 bytes, duration 0xFFFFFFFFFFFFFFFF ("unknown" — this is
+   why the file shows no playtime and won't play in phone galleries),
+   udta (creation_time) dropped, next_track_id updated, all offsets shifted.
 
-The reference site is RTXFury (`rtxfury.xyz`), not Vague's old browser-only
-implementation. RTXFury is treated as the behavioral and structural reference
-because its website shows an optimization stage, account/tier-based upload limits,
-and an upload → backend processing → download workflow.
+Why each piece matters (all measured from the real RTXFury reference file):
+- DV→HLG + everything above = TikTok DELIVERED HDR (confirmed).
+- Without DV strip, TikTok did NOT deliver HDR (first test failed).
+- Second track pattern: packets `0,0,2048`, 4710 = 471×10 samples.
+- Reference growth over source: 61,107 bytes (not "0.5 MB" — that earlier
+  observation measures 59.7 KB on this pair).
 
-The browser is only the client interface. RTXFury's processing is treated as
-server-side/backend processing. Our intended equivalent is an online cloud backend,
-not an offline laptop-only server.
+## 5. FIRST TASK: sync the user's laptop + GitHub from the bundle
 
-RTXFury workflow to follow:
-
-```text
-Browser selects/upload video
-        ↓
-RTXFury backend processes/remuxes it
-        ↓
-Browser downloads optimized MP4
-        ↓
-User uploads MP4 to TikTok
-```
-
-Our service should provide the same user workflow, but use our own server-side
-pipeline. Do not claim that the private RTXFury algorithm has been fully reproduced
-until a generated file is compared and tested in TikTok Studio.
-
-## Repository/platform rules
-
-- When the user says Windows, assume the clone is on the Desktop unless they provide
-  another path.
-- On the user's Linux machine, the active clone is:
-
-```text
-/home/willson/Desktop/vague-transcode
-```
-
-- An old Downloads clone was deleted. Do not create another clone unless requested.
-- Use the Linux Desktop clone only (on the laptop). In the Arena sandbox the clone
-  is `/home/user/vague-transcode` (cloned from GitHub; all four branches present).
-- The GitHub repository is:
-
-```text
-https://github.com/Willsonraiii/vague-transcode.git
-```
-
-- User is authenticated with GitHub locally (on the laptop) and can push. Do not ask
-  for or use a pasted token.
-- Keep migration/handoff files updated after meaningful work.
-- Keep backups in Git branches and GitHub. Do not merge experimental pull requests
-  into `main` until validation is complete.
-
-## Branches and current position
-
-```text
-main                        e3ca2c3  Preserve RTX edit-list timing structure
-online-server-lossless      c075f11  Fix composition offsets in RTXFury timing experiment
-rtx-final-sample-experiment 6c5002b  Match RTXFury movie timescale and edit durations
-rtx-audio-track-experiment  ff9a716  Add RTXFury second-AAC-track experiment tool   <-- current work
-                            (was 6c5002b before the 2026-09-29 session)
-```
-
-On the laptop the branch may still be at `6c5002b` until the patch/bundle is
-applied and pushed. Do not delete branches. Do not merge PRs yet.
-
-First commands in a new session (laptop):
+The user must download `vague-transcode-all-work.bundle` from the previous
+chat (or the next agent re-creates the bundle after cloning it — content is
+identical). Then ON THE LAPTOP (user is authenticated with GitHub there):
 
 ```bash
-cd "$HOME/Desktop/vague-transcode"
-git status --short --branch
-git branch -vv
-git log --oneline --decorate --graph --all -20
-ls -l tools lib/rtx* server-rtx* 2>/dev/null
-ls -lh /home/willson/Downloads/rtxfury-matching-1790458373247510.mp4
+cd ~/Desktop/vague-transcode
+git remote add bundle ~/Downloads/vague-transcode-all-work.bundle
+git fetch bundle
+git checkout -B online-rtx-service bundle/online-rtx-service
+git branch -f rtx-audio-track-experiment bundle/rtx-audio-track-experiment
+git push -u origin online-rtx-service
+git push origin rtx-audio-track-experiment
+git remote remove bundle
 ```
 
-## Files in the repository / project
+Notes:
+- The laptop's local v1 commit(s) become redundant (same content exists in
+  the bundle's history under different hashes). If git refuses `branch -f`
+  because the user is ON that branch, checkout the new branch first.
+- Never force-push `main`. `main` is identical in the bundle and on GitHub.
+- After the push: verify on GitHub that `online-rtx-service` tip = 86d70a0.
 
-```text
-index.html
-lib/remux.js            lib/wasm-encode.js    lib/probe.js        lib/hdr-doctor.js
-server-transcode.js     server-lossless.js    server-rtx-experiment.js
-server-rtx-duration-experiment.js
-lib/rtx-duration.js     lib/rtx-edit.js
-tools/split-last-stts.js
-tools/patch-rtx-movie-time.js
-tools/build-rtx-second-aac.js        <-- second AAC track (v2: 7056364..7c0d45b)
-tools/rtx-pipeline.js                <-- generic one-command pipeline (2bba639)
-Dockerfile  package.json  package-lock.json  SETUP.md  README.md
-```
+## 6. The backend (branch online-rtx-service)
 
-Workspace-only helpers from the sandbox session (not in the repo):
-`/home/user/rtx-work/run-stage1.mjs` (stage-1 driver: remux+duration+edit),
-`/home/user/rtx-work/dump-boxes.py` (MP4 box dumper),
-`/home/user/rtx-work/validation-log.md` (full session log),
-`/home/user/rtx-work/synthetic-source.mp4` (synthetic stand-in source).
+Files: `server-rtx-online.js` (Express, port 3005), `public/index.html`
+(mobile UI), `Dockerfile.online`, `docker-compose.yml` (with free-tier
+keepalive container), `.env.example`, `DEPLOY.md` (full Oracle steps),
+`tools/rtx-pipeline.js` (progress markers 5/35/55/70/95/100 + a
+machine-readable `PIPELINE_RESULT {...}` summary line).
 
-## Existing server paths and their meaning
+API (all /api routes require the token when ACCESS_TOKEN is set — header
+`x-access-token` or `?token=`):
+- `POST /api/jobs` multipart fields `video` (≤600 MB) + `mode`
+  (`hdr` default | `standard`) → `{id}`
+- `GET /api/jobs/:id` → status/progress/stage/mode/result
+- `GET /api/jobs/:id/download` → file, then job dir deleted
+- `DELETE /api/jobs/:id` → cancel running/queued job + cleanup
+- `GET /health`; `GET /` = UI (two option cards, token box, progress,
+  cancel, download button, DV-detection message)
 
-- `server-transcode.js` — old Dolby Vision re-encode server. Leave intact.
-- `server-lossless.js` — working baseline server on port 3002 (options
-  `stripEdits:false, stripDV:false, zeroDuration:false, rebrand:false`).
-  Baseline; must not be broken.
-- `server-rtx-experiment.js` — 1/19200 timing experiment on port 3003
-  (isoSignature via the browser remux module).
-- `server-rtx-duration-experiment.js` — timing-chain experiment server on port
-  3004: faststartRemux(isoSignature) + applyRtxDurationExperiment +
-  patchVideoEditList(20, 1280).
+Two optimization options (user-requested 2026-09-29):
+- `hdr` (default, RECOMMENDED): fps+quality bypass + Dolby Vision → HLG.
+  This is the TikTok-validated path.
+- `standard` (`--keep-dv`): bypass only, source HDR signalling untouched.
+  For non-DV sources both modes produce byte-identical output (verified).
+  For DV sources, standard mode is expected to lose the HDR tag on TikTok
+  (matches the one failed test) — still officially UNVALIDATED on TikTok.
 
-## Source/reference media used on Linux
+Storage policy (implemented): jobs in `./jobs/<32-hex>/`, deleted on
+download; 1 h TTL sweeper; orphaned dirs purged on restart; disk guard
+(needs ~2 GB free); one job at a time (others queue); processing timeout
+30 min (SIGTERM); no shell interpolation anywhere.
 
-```text
-/home/willson/Downloads/1790458373247510.MP4                 (valid source)
-/home/willson/Downloads/rtxfury-matching-1790458373247510.mp4 (RTXFury reference)
-```
+Tested in sandbox: full job cycle, 401s, cancellation (queued + running),
+invalid mode fallback, both modes byte-identical on non-DV input, orphan
+cleanup. NOT tested: real 600 MB upload latency, multi-user load.
 
-Source characteristics: 600 HEVC Main 10 frames, video timescale 1/600, stts
-600x10, duration 10.000000 s, AAC 471 samples, sample duration 1024 at 1/48000
-(last sample partial — see expected tool output below), audio priming 2112
-(elst media_time 2112 -> 4224 after x2).
+## 7. Next steps after sync
 
-Old invalid files (do not use as inputs): `1790458373247510-vague.mp4`,
-`1790458373247510-patched.mp4`.
+1. **Deploy** per `DEPLOY.md` (in the repo). Facts verified 2026: Oracle
+   Always Free = VM.Standard.A1.Flex up to 4 ARM OCPU + 24 GB RAM, 200 GB
+   block storage, 10 TB/month egress, credit-card verification (not
+   charged within limits), ~7-day idle reclamation (keepalive included),
+   ARM capacity can be hard to get (try multiple regions). Alternative:
+   any cheap Linux VPS works (Docker image is arch-neutral).
+2. HTTPS with Caddy before real use (token over plain HTTP is readable).
+3. Have the user verify on the phone: upload → progress → download →
+   TikTok Studio, both modes, including a real iPhone DV video.
+4. Optional later: Discord login/real accounts, job history, multiple
+   workers (all listed in ONLINE-SERVICE-PLAN.md "Future optional").
 
-## Exact matching RTXFury output facts (reference target)
+## 8. Open questions / known differences (non-blocking)
 
-```text
-Video: HEVC Main 10, 600 frames, 1/19200, 19.983333 s, ~30.03 FPS, ~15.36 Mbps
-Audio 1: AAC, 1/48000, 471 frames, 19.976000 s, ~128 kbps, starts DTS -4224,
-         carries AAC skip-samples side data, stts 470x2048 + 1x512
-Audio 2: AAC, 1/48000, 4710 frames, 19.976000 s, ~142 kbps, starts DTS 0,
-         no skip-samples side data, stts 470x2048 + 1x512 + 4239x1,
-         samples 471-4709 are 8 bytes each, payload 0000000400000000
-elst: video (19984, 1280); audio1 (19976, 4224); audio2 (19976, 4224)
-movie timescale 1000; video media timescale 19200; audio media timescale 48000
-metadata: major_brand isom, compatible isomiso2mp41,
-encoder "RTX Fury Quality Method - https://www.rtxfury.xyz/ - v21.2 [src 60fps x2]"
-```
+- standard mode on a real DV video in TikTok (expected: no HDR tag) — user
+  check pending.
+- Reference track 1 mdhd duration (ours 963072 = stts sum) never confirmed.
+- Reference file is fully re-interleaved (audio packet-per-chunk between
+  video); we preserve the source interleave. Demux-equivalent, cosmetically
+  different; size impact only.
+- The −8 ms audio elst rule and 10× filler rule are from ONE reference
+  file. A second RTXFury reference would confirm (ask the user for one
+  someday).
+- Reference ftyp minor_version 512, encoder tag "RTX Fury Quality Method
+  ... v21.2 [src 60fps x2]" — we do not write an encoder tag.
+- 30 fps sources derive speed x1 (no slowdown) — method targets >30 fps.
+- Sources whose video timescale does not divide 19200 (e.g. 90000) are
+  rejected with a clear error; a real remux path for them is not built.
+- ffprobe still shows format duration 19.983333 for our output (computed
+  from tracks) — same as the reference; only mvhd says unknown.
 
-The first 471 audio packet sizes/durations match between the two audio tracks, but
-timing metadata differs (start DTS, skip-samples side data).
+## 9. Failed approaches — do NOT repeat
 
-Additional user observations (2026-09-29, see HANDOFF.md for detail):
-1. RTXFury's flow appears to upload the user's video to their own backend /
-   remote processor and re-download it before offering the result — consistent
-   with the planned job/worker architecture.
-2. The final file is roughly 0.5 MB larger than the input — consistent with
-   the duplicated audio track + fillers + moov growth (the ~128/~142 kbps
-   reference bitrates imply a ~320 KB audio payload; 320 KB + 4239×8 B over
-   19.976 s ≈ 141.6 kbps). Verify: reference size − source size, and the
-   tool's outputBytes − inputBytes on the real run.
-3. Videos without audio CANNOT be optimized — the audio track is load-bearing
-   for the bypass. Keep rejecting audio-less inputs in the pipeline.
+- `-itsscale` + one-tick/`00:00` duration patch (worse fps/quality).
+- Browser-only WASM remux claimed as RTXFury-equivalent.
+- `stripEdits:true` (RTXFury keeps edit lists).
+- In-place 4-byte `dby1` replacement (ftyp must be rebuilt/shrunk).
+- Second AAC track WITHOUT full sample tables (stts/stsc/stsz/stco) — a
+  byte-copy of the trak is invalid.
+- ctts composition offset on track 2 (v1 theory — disproven by the real
+  reference dump: track 2 has NO ctts, NO elst).
+- Duplicating the audio payload for track 2 (reference shares offsets).
+- Keeping Dolby Vision when HDR delivery is the goal (TikTok test failed).
+- Trusting the source's video elst media_time (real source had 0; reference
+  uses 1280 = first ctts × speed).
+- Claiming TikTok success without TikTok Studio confirmation.
 
-## Validated video experiment results (unchanged)
+## 10. Key user-facing facts (keep saying these simply)
 
-The final-sample splitter + movie-time patch produced (validated previously and
-re-confirmed on the synthetic stand-in in the 2026-09-29 session):
+- Acceptable input: MP4/MOV, WITH audio, fps above 30, up to 600 MB,
+  4K 120fps max and everything below (tested: 4K120, 4K60, 1080p, 720p).
+- The pipeline is LOSSLESS — output quality = input quality. Recommend the
+  user record at max phone quality (1080p60 HDR 25–35 Mbps; 4K60 45–80 Mbps).
+- 600 MB length caps: ~2.6 min at 30 Mbps, ~2 min at 40 Mbps, ~1.6 min at
+  50 Mbps. Cut length, never lower quality.
+- The optimized file will NOT play normally in the phone gallery and shows
+  no playtime — that is intentional (unknown-duration mvhd), same as
+  RTXFury. TikTok Studio accepts it.
 
-```text
-video r_frame_rate 30/1, avg_frame_rate 36000/1199, timebase 1/19200,
-duration_ts 383680, duration 19.983333, 600 frames, stts 599x640 + 1x320,
-movie timescale 1000, video elst (19984, 1280), audio elst (19976, 4224)
-```
+## 11. Handoff rule
 
-The movie-time patched output passed `ffmpeg -v error -copyts -vsync 0 -i FILE
--map 0 -c copy -f null -` with no output.
-
-## 2026-09-29 session — second AAC track: real-file run + reference-matched v2
-
-Timeline: v1 tool (commit ff9a716, sandbox) was installed and run on the REAL
-source via laptop kit v1 (laptop commit 8012409). The real run + reference box
-dump then DISPROVED two assumptions (track 2 elst; ctts theory) and revealed
-the exact reference construction. Tool v2 (commits 7056364 + 2092c92, sandbox)
-implements the measured construction and is embedded in kit v2
-(sha256 ac3abe74...). Kit v2 self-updates the tool on the laptop and re-runs.
-
-Measured reference facts (supersede earlier assumptions):
-- Source audio: 471 samples, stts uniform 471x1024, 19 chunks, priming elst.
-- Track 1: stts 470x2048 + 1x512 — final sample TRIMMED so media ends exactly
-  at the edit end (4224 + 19976ms x 48 = 963072); re-chunked stsc [(1,1),(470,2)]
-  with 470 one-sample chunk offsets; sgpd/sbgp kept; DTS -4224 + skip 4224.
-- Track 2: NO elst, NO ctts (plain track: DTS 0, pts == dts, 2048 durations,
-  all 4710 packets); stts 470x2048 + 1x512 + 4239x1; stsc [(1,1),(470,2),
-  (471,4239)]; stco 471 entries with the first 470 SHARED with track 1 (no
-  duplicated payload); mdhd 958848 (edit ticks); tkhd 19976; sgpd/sbgp kept.
-- Fillers (4239 x 0000000400000000) appended at EOF OUTSIDE the declared mdat.
-- Reference growth over source: 61,107 bytes (not 0.5 MB).
-- Reference container: ftyp isom/isomiso2mp41 28B + free 8B, mvhd v1 120B,
-  encoder tag; reference is fully re-interleaved (audio packet-per-chunk).
-
-v2 tool validation (synthetic): track 2 packets 0/0/2048, all samples present,
-duration 19.976, copyts PASS; decode errors only from fillers (expected; the
-reference decodes identically — kit v2 prints both error counts).
-
-Immediate next step: re-run kit v2 on the laptop, paste the report, answer the
-remaining open questions (track 1 mdhd duration; mvhd v1 duration/next_track_id
-— kit v1's dumper had wrong v1 offsets, fixed in v2), then push the branch.
-No PR merges. No TikTok claims until TikTok Studio validation.
-
-## What remains to do
-
-### 1. Validate the second AAC track on the REAL files (immediate next task)
-
-The user runs this on the Linux laptop with `/home/user/rtx-work/laptop-runbook.sh`
-(download the runbook, `dump-boxes.py`, and the patch or tool file from the
-workspace). It performs all of the following automatically and writes
-`/tmp/vague-audio-experiment-report.txt` to paste back:
-
-On the laptop (or by uploading the two files to the sandbox):
-1. Run the full chain on `/home/willson/Downloads/1790458373247510.MP4`:
-
-```bash
-node server-rtx-duration-experiment.js &   # or the run-stage1.mjs driver
-# upload/download via the server, or call the libs directly, then:
-node tools/split-last-stts.js  STAGE1.mp4  /tmp/vague-rtx-final-sample-experiment.mp4
-node tools/patch-rtx-movie-time.js /tmp/vague-rtx-final-sample-experiment.mp4 \
-  /tmp/vague-rtx-movie-time-experiment.mp4
-node tools/build-rtx-second-aac.js /tmp/vague-rtx-movie-time-experiment.mp4 \
-  /tmp/vague-rtx-audio-track-experiment.mp4
-```
-
-2. Check the tool's JSON matches the assertions above.
-3. ffprobe both audio streams of the output AND of the RTXFury reference
-   (`rtxfury-matching-1790458373247510.mp4`); compare first-packet DTS, side
-   data, packet durations, nb_frames, durations.
-4. Box-dump reference track 2 and answer the open questions:
-   - does reference track 2 have ctts? (our default assumes yes)
-   - reference track 2 packet durations in ffprobe: 2048 or 1024-style?
-   - are track 2's first 471 chunk offsets shared with track 1 or duplicated?
-   - does reference track 2 keep sgpd/sbgp? (we drop them)
-   - reference track 2 stsc layout (we write one chunk of all 4710 samples)
-5. Run `ffmpeg -v error -copyts -vsync 0 -i OUT.mp4 -map 0 -c copy -f null -`
-   and a full decode test.
-6. Only then: Files/Gallery playback test and TikTok Studio upload. Record the
-   exact result in HANDOFF.md. Do not claim success before TikTok confirms.
-
-### 2. Implement generic timing
-
-The experiment tools still hardcode reference-specific values (19984/19976/1280/
-4224/4239; build-rtx-second-aac.js derives everything else from the input but
-trusts the input elst media_time). The production algorithm must read per-input
-mdhd/stts/ctts/frame counts/movie timescale, derive the media_time from source
-priming, compute target timing per input, and validate 60 FPS and 120 FPS
-separately.
-
-### 3. Match remaining container structure
-
-- RTXFury `mvhd` version 1 / 120-byte vs our version 0 / 108-byte.
-- Exact `ftyp` size/brand layout; remove `dby1` by rebuilding/shrinking ftyp.
-- Ensure no accidental DOVI metadata destruction; determine why RTXFury's
-  ffprobe no longer reports the source DOVI configuration record.
-
-### 4. Integrate server pipeline (after audio + container experiments are valid)
-
-One final server-only pipeline; keep baseline and experiments available; API job
-lifecycle, progress, cancellation/timeout, cleanup; mobile browser UI; 600 MB
-limit; HTTPS/private access before public exposure.
-
-### 5. Deploy online (Oracle Always Free investigated first; provider-neutral
-via Docker; do not use the laptop as the production server).
-
-### 6. Validate TikTok (for every claimed final version: ffprobe + packet timing
-+ Files/Gallery + TikTok Studio; record exact results in HANDOFF.md).
-
-## Important failed approaches (do not repeat)
-
-- FFmpeg `-itsscale` plus a one-tick/`00:00` duration patch (worse FPS/quality).
-- Browser-only WASM remux as if it were equivalent to RTXFury's backend.
-- `stripEdits:true` for the RTXFury output; RTXFury retains edit lists.
-- Simple four-byte `dby1` replacement; RTXFury's ftyp is smaller and requires box
-  rebuilding.
-- Treating `00:00` as the whole method.
-- Duplicating AAC tracks without matching sample tables and offsets.
-- Claiming Dolby Vision preservation solely because the source contains DOVI.
-- Claiming TikTok success without TikTok Studio validation.
-
-## Handoff rule
-
-At the end of every meaningful session:
-
-```bash
-git status --short --branch
-git log -1 --oneline
-git push
-```
-
-Update `HANDOFF.md` and this continuation prompt with: current branch and commit,
-files changed, commands run, validation results, exact known differences, exact
-next step, and any uncommitted files. Never leave the next agent to infer which
-branch, file, or experiment is current.
+At the end of every meaningful session: update `HANDOFF.md` and this prompt
+(they live in the repo AND at the workspace root), commit, rebuild the
+`--all` git bundle, and have the user download it. Record: current branch
+and commit, files changed, commands run, validation results, exact known
+differences, exact next step, uncommitted files. Never leave the next agent
+to infer which branch, file, or experiment is current.

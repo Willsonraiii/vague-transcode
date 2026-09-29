@@ -1,5 +1,18 @@
 # Vague Transcode — Migration / Handoff Notes
 
+## ⭐ START HERE (final migration, 2026-09-29)
+
+1. The optimization method is VALIDATED: two real videos, TikTok Studio
+   DELIVERED HDR (user-confirmed). The backend is built and tested but NOT
+   synced to laptop/GitHub and NOT deployed.
+2. AUTHORITATIVE CODE SOURCE: the git bundle `vague-transcode-all-work.bundle`
+   (all branches; `online-rtx-service` @ 86d70a0 is the newest). GitHub and
+   the laptop are BEHIND — see NEXT-AGENT-PROMPT.md section 3.
+3. FIRST TASK for the next agent: laptop + GitHub sync from the bundle
+   (NEXT-AGENT-PROMPT.md section 5 has the exact commands).
+4. THEN: deployment per DEPLOY.md (Oracle Always Free, facts verified 2026).
+
+
 ## Purpose
 Build an online RTXFury-style video optimizer that can be used from any device,
 especially a phone. The finished service must run on a cloud server rather than
