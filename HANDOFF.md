@@ -243,6 +243,25 @@ re-encodes, so TikTok receives exactly what was recorded.
 600 MB limit = max length by bitrate: 30 Mbps ~ 2.6 min, 40 Mbps ~ 2 min,
 50 Mbps ~ 1.6 min, 25 Mbps ~ 3.2 min.
 
+### Backend v2 (2026-09-29, branch online-rtx-service, commit 1c34192)
+Everything from ONLINE-SERVICE-PLAN.md's security list now implemented:
+- ACCESS_TOKEN env: every /api route requires it (header x-access-token or
+  ?token=) when set; unset = open for local dev. Health reports auth mode.
+- Progress: tools/rtx-pipeline.js emits additive stderr markers
+  (5/35/55/70/95/100 + stage); server parses them into job status; UI shows %.
+- Cancellation: DELETE /api/jobs/:id kills a running job (SIGTERM) and
+  deletes its files; queued jobs delete instantly.
+- Processing timeout: PROCESS_TIMEOUT_MS (default 30 min) kills stuck jobs.
+- Dockerfile.online (node:20-slim + ffmpeg, arm64/x64) and docker-compose.yml
+  (restart policy, 4 GB mem limit, jobs volume, daily keepalive container).
+- .env.example documents all settings; npm run start:online.
+- DEPLOY.md: full Oracle Always Free deployment steps (facts verified 2026:
+  A1.Flex 4 OCPU/24 GB RAM/200 GB disk/10 TB egress, card verification,
+  7-day idle reclamation, capacity lottery), Caddy HTTPS, systemd path,
+  rollback.
+All 10 endpoint tests passed in-sandbox (401s with wrong/missing token,
+upload+progress+download with token, queued/running cancellation, cleanup).
+
 ### Remaining open questions / known differences
 1. Reference track 1 mdhd duration (ours: 963072 stts sum) - needs the full
    reference dump to confirm.
