@@ -2,6 +2,10 @@
 
 ## ⭐ START HERE (final migration, 2026-09-29)
 
+0. CONTINUATION START POINT: after the second-video TikTok confirmation the
+   user said "keep working" and left; the agent built the whole backend and
+   the two-option feature alone; the user returned and DID NOTHING (no
+   downloads, no laptop sync, no push, no tests). Start from there.
 1. The optimization method is VALIDATED: two real videos, TikTok Studio
    DELIVERED HDR (user-confirmed). The backend is built and tested but NOT
    synced to laptop/GitHub and NOT deployed.

@@ -30,6 +30,27 @@ options, Docker + deploy guide) is BUILT AND TESTED in a sandbox but NOT yet
 synced to the user's laptop/GitHub and NOT yet deployed. The next agent's
 first job is the sync (section 5), then deployment (section 7).
 
+### EXACT timeline of the end of the last session (continuation start point)
+
+1. User confirmed the SECOND video worked in TikTok ("yeah worked").
+2. User said: "now work for backend until come back keep working" and LEFT.
+3. The agent worked ALONE and completed: backend v2 (access token, progress,
+   cancel, timeout, Dockerfile.online, docker-compose.yml, DEPLOY.md), then
+   the two optimization options (hdr/standard — requested by the user in a
+   short message during that period), then the migration docs.
+4. User came back BUT DID NOTHING after that: no files downloaded from the
+   chat, no laptop commands run, no git push, no TikTok test of the new
+   features. The two-option UI has NEVER been seen or used by the user.
+5. Migration package was prepared (this file + the git bundle).
+
+=> CONTINUATION START POINT: exactly at step 4. Everything from step 3 is
+un-synced work that exists only in the git bundle (and the previous chat's
+workspace). Treat the user as having done NOTHING since the second-video
+confirmation; do not assume any sync, push, download, or test happened.
+The user's last personal actions in total were: running the pipeline on two
+real videos and validating both in TikTok Studio, plus answering questions.
+Everything else was agent-side work in the sandbox.
+
 ## 3. Where the work lives (CRITICAL — read carefully)
 
 Three copies exist, and they are NOT equal:
