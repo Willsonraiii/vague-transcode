@@ -476,6 +476,29 @@ function patchStco(trakBuffer, stcoMeta, values) {
   });
 }
 
+/**
+ * Reference-matched mvhd: version 1 (120 bytes), creation/modification 0,
+ * duration = 0xFFFFFFFFFFFFFFFF ("unknown"). This is what makes the RTXFury
+ * output show no playtime in phone galleries while TikTok Studio still
+ * accepts it. Verified byte-by-byte against the reference xxd dump.
+ */
+function buildMvhdV1Unknown(timescale, nextTrackId) {
+  const c = Buffer.alloc(112);
+  c.writeUInt8(1, 0);                          // version 1, flags 0
+  // creation_time (8) and modification_time (8) stay 0
+  c.writeUInt32BE(u32(timescale, 'mvhd timescale'), 20);
+  c.writeBigUInt64BE(0xFFFFFFFFFFFFFFFFn, 24); // duration = unknown
+  c.writeUInt32BE(0x00010000, 32);             // rate 1.0
+  c.writeUInt16BE(0x0100, 36);                 // volume 1.0
+  // reserved (10) stay 0
+  c.writeUInt32BE(0x00010000, 48);             // matrix a
+  c.writeUInt32BE(0x00010000, 64);             // matrix w
+  c.writeUInt32BE(0x40000000, 80);             // matrix perspective
+  // pre_defined (24) stay 0
+  c.writeUInt32BE(u32(nextTrackId, 'next track id'), 108);
+  return makeBox('mvhd', c);
+}
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
@@ -488,6 +511,8 @@ let fillerDuration = 1;
 let fillerHex = '0000000400000000';
 let speedFactor = 2;
 let fillerLayout = 'eof';
+let mvhdV1Unknown = false;
+let dropUdta = false;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -503,7 +528,9 @@ for (let i = 0; i < args.length; i++) {
   else if (arg === '--filler-layout') {
     fillerLayout = args[++i];
     if (!['eof', 'mdat'].includes(fillerLayout)) throw new Error(`Unknown filler layout: ${fillerLayout}`);
-  } else positional.push(arg);
+  } else if (arg === '--mvhd-v1-unknown') mvhdV1Unknown = true;
+  else if (arg === '--drop-udta') dropUdta = true;
+  else positional.push(arg);
 }
 
 const inputPath = positional[0];
@@ -736,7 +763,13 @@ const trak2New = buildAudioTrak(input, audio1.box, a1.stbl, stbl1, {
   ctts: startMode === 'ctts' ? { count: track2SampleCount, offset: mediaTime } : null,
 });
 
-const moovDelta = trak1New.buffer.length - (audio1.box.end - audio1.box.start) + trak2New.buffer.length;
+let udtaSize = 0;
+readBoxes(input, moov.content, moov.end, (box) => {
+  if (box.type === 'udta') udtaSize = box.size;
+});
+const mvhdGrowth = mvhdV1Unknown ? 120 - mvhdBox.size : 0;
+const moovDelta = trak1New.buffer.length - (audio1.box.end - audio1.box.start)
+  + trak2New.buffer.length + mvhdGrowth - (dropUdta ? udtaSize : 0);
 
 // ---------------------------------------------------------------------------
 // Resolve real chunk offsets now that the layout shift is known
@@ -791,11 +824,17 @@ function patchOffsetsInCopy(box) {
 const moovParts = [];
 readBoxes(input, moov.content, moov.end, (box) => {
   if (box.type === 'mvhd') {
+    if (mvhdV1Unknown) {
+      moovParts.push(buildMvhdV1Unknown(movieTimescale, newTrackId + 1));
+      return;
+    }
     const mv = Buffer.from(input.subarray(box.start, box.end));
     mv.writeUInt32BE(u32(newTrackId + 1, 'next track id'), mvhdNextTrackIdOffset - box.start);
     moovParts.push(mv);
     return;
   }
+
+  if (box.type === 'udta' && dropUdta) return; // removes the creation_time tag
   if (box.type === 'trak') {
     if (box.start === audio1.box.start) {
       moovParts.push(trak1New.buffer);
@@ -886,6 +925,8 @@ console.log(JSON.stringify({
   },
   moovDelta,
   nextTrackId: newTrackId + 1,
+  mvhdV1Unknown,
+  dropUdta,
   notes: [
     'Track 1 elst values are trusted from the input (RTXFury targets 19976/4224).',
     'Final sample trimmed so media ends exactly at the edit end (media_time + edit duration in ticks).',

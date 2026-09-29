@@ -318,9 +318,21 @@ if (lastEntry.duration % 2 !== 0) {
   throw new Error(`Last video sample duration ${lastEntry.duration} is odd; cannot split in half.`);
 }
 
-// Video edit list: media time scales with speed (source priming x speed).
+// Video edit list media time: the first composition offset (scaled), which
+// zero-bases the presentation like the reference (video elst media_time 1280
+// = first ctts offset x speed on the matching source).
 const videoElst = elstInfo(b, vInfo.elst);
-const videoMediaTime = videoElst.mediaTime * speed;
+let firstCttsOffset = 0;
+if (vInfo.ctts) {
+  const entries = b.readUInt32BE(vInfo.ctts.content + 4);
+  if (entries > 0) {
+    const version = b[vInfo.ctts.content];
+    firstCttsOffset = version === 1
+      ? b.readInt32BE(vInfo.ctts.content + 12)
+      : b.readUInt32BE(vInfo.ctts.content + 12);
+  }
+}
+const videoMediaTime = firstCttsOffset * speed;
 if (videoMediaTime < 0) throw new Error('Video elst media_time is negative after scaling.');
 
 // Scaled media duration and the final-sample split.
@@ -425,7 +437,12 @@ if (splitRun.status !== 0) {
 }
 
 // Audio trim + second AAC track (validated tool).
-const toolArgs = [fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath, '--filler-count', String(fillerCount)];
+const toolArgs = [
+  fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
+  '--filler-count', String(fillerCount),
+  '--mvhd-v1-unknown',
+  '--drop-udta',
+];
 const run = spawnSync(process.execPath, toolArgs, { encoding: 'utf8' });
 process.stdout.write(run.stdout || '');
 if (run.status !== 0) {
@@ -455,6 +472,7 @@ console.log(JSON.stringify({
     videoFrameCount,
     videoSttsAfter: `${videoFrameCount - 1}x${uniformDuration * speed}, 1x${halfLast}`,
     videoMediaTicks,
+    firstCttsOffset,
     videoElst: { durationMs: videoElstMs, mediaTime: videoMediaTime },
     audioPriming: audioPrimedMediaTime,
     audioElst: { durationMs: audioElstMs, mediaTime: audioPrimedMediaTime },
