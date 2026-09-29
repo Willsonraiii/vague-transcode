@@ -20,7 +20,14 @@
  * Security: random 32-hex job ids validated on every request, no shell
  * interpolation (spawn argument arrays), upload size capped by multer,
  * output paths derived only from the server-generated job id.
- * TODO before public exposure: HTTPS via reverse proxy + an access token.
+ * Access token: set ACCESS_TOKEN in the environment -> every /api request
+ *   must send it (header "x-access-token" or ?token=...). Unset = open
+ *   (development only). HTTPS is still required before real exposure (see
+ *   DEPLOY.md - Caddy reverse proxy).
+ * Processing timeout: PROCESS_TIMEOUT_MS (default 30 min) kills stuck jobs.
+ * Cancellation: DELETE /api/jobs/:id kills a running job and deletes files.
+ * Progress: the worker reports "progress N stage" lines; GET /api/jobs/:id
+ *   returns { progress, stage }.
  */
 import express from 'express';
 import multer from 'multer';
@@ -37,6 +44,8 @@ const PIPELINE_TOOL = path.join(ROOT, 'tools', 'rtx-pipeline.js');
 const JOBS_DIR = path.join(ROOT, 'jobs');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN || '';
+const PROCESS_TIMEOUT_MS = Number(process.env.PROCESS_TIMEOUT_MS || 30 * 60 * 1000);
 const PORT = Number(process.env.PORT || 3005);
 const MAX_FILE_SIZE = 600 * 1024 * 1024;      // 600 MB upload limit
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 60 * 60 * 1000); // 1 hour
@@ -110,6 +119,8 @@ function publicJob(job) {
   return {
     id: job.id,
     status: job.status,
+    progress: job.progress ?? 0,
+    stage: job.stage ?? null,
     createdAt: job.createdAt,
     inputBytes: job.inputBytes ?? null,
     outputBytes: job.outputBytes ?? null,
@@ -133,6 +144,8 @@ function startNextJob() {
 
   processing = true;
   job.status = 'processing';
+  job.progress = 0;
+  job.stage = 'starting';
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes)`);
 
@@ -140,27 +153,58 @@ function startNextJob() {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  job.child = child;
+
+  const timeout = setTimeout(() => {
+    if (job.status === 'processing') {
+      job.timedOut = true;
+      console.error(`[job ${job.id}] processing timeout after ${Math.round(PROCESS_TIMEOUT_MS / 60000)} min — killing`);
+      child.kill('SIGTERM');
+    }
+  }, PROCESS_TIMEOUT_MS);
 
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d; });
-  child.stderr.on('data', (d) => { stderr += d; });
+  child.stderr.on('data', (d) => {
+    stderr += d;
+    // progress lines look like: "progress 45 timed"
+    const chunk = d.toString();
+    const m = chunk.match(/progress (\d+) ([a-z ]+)/i);
+    if (m) {
+      job.progress = Number(m[1]);
+      job.stage = m[2].trim();
+    }
+  });
 
   child.on('error', (err) => {
+    clearTimeout(timeout);
     job.status = 'failed';
     job.error = `worker error: ${err.message}`;
+    job.child = null;
     processing = false;
     console.error(`[job ${job.id}] failed to start: ${err.message}`);
   });
 
   child.on('close', (code) => {
+    clearTimeout(timeout);
     processing = false;
+    job.child = null;
     if (code === 0 && existsSync(job.outputPath)) {
       job.status = 'done';
+      job.progress = 100;
+      job.stage = 'done';
       stat(job.outputPath)
         .then((s) => { job.outputBytes = s.size; })
         .catch(() => {});
       console.log(`[job ${job.id}] done`);
+    } else if (job.cancelled) {
+      console.log(`[job ${job.id}] cancelled — deleting`);
+      removeJob(job);
+    } else if (job.timedOut) {
+      job.status = 'failed';
+      job.error = `processing timeout after ${Math.round(PROCESS_TIMEOUT_MS / 60000)} min`;
+      console.error(`[job ${job.id}] failed (timeout)`);
     } else {
       job.status = 'failed';
       job.error = (stderr || stdout || `pipeline exited with code ${code}`).split('\n').filter(Boolean).slice(-6).join(' | ');
@@ -185,6 +229,19 @@ setInterval(() => {
 }, CLEANUP_INTERVAL_MS).unref();
 
 // ---------------------------------------------------------------------------
+// Access token guard (when ACCESS_TOKEN is set)
+// ---------------------------------------------------------------------------
+
+app.use('/api', (req, res, next) => {
+  if (!ACCESS_TOKEN) return next();
+  const given = req.headers['x-access-token'] || req.query.token;
+  if (given !== ACCESS_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized — wrong or missing access token.' });
+  }
+  next();
+});
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
@@ -196,6 +253,7 @@ app.get('/health', async (_req, res) => {
     ffmpeg: ff.status === 0 ? ff.stdout.split('\n')[0] : null,
     node: process.version,
     maxUploadBytes: MAX_FILE_SIZE,
+    auth: ACCESS_TOKEN ? 'token' : 'open',
     jobs: { total: jobs.size, processing },
   });
 });
@@ -267,6 +325,23 @@ app.get('/api/jobs/:id/download', (req, res) => {
     console.log(`[job ${job.id}] downloaded — deleting job files`);
     removeJob(job);
   });
+});
+
+app.delete('/api/jobs/:id', (req, res) => {
+  if (!validJobId(req.params.id)) return res.status(400).json({ error: 'Bad job id.' });
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Unknown job.' });
+
+  if (job.status === 'processing' && job.child) {
+    job.cancelled = true;
+    job.child.kill('SIGTERM'); // the close handler deletes the job files
+    console.log(`[job ${job.id}] cancel requested`);
+    return res.json({ id: job.id, status: 'cancelling' });
+  }
+
+  removeJob(job);
+  console.log(`[job ${job.id}] deleted`);
+  res.json({ id: job.id, status: 'deleted' });
 });
 
 app.use((error, _req, res, _next) => {

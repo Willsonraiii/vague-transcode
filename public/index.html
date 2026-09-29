@@ -19,6 +19,11 @@
   }
   h1 { font-size: 20px; margin-bottom: 4px; }
   p.sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+  input[type=password] {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    color: #e6edf3; font-size: 15px;
+  }
   label.btn {
     display: block; text-align: center; padding: 14px;
     background: #238636; color: #fff; border-radius: 8px;
@@ -28,12 +33,17 @@
   input[type=file] { display: none; }
   #fileName { color: #8b949e; font-size: 13px; margin: 10px 0; word-break: break-all; text-align: center; min-height: 16px; }
   .bar { height: 10px; background: #21262d; border-radius: 6px; overflow: hidden; margin: 12px 0 6px; }
-  .bar > div { height: 100%; width: 0%; background: #238636; transition: width .2s; }
+  .bar > div { height: 100%; width: 0%; background: #238636; transition: width .3s; }
   #status { font-size: 14px; color: #8b949e; min-height: 20px; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
   a.download {
-    display: none; text-align: center; padding: 14px; margin-top: 12px;
+    flex: 1; text-align: center; padding: 14px;
     background: #1f6feb; color: #fff; border-radius: 8px;
     font-size: 16px; font-weight: 600; text-decoration: none;
+  }
+  button.cancel {
+    padding: 14px 18px; background: #6e2c2c; color: #ff9b9b;
+    border: 1px solid #a94442; border-radius: 8px; font-size: 15px;
   }
   #err { color: #f85149; font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
   .foot { color: #484f58; font-size: 12px; text-align: center; }
@@ -44,29 +54,49 @@
     <h1>RTX Optimizer</h1>
     <p class="sub">Upload a video (max 600 MB). After processing, download the optimized MP4 and upload it to TikTok Studio.</p>
 
+    <input type="password" id="token" placeholder="Access token (leave empty if none)" autocomplete="off">
     <label class="btn" for="file">Choose video</label>
     <input type="file" id="file" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v">
     <div id="fileName"></div>
 
     <div class="bar" id="barWrap" style="display:none"><div id="bar"></div></div>
     <div id="status"></div>
-    <a class="download" id="dl" href="#">Download optimized MP4</a>
+    <div class="row" id="actions" style="display:none">
+      <a class="download" id="dl" href="#">Download optimized MP4</a>
+      <button class="cancel" id="cancel" style="display:none">Cancel</button>
+    </div>
     <div id="err"></div>
   </div>
   <div class="foot">Files are deleted after download or 1 hour. Personal service.</div>
 
 <script>
   const fileInput = document.getElementById('file');
+  const tokenInput = document.getElementById('token');
   const fileName = document.getElementById('fileName');
   const barWrap = document.getElementById('barWrap');
   const bar = document.getElementById('bar');
   const statusEl = document.getElementById('status');
+  const actions = document.getElementById('actions');
   const dl = document.getElementById('dl');
+  const cancelBtn = document.getElementById('cancel');
   const errEl = document.getElementById('err');
+
+  tokenInput.value = localStorage.getItem('rtx_token') || '';
+  tokenInput.addEventListener('change', () => localStorage.setItem('rtx_token', tokenInput.value));
+
+  function token() { return tokenInput.value.trim(); }
+  function authHeaders() {
+    const t = token();
+    return t ? { 'x-access-token': t } : {};
+  }
+  function withToken(url) {
+    const t = token();
+    return t ? url + '?token=' + encodeURIComponent(t) : url;
+  }
 
   fileInput.addEventListener('change', () => {
     errEl.textContent = '';
-    dl.style.display = 'none';
+    actions.style.display = 'none';
     const file = fileInput.files[0];
     if (!file) return;
     fileName.textContent = file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)';
@@ -81,7 +111,9 @@
     const form = new FormData();
     form.append('video', file, file.name);
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/jobs');
+    xhr.open('POST', withToken('/api/jobs'));
+    const headers = authHeaders();
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     barWrap.style.display = 'block';
     statusEl.textContent = 'Uploading…';
 
@@ -94,6 +126,7 @@
     };
 
     xhr.onload = () => {
+      if (xhr.status === 401) { errEl.textContent = 'Wrong access token.'; barWrap.style.display = 'none'; return; }
       if (xhr.status !== 201) {
         try { errEl.textContent = JSON.parse(xhr.responseText).error || 'Upload failed.'; }
         catch { errEl.textContent = 'Upload failed (' + xhr.status + ').'; }
@@ -105,32 +138,64 @@
     xhr.send(form);
   }
 
+  let pollTimer = null;
+  let currentId = null;
+
   function poll(id) {
+    currentId = id;
     statusEl.textContent = 'Queued…';
-    bar.style.width = '100%';
-    const timer = setInterval(async () => {
+    pollTimer = setInterval(async () => {
       try {
-        const res = await fetch('/api/jobs/' + id);
+        const res = await fetch(withToken('/api/jobs/' + id), { headers: authHeaders() });
+        if (res.status === 401) { clearInterval(pollTimer); errEl.textContent = 'Wrong access token.'; return; }
         const job = await res.json();
-        if (job.status === 'queued') statusEl.textContent = 'Queued… (another video is processing)';
-        else if (job.status === 'processing') statusEl.textContent = 'Optimizing… this can take a few minutes';
-        else if (job.status === 'failed') {
-          clearInterval(timer);
+        if (job.status === 'queued') {
+          statusEl.textContent = 'Queued… (another video is processing)';
+          showCancel();
+        } else if (job.status === 'processing') {
+          statusEl.textContent = 'Optimizing… ' + job.progress + '%' + (job.stage ? ' (' + job.stage + ')' : '');
+          bar.style.width = job.progress + '%';
+          showCancel();
+        } else if (job.status === 'failed') {
+          clearInterval(pollTimer);
           statusEl.textContent = 'Failed.';
           errEl.textContent = job.error || 'Processing failed.';
+          cancelBtn.style.display = 'none';
         } else if (job.status === 'done') {
-          clearInterval(timer);
+          clearInterval(pollTimer);
           const mb = job.outputBytes ? (job.outputBytes / 1048576).toFixed(1) + ' MB' : '';
           statusEl.textContent = 'Done ' + mb;
-          dl.href = '/api/jobs/' + id + '/download';
-          dl.style.display = 'block';
+          bar.style.width = '100%';
+          actions.style.display = 'flex';
+          cancelBtn.style.display = 'none';
+          dl.href = withToken('/api/jobs/' + id + '/download');
         }
       } catch {
-        clearInterval(timer);
+        clearInterval(pollTimer);
         errEl.textContent = 'Lost connection to the server.';
       }
-    }, 2000);
+    }, 1500);
   }
+
+  function showCancel() {
+    actions.style.display = 'flex';
+    dl.style.display = 'none';
+    cancelBtn.style.display = 'block';
+  }
+
+  cancelBtn.addEventListener('click', async () => {
+    if (!currentId) return;
+    cancelBtn.disabled = true;
+    try { await fetch(withToken('/api/jobs/' + currentId), { method: 'DELETE', headers: authHeaders() }); }
+    catch {}
+    clearInterval(pollTimer);
+    statusEl.textContent = 'Cancelled.';
+    barWrap.style.display = 'none';
+    actions.style.display = 'none';
+    cancelBtn.disabled = false;
+    cancelBtn.style.display = 'none';
+    dl.style.display = 'block';
+  });
 </script>
 </body>
 </html>

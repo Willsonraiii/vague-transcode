@@ -1,0 +1,25 @@
+# Online RTX optimizer service image (lossless pipeline - no encoder needed).
+# Build:  docker build -f Dockerfile.online -t rtx-online .
+# Run:    docker run -d -p 3005:3005 --env-file .env -v rtx-jobs:/app/jobs rtx-online
+FROM node:20-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+
+COPY lib ./lib
+COPY tools ./tools
+COPY public ./public
+COPY server-rtx-online.js ./
+
+ENV PORT=3005
+EXPOSE 3005
+
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "server-rtx-online.js"]

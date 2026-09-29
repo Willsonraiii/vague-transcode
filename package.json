@@ -5,7 +5,8 @@
   "type": "module",
   "main": "server-transcode.js",
   "scripts": {
-    "start": "node server-transcode.js"
+    "start": "node server-transcode.js",
+    "start:online": "node server-rtx-online.js"
   },
   "dependencies": {
     "express": "^4.19.2",

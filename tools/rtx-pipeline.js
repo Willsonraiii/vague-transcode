@@ -217,6 +217,11 @@ if (!inputPath || !outputPath) {
 
 const warnings = [];
 
+function reportProgress(percent, stage) {
+  // Parsed by server-rtx-online.js; does not affect processing.
+  process.stderr.write(`progress ${percent} ${stage}\n`);
+}
+
 // ---------------------------------------------------------------------------
 // 1. Pre-check the source: video timescale must map to 19200 exactly
 // ---------------------------------------------------------------------------
@@ -241,6 +246,7 @@ if (!Number.isInteger(TARGET_VIDEO_TIMESCALE / sourceVideoMdhd.timescale)) {
 // 2. faststartRemux with the iso signature
 // ---------------------------------------------------------------------------
 
+reportProgress(5, 'reading');
 const inputBlob = new Blob([source], { type: 'video/mp4' });
 // stripDV: the RTXFury output does NOT carry the Dolby Vision config record —
 // it presents as plain HLG HDR, and that is what makes TikTok deliver an HDR
@@ -254,6 +260,7 @@ const remuxed = await faststartRemux(inputBlob, () => {}, {
   isoSignature: true,
 });
 const b = Buffer.from(await remuxed.blob.arrayBuffer());
+reportProgress(35, 'remuxed');
 
 // ---------------------------------------------------------------------------
 // 3. Parse and derive everything
@@ -419,6 +426,7 @@ writeDuration(b, mvhdDurationMeta.offset, mvhdDurationMeta.bytes, videoElstMs);
 // 5. Hand off to the validated second-AAC tool
 // ---------------------------------------------------------------------------
 
+reportProgress(55, 'timing');
 const workDir = await mkdtemp(path.join(tmpdir(), 'vague-rtx-pipeline-'));
 const stage1Path = path.join(workDir, 'stage1.mp4');
 const stage2Path = path.join(workDir, 'stage2.mp4');
@@ -437,6 +445,7 @@ if (splitRun.status !== 0) {
 }
 
 // Audio trim + second AAC track (validated tool).
+reportProgress(70, 'split-done');
 const toolArgs = [
   fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
   '--filler-count', String(fillerCount),
@@ -453,6 +462,8 @@ if (run.status !== 0) {
 if (!keepTemp) {
   await rm(workDir, { recursive: true, force: true });
 }
+
+reportProgress(95, 'audio-done');
 
 // ---------------------------------------------------------------------------
 // 6. Report
