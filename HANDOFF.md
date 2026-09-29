@@ -1,5 +1,19 @@
 # Vague Transcode — Migration / Handoff Notes
 
+## PAUSED STATUS — 2026-09-30
+
+The user asked to pause the local-laptop optimizer/deployment work and return to it later. Laptop and GitHub synchronization completed before the pause:
+- `online-rtx-service` was pushed at `87feb10`.
+- `rtx-audio-track-experiment` was synchronized at `30814a5`.
+- Old divergent laptop history was preserved on GitHub as `laptop-prebundle-rtx-backup` at `2d9bdcc`.
+- Former uncommitted laptop changes were committed and pushed on `laptop-uncommitted-backup` (exact resulting commit was not pasted back).
+- The laptop ended on `online-rtx-service` with a clean working tree before deployment discussion.
+- No deployment was performed. Oracle Always Free was considered, but the user does not want to provide a payment card. No suitable trusted, permanent, no-card free host was selected.
+- No new phone/TikTok tests occurred. The last TikTok action remains the second-video HDR success confirmed on 2026-09-29.
+
+NEXT ACTION WHEN USER RETURNS: confirm the laptop branch/status, then either run the service locally or choose a hosting provider. Do not restart the MP4 research or repeat completed synchronization.
+
+
 ## ⭐ START HERE (final migration, 2026-09-29)
 
 0. CONTINUATION START POINT: after the second-video TikTok confirmation the

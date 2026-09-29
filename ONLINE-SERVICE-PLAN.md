@@ -1,5 +1,10 @@
 # Online Optimizer Service — Working Build Plan
 
+## Pause update — 2026-09-30
+
+Implementation is complete on `online-rtx-service`; laptop/GitHub sync completed, but deployment is paused at the user's request. Oracle Always Free was not used because signup requires a supported payment card and the user wants a no-card option. No trusted permanent free no-card host satisfying 600 MB uploads, FFmpeg/Docker, and sufficient RAM was selected. Resume by choosing between a temporary local laptop run and a suitable host; do not alter the validated processing pipeline merely to fit a constrained free platform.
+
+
 ## Target outcome
 A private personal website reachable from any device. The browser uploads a video to an online backend, the backend performs the server-side processing, the browser downloads the result, and temporary server files are deleted. The service must not depend on the user's laptop being powered on.
 

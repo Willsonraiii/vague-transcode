@@ -1,5 +1,12 @@
 # Continuation Prompt — Vague / RTXFury-Style Online Optimizer (FINAL MIGRATION, 2026-09-29)
 
+## LATEST CONTINUATION UPDATE — PAUSED 2026-09-30
+
+The bundle-to-laptop/GitHub synchronization is complete. GitHub received `online-rtx-service` at `87feb10` and `rtx-audio-track-experiment` at `30814a5`. Divergent laptop history was preserved as `laptop-prebundle-rtx-backup` (`2d9bdcc`), and the user's former uncommitted files were preserved on `laptop-uncommitted-backup` (resulting commit hash not reported). Deployment did not occur. Oracle Always Free was discussed, but the user does not want any payment-card requirement, and no alternative host was selected. The user explicitly paused the local-laptop optimizer/deployment process to continue later. No additional TikTok test happened.
+
+When work resumes: first verify laptop `git status` and branch tips; then ask whether the user wants a local run or has selected hosting. Do not redo synchronization, do not deploy without confirmation, and do not claim any test after the second-video TikTok HDR confirmation.
+
+
 Give the next agent the file `vague-transcode-migration.zip`. It contains
 everything: this prompt, HANDOFF.md, and the git bundle with every branch
 and commit. (Some chats reject the bare `.bundle` file type — that is why
