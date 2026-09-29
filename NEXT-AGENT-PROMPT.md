@@ -1,10 +1,23 @@
 # Continuation Prompt — Vague / RTXFury-Style Online Optimizer (FINAL MIGRATION, 2026-09-29)
 
-Give this file to the next agent, together with the file
-`vague-transcode-all-work.bundle` (git bundle — contains every branch and
-commit). The agent must read this file, `HANDOFF.md`, and
-`ONLINE-SERVICE-PLAN.md` (both are inside the bundle's repository too)
-before changing anything.
+Give the next agent the file `vague-transcode-migration.zip`. It contains
+everything: this prompt, HANDOFF.md, and the git bundle with every branch
+and commit. (Some chats reject the bare `.bundle` file type — that is why
+it ships inside a zip.)
+
+Restore the repository from the zip:
+```bash
+unzip vague-transcode-migration.zip
+git clone vague-transcode-all-work.bundle vague-transcode
+cd vague-transcode
+git remote set-url origin https://github.com/Willsonraiii/vague-transcode.git
+```
+(Fallback if zip is also rejected: `vague-transcode-bundle.b64.txt` — run
+`base64 -d vague-transcode-bundle.b64.txt > vague-transcode-all-work.bundle`
+first, then clone as above.)
+
+The agent must read this file, `HANDOFF.md`, and `ONLINE-SERVICE-PLAN.md`
+(both are inside the bundle's repository too) before changing anything.
 
 ---
 
