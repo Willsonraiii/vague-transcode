@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTX Optimizer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #0d1117; color: #e6edf3;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 24px 16px; gap: 20px;
+  }
+  .card {
+    width: 100%; max-width: 480px; background: #161b22;
+    border: 1px solid #30363d; border-radius: 12px; padding: 20px;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+  label.btn {
+    display: block; text-align: center; padding: 14px;
+    background: #238636; color: #fff; border-radius: 8px;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  label.btn:active { background: #2ea043; }
+  input[type=file] { display: none; }
+  #fileName { color: #8b949e; font-size: 13px; margin: 10px 0; word-break: break-all; text-align: center; min-height: 16px; }
+  .bar { height: 10px; background: #21262d; border-radius: 6px; overflow: hidden; margin: 12px 0 6px; }
+  .bar > div { height: 100%; width: 0%; background: #238636; transition: width .2s; }
+  #status { font-size: 14px; color: #8b949e; min-height: 20px; }
+  a.download {
+    display: none; text-align: center; padding: 14px; margin-top: 12px;
+    background: #1f6feb; color: #fff; border-radius: 8px;
+    font-size: 16px; font-weight: 600; text-decoration: none;
+  }
+  #err { color: #f85149; font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .foot { color: #484f58; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>RTX Optimizer</h1>
+    <p class="sub">Upload a video (max 600 MB). After processing, download the optimized MP4 and upload it to TikTok Studio.</p>
+
+    <label class="btn" for="file">Choose video</label>
+    <input type="file" id="file" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v">
+    <div id="fileName"></div>
+
+    <div class="bar" id="barWrap" style="display:none"><div id="bar"></div></div>
+    <div id="status"></div>
+    <a class="download" id="dl" href="#">Download optimized MP4</a>
+    <div id="err"></div>
+  </div>
+  <div class="foot">Files are deleted after download or 1 hour. Personal service.</div>
+
+<script>
+  const fileInput = document.getElementById('file');
+  const fileName = document.getElementById('fileName');
+  const barWrap = document.getElementById('barWrap');
+  const bar = document.getElementById('bar');
+  const statusEl = document.getElementById('status');
+  const dl = document.getElementById('dl');
+  const errEl = document.getElementById('err');
+
+  fileInput.addEventListener('change', () => {
+    errEl.textContent = '';
+    dl.style.display = 'none';
+    const file = fileInput.files[0];
+    if (!file) return;
+    fileName.textContent = file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)';
+    if (file.size > 600 * 1024 * 1024) {
+      errEl.textContent = 'File is bigger than 600 MB.';
+      return;
+    }
+    upload(file);
+  });
+
+  function upload(file) {
+    const form = new FormData();
+    form.append('video', file, file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/jobs');
+    barWrap.style.display = 'block';
+    statusEl.textContent = 'Uploading…';
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        bar.style.width = pct + '%';
+        statusEl.textContent = 'Uploading… ' + pct + '%';
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status !== 201) {
+        try { errEl.textContent = JSON.parse(xhr.responseText).error || 'Upload failed.'; }
+        catch { errEl.textContent = 'Upload failed (' + xhr.status + ').'; }
+        return;
+      }
+      poll(JSON.parse(xhr.responseText).id);
+    };
+    xhr.onerror = () => { errEl.textContent = 'Upload failed — connection lost.'; };
+    xhr.send(form);
+  }
+
+  function poll(id) {
+    statusEl.textContent = 'Queued…';
+    bar.style.width = '100%';
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/jobs/' + id);
+        const job = await res.json();
+        if (job.status === 'queued') statusEl.textContent = 'Queued… (another video is processing)';
+        else if (job.status === 'processing') statusEl.textContent = 'Optimizing… this can take a few minutes';
+        else if (job.status === 'failed') {
+          clearInterval(timer);
+          statusEl.textContent = 'Failed.';
+          errEl.textContent = job.error || 'Processing failed.';
+        } else if (job.status === 'done') {
+          clearInterval(timer);
+          const mb = job.outputBytes ? (job.outputBytes / 1048576).toFixed(1) + ' MB' : '';
+          statusEl.textContent = 'Done ' + mb;
+          dl.href = '/api/jobs/' + id + '/download';
+          dl.style.display = 'block';
+        }
+      } catch {
+        clearInterval(timer);
+        errEl.textContent = 'Lost connection to the server.';
+      }
+    }, 2000);
+  }
+</script>
+</body>
+</html>
