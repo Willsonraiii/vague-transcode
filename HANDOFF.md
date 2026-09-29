@@ -262,6 +262,26 @@ Everything from ONLINE-SERVICE-PLAN.md's security list now implemented:
 All 10 endpoint tests passed in-sandbox (401s with wrong/missing token,
 upload+progress+download with token, queued/running cancellation, cleanup).
 
+### Two optimization options (2026-09-29, user-requested)
+The service now offers two modes (upload field "mode" = "hdr" | "standard"):
+- FPS + Quality + HDR (default, "hdr"): the validated full path - fps/quality
+  bypass PLUS Dolby Vision -> plain HLG conversion (what made TikTok deliver
+  HDR in the confirmed test).
+- FPS + Quality ("standard"): same bypass, but the video's own HDR signalling
+  is left untouched (--keep-dv). For DV sources this is UNVALIDATED on TikTok
+  (our single test with DV kept showed no HDR tag - that is why hdr is the
+  default). For non-DV sources both modes produce byte-identical output
+  (verified by sha256).
+UI: two tappable option cards (default HDR); after processing the UI reports
+what was detected ("Dolby Vision detected - converted to HLG" / "No Dolby
+Vision found - both options identical for this video"). The pipeline prints a
+machine-readable PIPELINE_RESULT line; the server stores it as job.result and
+exposes it in the status API.
+Validation done: hdr mode, standard mode, invalid-mode fallback, byte-identical
+outputs on non-DV source, mode shown in status, UI picker present.
+STILL TO VERIFY with the user's real iPhone DV video: standard mode on TikTok
+(expect: fps bypass works, no HDR tag) vs hdr mode (validated: HDR).
+
 ### Remaining open questions / known differences
 1. Reference track 1 mdhd duration (ours: 963072 stts sum) - needs the full
    reference dump to confirm.

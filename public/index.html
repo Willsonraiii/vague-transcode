@@ -46,6 +46,16 @@
     border: 1px solid #a94442; border-radius: 8px; font-size: 15px;
   }
   #err { color: #f85149; font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .modes { display: flex; gap: 10px; margin-bottom: 12px; }
+  .mode {
+    flex: 1; padding: 12px 10px; border: 2px solid #30363d; border-radius: 10px;
+    cursor: pointer; text-align: center;
+  }
+  .mode b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .mode span { font-size: 11px; color: #8b949e; line-height: 1.3; display: block; }
+  .mode.sel { border-color: #238636; background: #12261e; }
+  #info { display: none; font-size: 13px; color: #79c0ff; background: #0d2233;
+          border: 1px solid #1f4462; padding: 10px; border-radius: 8px; margin-top: 10px; }
   .foot { color: #484f58; font-size: 12px; text-align: center; }
 </style>
 </head>
@@ -55,6 +65,18 @@
     <p class="sub">Upload a video (max 600 MB). After processing, download the optimized MP4 and upload it to TikTok Studio.</p>
 
     <input type="password" id="token" placeholder="Access token (leave empty if none)" autocomplete="off">
+
+    <div class="modes">
+      <div class="mode" id="mode-hdr">
+        <b>② FPS + Quality + HDR</b>
+        <span>For iPhone HDR / Dolby Vision videos. Converts to standard HDR (HLG) so TikTok keeps HDR. Recommended.</span>
+      </div>
+      <div class="mode" id="mode-standard">
+        <b>① FPS + Quality</b>
+        <span>Smooth fps and full quality only. Keeps the video's own HDR signalling untouched.</span>
+      </div>
+    </div>
+
     <label class="btn" for="file">Choose video</label>
     <input type="file" id="file" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v">
     <div id="fileName"></div>
@@ -66,6 +88,7 @@
       <button class="cancel" id="cancel" style="display:none">Cancel</button>
     </div>
     <div id="err"></div>
+    <div id="info"></div>
   </div>
   <div class="foot">Files are deleted after download or 1 hour. Personal service.</div>
 
@@ -80,6 +103,19 @@
   const dl = document.getElementById('dl');
   const cancelBtn = document.getElementById('cancel');
   const errEl = document.getElementById('err');
+  const infoEl = document.getElementById('info');
+
+  let mode = 'hdr';
+  const modeHdr = document.getElementById('mode-hdr');
+  const modeStd = document.getElementById('mode-standard');
+  function setMode(m) {
+    mode = m;
+    modeHdr.classList.toggle('sel', m === 'hdr');
+    modeStd.classList.toggle('sel', m === 'standard');
+  }
+  modeHdr.addEventListener('click', () => setMode('hdr'));
+  modeStd.addEventListener('click', () => setMode('standard'));
+  setMode('hdr');
 
   tokenInput.value = localStorage.getItem('rtx_token') || '';
   tokenInput.addEventListener('change', () => localStorage.setItem('rtx_token', tokenInput.value));
@@ -109,6 +145,7 @@
 
   function upload(file) {
     const form = new FormData();
+    form.append('mode', mode);
     form.append('video', file, file.name);
     const xhr = new XMLHttpRequest();
     xhr.open('POST', withToken('/api/jobs'));
@@ -169,6 +206,13 @@
           actions.style.display = 'flex';
           cancelBtn.style.display = 'none';
           dl.href = withToken('/api/jobs/' + id + '/download');
+          const r = job.result;
+          if (r && r.mode === 'hdr') {
+            infoEl.style.display = 'block';
+            infoEl.textContent = r.hadDolbyVision
+              ? 'Dolby Vision detected — converted to standard HDR (HLG). Upload to TikTok Studio for the HDR result.'
+              : 'No Dolby Vision found in this video (already plain HLG or SDR) — both options give the same result for it.';
+          }
         }
       } catch {
         clearInterval(pollTimer);

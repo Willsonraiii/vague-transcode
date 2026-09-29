@@ -119,6 +119,8 @@ function publicJob(job) {
   return {
     id: job.id,
     status: job.status,
+    mode: job.mode ?? 'hdr',
+    result: job.result ?? null,
     progress: job.progress ?? 0,
     stage: job.stage ?? null,
     createdAt: job.createdAt,
@@ -149,7 +151,10 @@ function startNextJob() {
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes)`);
 
-  const child = spawn(process.execPath, [PIPELINE_TOOL, job.inputPath, job.outputPath], {
+  const workerArgs = [PIPELINE_TOOL, job.inputPath, job.outputPath];
+  if (job.mode === 'standard') workerArgs.push('--keep-dv');
+
+  const child = spawn(process.execPath, workerArgs, {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -194,10 +199,15 @@ function startNextJob() {
       job.status = 'done';
       job.progress = 100;
       job.stage = 'done';
+      // Machine-readable summary from the pipeline (single PIPELINE_RESULT line)
+      const line = stdout.split('\n').find((l) => l.startsWith('PIPELINE_RESULT '));
+      if (line) {
+        try { job.result = JSON.parse(line.slice('PIPELINE_RESULT '.length)); } catch {}
+      }
       stat(job.outputPath)
         .then((s) => { job.outputBytes = s.size; })
         .catch(() => {});
-      console.log(`[job ${job.id}] done`);
+      console.log(`[job ${job.id}] done (mode ${job.mode})`);
     } else if (job.cancelled) {
       console.log(`[job ${job.id}] cancelled — deleting`);
       removeJob(job);
@@ -267,6 +277,8 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
       await rm(req.file.path, { force: true }).catch(() => {});
       return res.status(400).json({ error: 'Only MP4/MOV/M4V files are supported.' });
     }
+    const mode = req.body?.mode === 'standard' ? 'standard' : 'hdr';
+    req.mode = mode;
 
     const freeBytes = freeDiskBytes(JOBS_DIR);
     if (freeBytes !== null && freeBytes < MIN_FREE_DISK) {
@@ -287,6 +299,7 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
       inputPath,
       outputPath: path.join(dir, 'output.mp4'),
       status: 'queued',
+      mode: req.mode,
       createdAt: Date.now(),
       inputBytes: req.file.size,
       outputBytes: null,

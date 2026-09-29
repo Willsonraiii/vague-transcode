@@ -198,12 +198,14 @@ const positional = [];
 let audioElstMsOverride = null;
 let fillerCountOverride = null;
 let keepTemp = false;
+let keepDv = false;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
   if (arg === '--audio-elst-ms') audioElstMsOverride = Number(args[++i]);
   else if (arg === '--filler-count') fillerCountOverride = Number(args[++i]);
   else if (arg === '--keep-temp') keepTemp = true;
+  else if (arg === '--keep-dv') keepDv = true; // mode "standard": leave Dolby Vision signalling untouched
   else positional.push(arg);
 }
 
@@ -254,7 +256,7 @@ const inputBlob = new Blob([source], { type: 'video/mp4' });
 // deliver HDR. rebrand: the reference major brand is isom.
 const remuxed = await faststartRemux(inputBlob, () => {}, {
   stripEdits: false,
-  stripDV: true,
+  stripDV: !keepDv,
   zeroDuration: false,
   rebrand: true,
   isoSignature: true,
@@ -470,10 +472,14 @@ reportProgress(95, 'audio-done');
 // ---------------------------------------------------------------------------
 
 const output = await readFile(outputPath);
-console.log(JSON.stringify({
+const summary = {
+  mode: keepDv ? 'standard' : 'hdr',
   inputBytes: source.length,
   outputBytes: output.length,
   sizeGrowth: output.length - source.length,
+  hadDolbyVision: keepDv
+    ? null
+    : Boolean(remuxed.dvStripped && (remuxed.dvStripped.boxes > 0 || remuxed.dvStripped.retagged > 0)),
   dvStripped: remuxed.dvStripped,
   rebranded: remuxed.rebranded,
   derived: {
@@ -493,4 +499,7 @@ console.log(JSON.stringify({
     secondTrackSamples: audioSamples + fillerCount,
   },
   warnings,
-}, null, 2));
+};
+console.log(JSON.stringify(summary, null, 2));
+// Machine-readable single line for server-rtx-online.js
+console.log('PIPELINE_RESULT ' + JSON.stringify(summary));
