@@ -1,5 +1,10 @@
 # Online Optimizer Service — Working Build Plan
 
+## Windows 4K validation continuation — 2026-09-30
+
+A Windows engine is ready at `%USERPROFILE%\Desktop\vague-transcode-4k-test` (`online-rtx-service` 87feb10; Node 24.19.0; FFmpeg/FFprobe 9.0.2). Real Downloads video `1790757802960597.*` is waiting for read-only ffprobe inspection. No optimization has run. Confirm 4K/FPS/HDR/audio/timescale first, then process and perform both mandatory validations. Record the exact TikTok Studio outcome separately; existing 4K60 synthetic/container validation is not a user confirmation for this real file.
+
+
 ## Pause update — 2026-09-30
 
 Implementation is complete on `online-rtx-service`; laptop/GitHub sync completed, but deployment is paused at the user's request. Oracle Always Free was not used because signup requires a supported payment card and the user wants a no-card option. No trusted permanent free no-card host satisfying 600 MB uploads, FFmpeg/Docker, and sufficient RAM was selected. Resume by choosing between a temporary local laptop run and a suitable host; do not alter the validated processing pipeline merely to fit a constrained free platform.

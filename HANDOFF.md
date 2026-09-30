@@ -1,5 +1,38 @@
 # Vague Transcode — Migration / Handoff Notes
 
+## LATEST CONTINUATION — WINDOWS 4K TEST READY, WAITING FOR FFPROBE (2026-09-30)
+
+The user returned after the deployment pause for a quick 4K60 check. They are now on Windows and want to test a real video, but optimization HAS NOT started. Continue exactly here:
+
+### Windows environment prepared successfully
+- Fresh clone: `%USERPROFILE%\Desktop\vague-transcode-4k-test`
+- Branch/commit cloned from GitHub: `online-rtx-service` at `87feb10`
+- `npm install` completed: 87 packages, audit reported 0 vulnerabilities. Multer 1.x printed a deprecation warning only; it did not block setup.
+- Node: `v24.19.0`
+- FFmpeg: `9.0.2-full_build-www.gyan.dev`
+- FFprobe: `9.0.2-full_build-www.gyan.dev`
+- Git for Windows was updated to `2.55.0.5`.
+- Engine setup is complete; no server is running and no media has been processed yet.
+
+### Real video waiting for inspection
+- Base filename: `1790757802960597` (extension not yet reported)
+- Location: user's Windows Downloads folder
+- Phone displayed size: 152.1 MB; Windows PowerShell displayed 145.03 MiB. This is consistent with decimal MB vs binary MiB (`152.1 MB / 1.048576 ~= 145.05 MiB`), not evidence of corruption. The user zipped the file for transfer; MP4/MOV is already compressed, so little ZIP size reduction is expected.
+- Actual resolution, FPS, codec, HDR/Dolby Vision metadata, audio, duration, and timescale have NOT been inspected because the user has not yet run/pasted ffprobe output.
+
+### Exact next action
+Ask the user to run this read-only PowerShell command (do not optimize yet):
+
+```powershell
+$v = Get-ChildItem "$HOME\Downloads\1790757802960597.*" -File | Select-Object -First 1; if (-not $v) { Write-Error "Video not found in Downloads"; exit 1 }; Write-Host "FILE: $($v.FullName)"; Write-Host "SIZE: $([math]::Round($v.Length / 1MB, 2)) MiB"; ffprobe -v error -show_entries stream=index,codec_type,codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,time_base,sample_rate,channels,color_range,color_space,color_transfer,color_primaries:stream_side_data -show_entries format=duration,size,format_name -of json "$($v.FullName)"
+```
+
+Review the complete output and explicitly confirm: width/height (4K means 3840x2160 or phone portrait equivalent 2160x3840), exact FPS, codec/profile/pixel format, HDR/DV signaling, presence of audio, file size below 600 MB, and video time base compatibility (pipeline requires the video timescale to divide 19200). Only after that should you provide the optimization command. Leave the source untouched. After output generation, validation is mandatory: ffprobe plus `ffmpeg -v error -copyts -vsync 0 -i OUTPUT -map 0 -c copy -f null -`. Never claim this exact 4K60 source works in TikTok until the user confirms it in TikTok Studio.
+
+### Important clarification already given to user
+For a 60 fps input, the validated RTXFury-style pipeline keeps all frames and applies x2 timing, yielding approximately 30 fps track timing and twice the source track duration (e.g. 600 frames: 10 s at 60 fps becomes about 20 s at 30 fps). It does not re-encode. We have NOT confirmed that TikTok restores the final published result to the original real-time duration; prior user validation confirmed HDR delivery, not final published duration. Be transparent about this.
+
+
 ## PAUSED STATUS — 2026-09-30
 
 The user asked to pause the local-laptop optimizer/deployment work and return to it later. Laptop and GitHub synchronization completed before the pause:
