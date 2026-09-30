@@ -1,5 +1,37 @@
 # Vague Transcode — Migration / Handoff Notes
 
+## LATEST RESULT — WINDOWS 4K60 REAL VIDEO VALIDATED IN TIKTOK STUDIO (2026-09-30)
+
+USER-CONFIRMED: the third real video (first 4K60) worked in TikTok Studio and HDR is delivered (the project's main target).
+
+### Source (FFprobe, read-only, source untouched)
+- Base filename `1790757802960597` (Windows Downloads). 2160x3840 portrait 4K, 60/1 fps, 863 frames, 14.383 s.
+- HEVC Main 10, yuv420p10le, BT.2020 / HLG (arib-std-b67), ~84.3 Mbps, video time_base 1/600 (divides 19200).
+- Dolby Vision profile 8 (compat id 4) present -> `hdr` mode (DV -> plain HLG).
+- AAC-LC 48 kHz stereo, 675 frames. Size 152,074,462 bytes (145.03 MiB).
+
+### Processing (Windows, `online-rtx-service` clone at 87feb10, Node 24.19.0, FFmpeg/FFprobe 9.0.2)
+- `node tools/rtx-pipeline.js SRC out\1790757802960597-optimized.mp4`, mode `hdr`.
+- Derived: speed x2, video stts `862x640, 1x320`, video elst 28750 ms (mediaTime 0), audio elst 28742 ms (priming 4224), fillers 6075, second track 6750 samples, DV box stripped (1), rebranded.
+- Output 152,155,868 bytes (+81,406). Warnings were the two known UNCONFIRMED rules (audio elst = video - 8 ms; filler = 9 x audio samples).
+- Validation PASSED: ffprobe (HEVC 2160x3840, 30/1, 863 frames, arib-std-b67, NO DOVI record, two AAC tracks 675 + 6750, duration 28.75) and `ffmpeg -v error -copyts -vsync 0 -i OUT -map 0 -c copy -f null -` printed nothing.
+
+### TikTok result (user-reported)
+- HDR: WORKING (user: main target achieved).
+- TikTok Studio shows the published duration as ~28-29 s (the x2 track time).
+- In the TikTok APP the video plays/shows the normal ORIGINAL duration (~14 s). This answers the earlier open question: the app restores real-time duration.
+- Exact HDR-tag wording and visual 4K quality comparison were not itemised by the user beyond "working well".
+
+### Conclusions
+- The method is now validated on three real videos, including 4K60 portrait DV profile 8. `--audio-elst-ms` and `--filler-count` overrides were NOT needed.
+- The two unconfirmed rules (-8 ms, 10x fillers) have now held on a third source without issue.
+- Windows note: no code changes were made in this session; no repository processing code was modified.
+
+### Status / next step
+- Deployment is still PAUSED (no-card free host not chosen; Oracle needs a card). Do not alter the validated pipeline to fit a constrained host.
+- Resume by either running locally (`npm run start:online`, port 3005) or choosing a host. Do not redo sync or setup research.
+
+
 ## LATEST CONTINUATION — WINDOWS 4K TEST READY, WAITING FOR FFPROBE (2026-09-30)
 
 The user returned after the deployment pause for a quick 4K60 check. They are now on Windows and want to test a real video, but optimization HAS NOT started. Continue exactly here:
