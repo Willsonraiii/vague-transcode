@@ -1,5 +1,14 @@
 # Vague Transcode — Migration / Handoff Notes
 
+## PWA + PRIVATE ACCESS PLAN (2026-09-30)
+
+Decision: host the validated online service on the user's own computer and reach it privately from the phone via Tailscale (free, no card), instead of a cloud host. Reason: every no-card free host is too small (512 MB) or now paid (Hugging Face Docker Spaces need PRO since mid-2026; Oracle needs a card). The computer must be on and awake.
+- DONE: the web page is now an installable PWA shell (public/manifest.webmanifest, icons, apple-touch-icon, meta tags in public/index.html). No pipeline or server code changed. No service worker (offline use makes no sense).
+- Windows note: server-rtx-online.js runs on Windows; the disk-space guard uses `df`, which is missing there, so the guard is skipped (returns null) - harmless.
+- iPhone: upload from the Files app, not the Photos picker, so iOS does not convert the video.
+- TODO: Windows test run + Tailscale on the phone. LATER (on Linux): same setup on the Linux laptop. Browser-only (static hosting) version is a possible future project, needs the pipeline ported to the browser; not started.
+
+
 ## LATEST RESULT — WINDOWS 4K60 REAL VIDEO VALIDATED IN TIKTOK STUDIO (2026-09-30)
 
 USER-CONFIRMED: the third real video (first 4K60) worked in TikTok Studio and HDR is delivered (the project's main target).
