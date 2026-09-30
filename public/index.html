@@ -212,7 +212,7 @@
           bar.style.width = '100%';
           actions.style.display = 'flex';
           cancelBtn.style.display = 'none';
-          dl.href = withToken('/api/jobs/' + id + '/download');
+          dl.href = withToken('/api/jobs/' + id + '/download'); dl.style.display = 'block';
           const r = job.result;
           if (r && r.mode === 'hdr') {
             infoEl.style.display = 'block';
