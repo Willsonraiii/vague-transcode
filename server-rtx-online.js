@@ -33,8 +33,9 @@ import express from 'express';
 import multer from 'multer';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdir, rm, stat, rename, copyFile, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, rm, stat, rename, copyFile, unlink, link, readFile, writeFile, readdir } from 'node:fs/promises';
+import { existsSync, createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +44,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PIPELINE_TOOL = path.join(ROOT, 'tools', 'rtx-pipeline.js');
 const JOBS_DIR = path.join(ROOT, 'jobs');
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const UPLOADS_DIR = path.join(ROOT, 'uploads');
+const MAX_CHUNK = 64 * 1024 * 1024;           // per-chunk cap for resumable uploads
 
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN || '';
 const PROCESS_TIMEOUT_MS = Number(process.env.PROCESS_TIMEOUT_MS || 30 * 60 * 1000);
@@ -53,6 +56,7 @@ const MIN_FREE_DISK = 2 * 1024 * 1024 * 1024; // need ~2 GB free to accept
 const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 await mkdir(JOBS_DIR, { recursive: true });
+await mkdir(UPLOADS_DIR, { recursive: true });
 
 // No job state survives a restart: purge any orphaned job directories left by
 // a previous crash or restart (they are unreachable and would leak disk).
@@ -133,6 +137,37 @@ function publicJob(job) {
 async function removeJob(job) {
   jobs.delete(job.id);
   await rm(job.dir, { recursive: true, force: true }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Resumable uploads: the client sends the video in chunks, can pause, cancel and
+// later continue from the byte where it stopped (nothing is re-uploaded).
+// ---------------------------------------------------------------------------
+
+const uploadsBusy = new Set();
+
+function uploadPaths(id) {
+  return {
+    data: path.join(UPLOADS_DIR, id + '.bin'),
+    meta: path.join(UPLOADS_DIR, id + '.json'),
+    part: path.join(UPLOADS_DIR, id + '.part'),
+  };
+}
+
+async function readUpload(id) {
+  const p = uploadPaths(id);
+  try {
+    const meta = JSON.parse(await readFile(p.meta, 'utf8'));
+    const st = await stat(p.data).catch(() => null);
+    return { ...meta, received: st ? st.size : 0 };
+  } catch {
+    return null;
+  }
+}
+
+async function removeUpload(id) {
+  const p = uploadPaths(id);
+  await Promise.all([p.data, p.meta, p.part].map((f) => rm(f, { force: true }).catch(() => {})));
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +271,18 @@ setInterval(() => {
       removeJob(job);
     }
   }
+  // abandoned resumable uploads (paused/cancelled and never continued)
+  readdir(UPLOADS_DIR).then(async (names) => {
+    for (const name of names) {
+      const m = /^([0-9a-f]{32})\.json$/.exec(name);
+      if (!m) continue;
+      const st = await stat(path.join(UPLOADS_DIR, name)).catch(() => null);
+      if (st && now - st.mtimeMs > JOB_TTL_MS && !uploadsBusy.has(m[1])) {
+        console.log(`[upload ${m[1]}] expired — deleting`);
+        removeUpload(m[1]);
+      }
+    }
+  }).catch(() => {});
 }, CLEANUP_INTERVAL_MS).unref();
 
 // ---------------------------------------------------------------------------
@@ -317,6 +364,104 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
   }
 });
 
+app.post('/api/uploads', express.json({ limit: '10kb' }), async (req, res) => {
+  try {
+    const name = String(req.body?.name || '');
+    const size = Number(req.body?.size);
+    if (!/\.(mp4|mov|m4v)$/i.test(name)) return res.status(400).json({ error: 'Only MP4/MOV/M4V files are supported.' });
+    if (!Number.isInteger(size) || size < 1) return res.status(400).json({ error: 'Bad file size.' });
+    if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is bigger than 600 MB.' });
+    const freeBytes = freeDiskBytes(UPLOADS_DIR);
+    if (freeBytes !== null && freeBytes < MIN_FREE_DISK) return res.status(507).json({ error: 'Server is low on disk space, try again later.' });
+    const id = newJobId();
+    const p = uploadPaths(id);
+    await writeFile(p.meta, JSON.stringify({ id, name: path.basename(name), size, createdAt: Date.now() }));
+    await writeFile(p.data, '');
+    res.status(201).json({ id, size, received: 0 });
+  } catch (error) {
+    console.error('create upload failed:', error);
+    res.status(500).json({ error: 'Could not start the upload.' });
+  }
+});
+
+app.get('/api/uploads/:id', async (req, res) => {
+  if (!validJobId(req.params.id)) return res.status(400).json({ error: 'Bad upload id.' });
+  const up = await readUpload(req.params.id);
+  if (!up) return res.status(404).json({ error: 'Unknown upload.' });
+  res.json({ id: up.id, name: up.name, size: up.size, received: up.received });
+});
+
+app.put('/api/uploads/:id', async (req, res) => {
+  const id = req.params.id;
+  if (!validJobId(id)) return res.status(400).json({ error: 'Bad upload id.' });
+  const up = await readUpload(id);
+  if (!up) return res.status(404).json({ error: 'Unknown upload.' });
+  const offset = Number(req.query.offset);
+  if (!Number.isInteger(offset) || offset !== up.received) {
+    return res.status(409).json({ error: 'Offset mismatch.', received: up.received });
+  }
+  const len = Number(req.headers['content-length']);
+  if (!Number.isFinite(len) || len < 1 || len > MAX_CHUNK || offset + len > up.size) {
+    return res.status(400).json({ error: 'Bad chunk size.' });
+  }
+  if (uploadsBusy.has(id)) return res.status(409).json({ error: 'Chunk already in progress.', received: up.received });
+  uploadsBusy.add(id);
+  const p = uploadPaths(id);
+  try {
+    await pipeline(req, createWriteStream(p.part));
+    const st = await stat(p.part);
+    if (st.size !== len) throw new Error('short chunk');
+    await pipeline(createReadStream(p.part), createWriteStream(p.data, { flags: 'a' }));
+    const now = new Date();
+    await import('node:fs/promises').then(({ utimes }) => utimes(p.meta, now, now)).catch(() => {});
+    if (!res.headersSent) res.json({ received: offset + len });
+  } catch {
+    const cur = await readUpload(id);
+    if (!res.headersSent && !res.destroyed) res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0 });
+  } finally {
+    uploadsBusy.delete(id);
+    await rm(p.part, { force: true }).catch(() => {});
+  }
+});
+
+app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, res) => {
+  try {
+    const uploadId = req.params.id;
+    if (!validJobId(uploadId)) return res.status(400).json({ error: 'Bad upload id.' });
+    const up = await readUpload(uploadId);
+    if (!up) return res.status(404).json({ error: 'Unknown upload.' });
+    if (up.received !== up.size) return res.status(409).json({ error: 'Upload is not complete.', received: up.received });
+    const mode = req.body?.mode === 'standard' ? 'standard' : 'hdr';
+
+    const id = newJobId();
+    const dir = path.join(JOBS_DIR, id);
+    await mkdir(dir, { recursive: true });
+    const inputPath = path.join(dir, 'input.mp4');
+    // hard link: the same bytes stay available for another run without re-uploading
+    await link(uploadPaths(uploadId).data, inputPath).catch(() => copyFile(uploadPaths(uploadId).data, inputPath));
+
+    const job = {
+      id, dir, inputPath, uploadId,
+      outputPath: path.join(dir, 'output.mp4'),
+      status: 'queued', mode, createdAt: Date.now(),
+      inputBytes: up.size, outputBytes: null, error: null,
+    };
+    jobs.set(id, job);
+    console.log(`[job ${id}] queued from upload ${uploadId} (${up.size} bytes, ${jobs.size} total)`);
+    startNextJob();
+    res.status(201).json({ id });
+  } catch (error) {
+    console.error('start from upload failed:', error);
+    res.status(500).json({ error: 'Could not start optimizing.' });
+  }
+});
+
+app.delete('/api/uploads/:id', async (req, res) => {
+  if (!validJobId(req.params.id)) return res.status(400).json({ error: 'Bad upload id.' });
+  await removeUpload(req.params.id);
+  res.json({ id: req.params.id, status: 'deleted' });
+});
+
 app.get('/api/jobs/:id', (req, res) => {
   if (!validJobId(req.params.id)) return res.status(400).json({ error: 'Bad job id.' });
   const job = jobs.get(req.params.id);
@@ -337,6 +482,7 @@ app.get('/api/jobs/:id/download', (req, res) => {
     }
     console.log(`[job ${job.id}] downloaded — deleting job files`);
     removeJob(job);
+    if (job.uploadId) removeUpload(job.uploadId);
   });
 });
 

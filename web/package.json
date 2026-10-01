@@ -3,8 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
   "dependencies": {
+    "border-beam": "^1.4.1",
+    "bot-avatars": "^0.1.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "thinking-orbs": "^0.3.2"

@@ -12,4 +12,4 @@ npm run build
 
 Builds straight into `../public`. Dev mode with the server running on port 3005: `npm run dev`.
 
-Orb: `thinking-orbs` (states: idle = breathing, uploading = connecting, optimizing = working).
+Orb: `thinking-orbs` (idle, uploading). Bot: `bot-avatars` clover (working, paused, done). Beam: `border-beam` rides the window border while busy.
