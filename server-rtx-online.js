@@ -365,14 +365,7 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' });
 });
 
-// Old Vague Transcode site (repo root) is the main page; the simple RTX page lives at /rtx
-app.get('/', (_req, res) => res.sendFile(path.join(ROOT, 'index.html')));
-app.get('/_style.css', (_req, res) => res.sendFile(path.join(ROOT, '_style.css')));
-app.get('/privacy.html', (_req, res) => res.sendFile(path.join(ROOT, 'privacy.html')));
-app.get('/terms.html', (_req, res) => res.sendFile(path.join(ROOT, 'terms.html')));
-app.use('/lib', express.static(path.join(ROOT, 'lib')));
-app.get('/rtx', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
-app.use(express.static(PUBLIC_DIR, { index: false }));
+app.use(express.static(PUBLIC_DIR));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`RTX online service listening on http://0.0.0.0:${PORT}`);
