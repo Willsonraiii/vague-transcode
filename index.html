@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#fbf6ec">
-<title>Vague Transcode — fix your video before TikTok ruins it</title>
-<meta name="description" content="Free. Runs in your browser, phone or desktop. Finds what's costing you quality on TikTok — variable frame rate, broken HDR tags, slow container — and fixes it losslessly. Nothing is uploaded.">
+<meta name="theme-color" content="#0b1d33">
+<title>OBITO STUDIO — fix your video before TikTok ruins it</title>
+<meta name="description" content="Free. Runs in your browser, phone or desktop. Finds what's costing you quality on TikTok — variable frame rate, broken HDR tags, slow container — and fixes it losslessly. Analysis stays on your device.">
 <link rel="stylesheet" href="_style.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OBITO STUDIO">
 </head><body>
 <div class="top"><div class="wrap">
-<span class="logo">V</span>
-<span class="brand"><b>Vague Transcode</b><span>Fix it before you post it</span></span>
+<span class="logo">O</span>
+<span class="brand"><b>OBITO STUDIO</b><span>Fix it before you post it</span></span>
 <nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
 </div></div>
 <div class="wrap">
@@ -27,7 +32,7 @@ A lossy transfer from your phone already threw away half the detail.
 <input type="file" id="file" accept="video/*,.mp4,.mov,.m4v" class="hide">
 </div>
 <p class="tiny" style="text-align:center;margin:11px 0 0">
-🔒 Read on your own device. Never uploaded. No server exists.</p>
+🔒 Analysis runs on your own device. The file is sent only if you tap the RTX server button, and only to your own server.</p>
 </div>
 </section>
 
@@ -100,14 +105,13 @@ drag-and-drop script for your OS that installs ffmpeg if missing and runs the re
 </section>
 
 </div>
-<footer>Runs entirely on your device · no uploads · no accounts · no analytics</footer>
+<footer>Analysis on your device · optimization on your own server · no accounts · no analytics</footer>
 
 <script type="module">
 import { probeFile } from './lib/probe.js';
 import { diagnose, identifyToolchain } from './lib/hdr-doctor.js';
 import { plan } from './lib/profiles.js';
 import { faststartRemux } from './lib/remux.js';
-import { rtxTimingWithFFmpeg } from './lib/wasm-encode.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -221,26 +225,26 @@ Streams are copied byte-for-byte — ${p.hdr?'HDR, ':''}frame rate, bitrate and 
 : `<p class="tiny">Nothing needs fixing in the container. ${p.fps > 48
 ? 'The frame-rate method below is still worth applying.'
 : 'You can still apply the experimental patch below, or just upload your original.'}</p>`}
-${p.hasDolbyVisionRPU ? `<label class="opt" style="background:#eaf6ff"><input type="checkbox" id="nodv" checked>
+${p.hasDolbyVisionRPU ? `<label class="opt" style="background:rgba(56,189,248,.14)"><input type="checkbox" id="nodv" checked>
 <div>Deliver as <b>plain HLG</b> — strip Dolby Vision <em>(recommended)</em>
 <span><b>Measured:</b> every HDR file TikTok actually delivers is plain HLG — their encoder
 strips Dolby Vision itself (verified on two delivered posts: 10-bit bt2020/HLG, DV gone).
 Matching their output format removes the last difference between your upload and a
 creator-grade one. Lossless: same bytes, relabelled signalling.</span></div></label>` : ''}
-<label class="opt" style="background:#eef9ef"><input type="checkbox" id="isom" checked>
+<label class="opt" style="background:rgba(74,222,128,.14)"><input type="checkbox" id="isom" checked>
 <div>Match TikTok's delivery signature <em>(recommended)</em>
 <span>Sets the container brand to <b>isom</b> (the brand TikTok's own muxer writes —
 delivered files never carry mp42/qt) and the video timescale to <b>19200</b> (their standard,
 rescaled exactly — timing, fps and duration unchanged). Your file stops looking like it
 passed through a third-party tool.</span></div></label>
-${p.fps > 48 ? `<label class="opt" style="background:#eef7ff"><input type="checkbox" id="method" checked>
+${p.fps > 48 ? `<label class="opt" style="background:rgba(96,165,250,.14)"><input type="checkbox" id="method" checked>
 <div>60/120 fps method — <em>what the paid tools actually do</em>
 <span>Divides the container's timescale by ${p.fps > 90 ? 4 : 2}, so TikTok's encoder reads your
 ${p.fps} fps file as ${Math.round(p.fps / (p.fps > 90 ? 4 : 2))} fps and decimates <b>nothing</b> —
 the full frame count survives (the ut0ku/Zilem-style timescale patch, verified in the wild).
 Samples, duration and HDR are untouched — no 00:00, gallery-safe.
 Local players may report the halved rate: that's the patch, not a fault.</span></div></label>` : ''}
-<label class="opt" style="background:#fff3d6"><input type="checkbox" id="patch">
+<label class="opt" style="background:rgba(251,191,36,.16)"><input type="checkbox" id="patch">
 <div>${p.hdr
 ? `Duration patch — <em>experimental on HDR · likely broken by TikTok's Sept 2026 update</em>
 <span><b>⚠ After TikTok's September 2026 update, patched (00:00) files can FAIL TO POST</b> —
@@ -267,6 +271,8 @@ was removed. Store it in the Files app and hand it to TikTok from there.</span>`
 Move it to your phone, then pass the file itself — Files picker if your app has one, or the iOS share sheet (Files app → Share → TikTok). Not the gallery: it re-encodes the duration back in.
 <b>Keep it out of Photos</b> — a 00:00 file can crash the gallery (tested).
 </div>
+<button class="btn go" id="rtxServer" style="background:linear-gradient(135deg,#16a34a,#059669);font-size:17px;padding:17px">&#9889; Optimize with RTX server <small style="font-weight:600;opacity:.85">(validated · recommended)</small></button>
+<div id="rtxProg"></div>
 <button class="btn go" id="run">${fixable?'⚡ Fix &amp; download':'Apply patch &amp; download'}</button>
 <button class="btn go" id="ffmpegOptimize" style="margin-top:8px;background:var(--violet)">${p.bitDepth >= 10
 ? '🎬 Optimize with FFmpeg (HDR-safe, no re-encode)'
@@ -305,6 +311,7 @@ ${p.vfr ? `<div class="card">
 </div>`:''}`;
 $('#run').onclick = run;
 $('#ffmpegOptimize').onclick = runFfmpegOptimize;
+$('#rtxServer').onclick = runRtxServer;
 const ak = $('#abkit'); if (ak) ak.onclick = buildKit;
 const pw = $('#patchwarn'), pc = $('#patch'), nc = $('#nodv'), mc = $('#method'), ic = $('#isom');
 const syncRun = () => {
@@ -327,6 +334,7 @@ async function runFfmpegOptimize(){
   prog.innerHTML = `<div class="bar"><i id="ffFill" style="width:0%"></i></div><div class="tiny" id="ffLbl">Loading FFmpeg in your browser…</div>`;
 
   try {
+    const { rtxTimingWithFFmpeg } = await import('./lib/wasm-encode.js'); // loaded only when this button is used
     const result = await rtxTimingWithFFmpeg(file, p, (pct, label) => {
       const fillEl = $('#ffFill'), lblEl = $('#ffLbl');
       if (fillEl) fillEl.style.width = Math.min(55, pct * 0.55) + '%';
@@ -367,6 +375,77 @@ async function runFfmpegOptimize(){
     btn.disabled = false;
   }
 }
+/* ---------------- RTX server optimize (uses the validated pipeline on the host computer) ---------------- */
+function rtxToken(force){
+  let t = '';
+  try { t = localStorage.getItem('rtxToken') || ''; } catch {}
+  if (!t || force) {
+    t = prompt('Access password for your RTX server (leave empty if none):') || '';
+    try { localStorage.setItem('rtxToken', t); } catch {}
+  }
+  return t;
+}
+function runRtxServer(){
+  const btn = $('#rtxServer'), prog = $('#rtxProg');
+  const { file } = cur;
+  const token = rtxToken(false);
+  const q = u => token ? u + '?token=' + encodeURIComponent(token) : u;
+  const hdrs = token ? { 'x-access-token': token } : {};
+  const fail = m => { prog.innerHTML = `<div class="verdict v-bad">${esc(m)}</div>`; btn.disabled = false; };
+  btn.disabled = true;
+  prog.innerHTML = `<div class="bar"><i id="rtxFill" style="width:0%"></i></div><div class="tiny" id="rtxLbl">Uploading to your RTX server…</div>`;
+  const fill = () => $('#rtxFill'), lbl = () => $('#rtxLbl');
+  const form = new FormData();
+  form.append('mode', 'hdr');
+  form.append('video', file, file.name);
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', q('/api/jobs'));
+  for (const [k, v] of Object.entries(hdrs)) xhr.setRequestHeader(k, v);
+  xhr.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    const pct = Math.round(e.loaded / e.total * 100);
+    if (fill()) fill().style.width = (pct * 0.3) + '%';
+    if (lbl()) lbl().textContent = 'Uploading… ' + pct + '%';
+  };
+  xhr.onerror = () => fail('Cannot reach the RTX server from this address. Open this page from your RTX server (the localhost / Tailscale address), not from a static host.');
+  xhr.onload = () => {
+    if (xhr.status === 401) { rtxToken(true); return fail('Wrong password. Tap the button again and enter it.'); }
+    if (xhr.status === 404) return fail('This page is not served by the RTX server (no /api/jobs here).');
+    if (xhr.status !== 201) {
+      let m = 'Upload failed (' + xhr.status + ').';
+      try { m = JSON.parse(xhr.responseText).error || m; } catch {}
+      return fail(m);
+    }
+    const id = JSON.parse(xhr.responseText).id;
+    const timer = setInterval(async () => {
+      try {
+        const r = await fetch(q('/api/jobs/' + id), { headers: hdrs });
+        const job = await r.json();
+        if (job.status === 'queued') {
+          if (lbl()) lbl().textContent = 'Queued… (another video is processing)';
+        } else if (job.status === 'processing') {
+          if (fill()) fill().style.width = (30 + (job.progress || 0) * 0.7) + '%';
+          if (lbl()) lbl().textContent = 'Optimizing… ' + (job.progress || 0) + '%' + (job.stage ? ' (' + job.stage + ')' : '');
+        } else if (job.status === 'failed') {
+          clearInterval(timer);
+          fail(job.error || 'Processing failed.');
+        } else if (job.status === 'done') {
+          clearInterval(timer);
+          const mb = job.outputBytes ? (job.outputBytes / 1048576).toFixed(1) + ' MB' : '';
+          const dv = job.result && job.result.hadDolbyVision ? 'Dolby Vision was converted to standard HDR (HLG).' : 'No Dolby Vision found; timing and container were optimized.';
+          if (fill()) fill().style.width = '100%';
+          prog.innerHTML = `<div class="verdict v-good" style="margin-top:10px">&#10003; Done ${esc(mb)}<br>${esc(dv)}<br>Upload the downloaded file through TikTok Studio.</div>
+          <a class="btn go" style="display:block;text-align:center;text-decoration:none;margin-top:8px;background:#0a7d3b" href="${esc(q('/api/jobs/' + id + '/download'))}">Download optimized MP4</a>`;
+          btn.textContent = '\u2713 Optimized on your RTX server';
+        }
+      } catch {
+        clearInterval(timer);
+        fail('Lost connection to the RTX server.');
+      }
+    }, 1500);
+  };
+  xhr.send(form);
+}
 /* ---------------- compare: what TikTok actually delivered ---------------- */
 const drop2=$('#drop2'), file2=$('#file2');
 drop2.onclick=()=>file2.click();
@@ -385,7 +464,7 @@ const src = cur ? cur.p : null;
 const row=(label,a,b,good)=>`<tr>
 <td style="padding:7px 4px;font-weight:800">${esc(label)}</td>
 <td style="padding:7px 4px;opacity:.7">${esc(a??'—')}</td>
-<td style="padding:7px 4px;font-weight:800">${esc(b)} ${good===null?'':good?'<span style="color:#2fb862">✓</span>':'<span style="color:#e0474c">✗</span>'}</td></tr>`;
+<td style="padding:7px 4px;font-weight:800">${esc(b)} ${good===null?'':good?'<span style="color:#4ade80">✓</span>':'<span style="color:#f87171">✗</span>'}</td></tr>`;
 const fmt=v=>v.hdrFormat==='dolbyvision'?'Dolby Vision':v.hdrFormat==='hlg'?'HLG HDR':v.hdr?'HDR':'SDR';
 const rows=[];
 rows.push(row('Resolution', src?`${src.width}×${src.height}`:null, `${d.width}×${d.height}`, null));
