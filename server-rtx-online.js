@@ -36,8 +36,6 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, rm, stat, rename, copyFile, unlink, link, readFile, writeFile, readdir } from 'node:fs/promises';
 import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
-import { getWifiName } from './lib/network-info.js';
-import { readWifi } from './lib/wifi-info.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -398,14 +396,6 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
     if (req.file) await rm(req.file.path, { force: true }).catch(() => {});
     res.status(500).json({ error: 'Could not store the upload.' });
   }
-});
-
-app.get('/api/network', (_req, res) => {
-  res.json(readWifi());
-});
-
-app.get('/api/network', async (_req, res) => {
-  res.json({ ssid: await getWifiName(), platform: process.platform });
 });
 
 app.post('/api/uploads', express.json({ limit: '10kb' }), async (req, res) => {
