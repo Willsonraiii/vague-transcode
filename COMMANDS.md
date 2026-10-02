@@ -1,17 +1,16 @@
-# COMMANDS - RTX Optimizer quick reference
+# COMMANDS — every terminal thing, both machines
 
-Everything you need to run the optimizer yourself, with no agent.
-Windows first. Linux section at the bottom is a to-do.
-
-Repo (Windows): `%USERPROFILE%\Desktop\vague-transcode-4k-test`   Branch: `online-rtx-service`
-Output folder for optimized videos: `Desktop\vague-transcode-4k-test\out\`
+Windows = PowerShell 5 (no `&&` — run lines one by one). Linux = bash.
+Repo folders: Windows `%USERPROFILE%\Desktop\vague-transcode-4k-test` · Linux `~/Desktop/vague-transcode`.
+Output folder on both: `out/` inside the repo. Source videos are never touched.
 
 ---
 
-## 1. Optimize a video (easiest: drag and drop)
+# W — WINDOWS
 
+## W1. Optimize a video (drag and drop)
 Drag the video onto **Optimize Video.bat** on the Desktop. Wait for `COPY TEST: PASS`.
-Result: `Desktop\vague-transcode-4k-test\out\<name>-optimized.mp4`
+Result: `...\vague-transcode-4k-test\out\<name>-optimized.mp4`.
 
 Same thing by command:
 
@@ -20,57 +19,50 @@ cd "$HOME\Desktop\vague-transcode-4k-test"
 powershell -ExecutionPolicy Bypass -File .\optimize.ps1 "C:\full\path\to\video.mp4"
 ```
 
-Keep the source HDR/DV signalling instead (unvalidated on TikTok): add `-Mode standard`.
+Keep the source HDR/DV signalling instead (unvalidated): add `-Mode standard`.
 
-Good result = `COPY TEST: PASS`, `DV present: False`, `arib-std-b67`, 2 audio tracks.
-
-## 2. Run the web optimizer (localhost)
+## W2. Run the web server (the website)
 
 ```powershell
 cd "$HOME\Desktop\vague-transcode-4k-test"
-$env:ACCESS_TOKEN = "choose-a-password"
+$env:ACCESS_TOKEN = "your-key"
 npm run start:online
 ```
 
-- Open `http://localhost:3005` and type the same password in the token box.
-- Keep that PowerShell window open while using it. Stop with Ctrl+C.
-- Choose video -> wait for Done -> click **Download optimized MP4** (file = `optimized.mp4` in Downloads).
-- The server deletes the temporary files after download or after 1 hour.
+Open `http://localhost:3005`, type the same key. Keep this window open. Stop with Ctrl+C.
+(Optional comfort: put the key in your PowerShell profile so you never type it — see W9.)
 
-Port already in use:
+## W3. Phone by http (Tailscale IP)
+
+```powershell
+tailscale ip -4
+```
+
+Phone Safari: `http://<that-ip>:3005`. If it times out, the firewall rule is missing (W5).
+
+## W4. Phone by https (the protected address)
+
+```powershell
+tailscale serve --bg 3005
+```
+
+It prints your address (on this PC: `https://desktop-kndp51g.tail5e494c.ts.net`). Runs in background, survives closing the window. To stop: `tailscale serve --https=443 off`. To see it again: `tailscale serve status`.
+
+## W5. Firewall rule (only needed once per PC — already done on this PC 2026-10-02)
+Admin PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "OBITO STUDIO 3005" -Direction Inbound -Protocol TCP -LocalPort 3005 -Action Allow
+```
+
+## W6. Port 3005 already in use
 
 ```powershell
 netstat -ano | findstr :3005
 taskkill /PID <number-from-last-column> /F
 ```
 
-## 3. Use it from the iPhone (Tailscale, free, no card)
-
-1. Install Tailscale on the PC and on the iPhone, sign in with the SAME account.
-2. On the PC: `tailscale ip -4` (gives `100.x.x.x`).
-3. Start the server (section 2) and keep the PC on and awake.
-4. iPhone Safari: `http://100.x.x.x:3005` -> enter the password.
-5. Share -> **Add to Home Screen** to get the app icon.
-6. Pick the video from the **Files** app, not Photos (Photos can convert the video).
-
-## 4. Inspect a video before optimizing (read-only)
-
-```powershell
-ffprobe -v error -show_entries stream=index,codec_type,codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,time_base,bit_rate,nb_frames,sample_rate,channels,color_transfer:stream_side_data -show_entries format=duration,size,format_name -of json "C:\path\to\video.mp4"
-```
-
-Accepted: MP4/MOV, has audio, fps above 30, under 600 MB, video time_base denominator divides 19200 (600, 1200, 2400, 4800 are fine).
-
-## 5. Optimize by hand (what the launcher runs)
-
-```powershell
-cd "$HOME\Desktop\vague-transcode-4k-test"
-node tools/rtx-pipeline.js "C:\path\to\input.mp4" "C:\path\to\output.mp4"
-```
-
-Add `--keep-dv` to keep Dolby Vision (unvalidated). The source file is never modified.
-
-## 6. Validate an output (mandatory)
+## W7. Validate an output (what "good" means)
 
 ```powershell
 $dst = "C:\path\to\output.mp4"
@@ -78,13 +70,9 @@ ffprobe -v error -show_entries stream=index,codec_type,codec_name,width,height,r
 ffmpeg -v error -copyts -i "$dst" -map 0 -c copy -fps_mode passthrough -f null -
 ```
 
-- The ffmpeg line printing NOTHING = pass.
-- `-fps_mode` goes AFTER `-c copy` (it is an output option). FFmpeg 9 no longer has `-vsync`.
-- Expect: no DOVI record, `arib-std-b67`, 2 audio tracks, video 30/1.
+Good = `COPY TEST: PASS` (the ffmpeg line prints nothing), no DOVI record, `arib-std-b67`, 2 audio tracks, video 30/1. `-fps_mode` goes AFTER `-c copy`.
 
-## 7. Back up / update the repo
-
-Save your changes:
+## W8. Save / update the code (git)
 
 ```powershell
 cd "$HOME\Desktop\vague-transcode-4k-test"
@@ -94,24 +82,18 @@ git commit -m "describe the change"
 git push origin online-rtx-service
 ```
 
-Restore a lost file from git: `git checkout -- optimize.ps1` (or any other tracked file).
+Get updates on this PC: `git pull --ff-only origin online-rtx-service`.
+Restore a lost tracked file: `git checkout -- optimize.ps1`.
 
-Get a new update from a bundle sent by the agent (base64 text file in Downloads):
+## W9. Never type the key again (optional)
 
 ```powershell
-cd "$HOME\Desktop\vague-transcode-4k-test"
-$t = "$HOME\Downloads\FILE.b64.txt"
-$b = "$HOME\Downloads\update.bundle"
-[IO.File]::WriteAllBytes($b, [Convert]::FromBase64String((Get-Content $t -Raw).Trim()))
-git bundle verify $b
-git fetch $b online-rtx-service
-git merge --ff-only FETCH_HEAD
-git push origin online-rtx-service
+notepad $PROFILE
 ```
 
-## 8. Recreate the Desktop launcher if it is lost
+Add the line `$env:ACCESS_TOKEN = "your-key"`, save, restart PowerShell. (Only do this on your own PC.)
 
-`optimize.ps1` lives in the repo folder (restore with `git checkout -- optimize.ps1`). Then:
+## W10. Recreate the Desktop launcher if lost
 
 ```powershell
 @(
@@ -122,35 +104,121 @@ git push origin online-rtx-service
 ) | Set-Content -Encoding ASCII "$HOME\Desktop\Optimize Video.bat"
 ```
 
-## 9. Fresh setup on a new Windows PC
+---
 
-```powershell
-git clone -b online-rtx-service https://github.com/Willsonraiii/vague-transcode.git "$HOME\Desktop\vague-transcode-4k-test"
-cd "$HOME\Desktop\vague-transcode-4k-test"
+# L — LINUX (the future main server)
+
+## L1. First-time / keep-up-to-date
+
+```bash
+cd ~/Desktop/vague-transcode
+git pull --ff-only origin online-rtx-service
 npm install
-node -v; ffmpeg -version; ffprobe -version
+node -v; ffmpeg -version | head -1
 ```
 
-Needs Node.js, FFmpeg and FFprobe on PATH (tested: Node v24.19.0, FFmpeg 9.0.2).
+(If the repo is not there yet: `git clone -b online-rtx-service https://github.com/Willsonraiii/vague-transcode.git ~/Desktop/vague-transcode` first.)
 
-## 10. Troubleshooting
+## L2. Run the web server
 
-- **Cannot scroll in PowerShell:** press Esc (Select mode), or right-click title bar -> Properties -> Layout -> Screen Buffer Height 9999. Or use Windows Terminal.
-- **`Unrecognized option 'vsync'`:** use `-fps_mode passthrough` after `-c copy`.
-- **`fps_mode cannot be applied to input url`:** the flag is before `-i`; move it after `-c copy`.
-- **No Download button:** fixed in commit bc7e665. Update the repo. Workaround: copy `output.mp4` from the newest folder in `jobs\` within 1 hour.
-- **Garbled symbols on the page (`a'` `a€"`):** never rewrite a file with `Get-Content | Set-Content`. Restore with `git checkout -- public/index.html`.
-- **Pipeline error about timescale:** the video's time base does not divide 19200; that source is not supported yet.
-- **Page cannot connect from the phone:** PC asleep/off, server window closed, or Tailscale not connected on both devices.
+```bash
+cd ~/Desktop/vague-transcode
+ACCESS_TOKEN="your-key" npm run start:online
+```
 
-## 11. Rules to remember
+Open `http://localhost:3005` on the laptop, or from the phone: `http://100.91.23.41:3005`.
+Linux has no blocking firewall by default; if the phone times out, check `sudo ufw status` and allow 3005 if active.
 
-- Never overwrite the source video; outputs go to `out\`.
-- Output quality = input quality (no re-encode). Record at the phone's highest quality.
-- The optimized file shows no playtime in the phone gallery. That is intentional.
-- TikTok success counts only after you confirm it in TikTok Studio. Validated so far: three real videos including a 4K60 portrait DV video (HDR delivered; Studio shows the x2 duration, the TikTok app shows the original duration).
-- Do not change tools/ or lib/ (the validated pipeline) without a reason.
+## L3. Phone by https
 
-## 12. Linux (to do later)
+```bash
+tailscale serve --bg 3005
+```
 
-Not set up yet. When on the Linux laptop: `git pull --ff-only origin online-rtx-service`, `npm install`, then ask the agent for the Linux launcher (it needs the same `-fps_mode` fix) and the Tailscale server setup.
+Address: `https://willson-inspiron-15-3552.tail5e494c.ts.net`. Status: `tailscale serve status`. Stop: `tailscale serve --https=443 off`.
+
+## L4. Create the Linux drag-and-drop launcher (one-time)
+This is the Linux cousin of `Optimize Video.bat`, with the same safety checks style and the `-fps_mode` copy test:
+
+```bash
+cd ~/Desktop/vague-transcode
+cat > optimize-video <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ $# -ge 1 ] || { echo "Usage: optimize-video VIDEO [hdr|standard]"; exit 1; }
+repo="$HOME/Desktop/vague-transcode"
+src="$(readlink -f "$1")"; mode="${2:-hdr}"
+mkdir -p "$repo/out"
+dst="$repo/out/$(basename "${src%.*}")-optimized.mp4"
+[ "$src" != "$dst" ] || { echo "Output would overwrite the source"; exit 1; }
+cd "$repo"
+if [ "$mode" = standard ]; then node tools/rtx-pipeline.js "$src" "$dst" --keep-dv; else node tools/rtx-pipeline.js "$src" "$dst"; fi
+echo "--- validate ---"
+ffprobe -v error -show_entries stream=codec_type,width,height,r_frame_rate,color_transfer -show_entries format=duration,size -of json "$dst"
+if [ -z "$(ffmpeg -v error -copyts -i "$dst" -map 0 -c copy -fps_mode passthrough -f null - 2>&1)" ]; then
+  echo "COPY TEST: PASS"; else echo "COPY TEST: FAIL"; fi
+echo "FILE: $dst"
+EOF
+chmod +x optimize-video
+git add optimize-video
+git commit -m "Add Linux launcher optimize-video"
+git push origin online-rtx-service
+```
+
+Use it: `~/Desktop/vague-transcode/optimize-video "/path/to/video.mp4"` (or `nautilus .` and double-click via "Run in Terminal").
+
+## L5. Port 3005 already in use
+
+```bash
+ss -tlnp | grep 3005
+kill <pid>
+```
+
+## L6. Validate an output
+
+```bash
+dst="/path/to/output.mp4"
+ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate,nb_frames,color_transfer:stream_side_data -show_entries format=duration,size -of json "$dst"
+ffmpeg -v error -copyts -i "$dst" -map 0 -c copy -fps_mode passthrough -f null -
+```
+
+Same "good" rules as Windows (W7).
+
+## L7. Save / update the code (git)
+
+```bash
+cd ~/Desktop/vague-transcode
+git add -A
+git commit -m "describe the change"
+git push origin online-rtx-service
+```
+
+## L8. Never type the key again (optional)
+
+```bash
+echo 'export ACCESS_TOKEN="your-key"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+# P — PHONE (no terminal, just the steps)
+
+1. Safari → the https address of the awake PC → type the key.
+2. Choose mode → **Choose video** → pick from the **Files** app (not Photos).
+3. Wait for Done → **Download optimized MP4**.
+4. Post to TikTok → confirm HDR in **TikTok Studio**. Only that counts as success.
+5. Optional: Share → Add to Home Screen for the app icon (downloads must still happen in Safari).
+
+---
+
+# T — TROUBLESHOOTING
+
+- **Server won't start, "Cannot find module .../lib/..."** — that was the 2026-10-02 bug; fixed in commit `ff095ca`. If you ever see it again, your copy is old: `git pull --ff-only`.
+- **Phone times out, localhost works** — firewall (W5) or PC asleep or server window closed or Tailscale off on one side.
+- **`Unrecognized option 'vsync'`** — FFmpeg 9: use `-fps_mode passthrough` AFTER `-c copy`.
+- **Garbled symbols on the page** — someone rewrote a file with `Get-Content | Set-Content`. Fix: `git checkout -- public/index.html`.
+- **No Download button** — old code; update the repo (fixed long ago in `bc7e665`).
+- **https address dead** — serve stopped: run `tailscale serve --bg 3005` again on that PC.
+- **Pipeline error about timescale** — that source's time base does not divide 19200; not supported yet.
+- **WiFi menu shows no name** — the PC has no Wi-Fi (it will say "connected by cable") or the tools are missing; on Linux it tries `iwgetid` then `nmcli`.
