@@ -31,11 +31,13 @@
  */
 import express from 'express';
 import multer from 'multer';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, rm, stat, rename, copyFile, unlink, link, readFile, writeFile, readdir } from 'node:fs/promises';
 import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
+import { getWifiName } from './lib/network-info.js';
+import { readWifi } from './lib/wifi-info.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -302,6 +304,40 @@ app.use('/api', (req, res, next) => {
 // Routes
 // ---------------------------------------------------------------------------
 
+// Name of the Wi-Fi network the computer running this server is connected to (browsers cannot read their own).
+let netCache = { at: 0, value: null };
+function runCmd(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 2500, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout)));
+  });
+}
+async function readWifiName() {
+  try {
+    if (process.platform === 'win32') {
+      const out = await runCmd('netsh', ['wlan', 'show', 'interfaces']);
+      const m = /^\s*SSID\s*:\s*(.+?)\s*$/m.exec(out);
+      return m ? m[1] : null;
+    }
+    if (process.platform === 'darwin') {
+      const out = await runCmd('networksetup', ['-getairportnetwork', 'en0']);
+      const m = /Current Wi-Fi Network:\s*(.+?)\s*$/m.exec(out);
+      return m ? m[1] : null;
+    }
+    const iw = (await runCmd('iwgetid', ['-r'])).trim();
+    if (iw) return iw;
+    const nm = await runCmd('nmcli', ['-t', '-f', 'active,ssid', 'dev', 'wifi']);
+    const line = nm.split('\n').find((l) => l.startsWith('yes:'));
+    return line ? line.slice(4).replace(/\\:/g, ':').trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+app.get('/api/network', async (_req, res) => {
+  if (Date.now() - netCache.at > 10000) netCache = { at: Date.now(), value: await readWifiName() };
+  const ssid = netCache.value ? String(netCache.value).slice(0, 64) : null;
+  res.json({ ssid, wired: !ssid });
+});
+
 app.get('/health', async (_req, res) => {
   const ff = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' });
   res.json({
@@ -362,6 +398,14 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
     if (req.file) await rm(req.file.path, { force: true }).catch(() => {});
     res.status(500).json({ error: 'Could not store the upload.' });
   }
+});
+
+app.get('/api/network', (_req, res) => {
+  res.json(readWifi());
+});
+
+app.get('/api/network', async (_req, res) => {
+  res.json({ ssid: await getWifiName(), platform: process.platform });
 });
 
 app.post('/api/uploads', express.json({ limit: '10kb' }), async (req, res) => {

@@ -1,8 +1,8 @@
 # OBITO STUDIO front end (React + Vite)
 
-Source for the page served at `/` by `server-rtx-online.js`. The built files live in `../public/` (already committed), so the server runs without building.
+Source for the page served at `/` by `server-rtx-online.js`. Built files are committed in `../public/`, so the server runs without building.
 
-Rebuild after editing anything in `web/src`:
+Rebuild after editing `web/src`:
 
 ```
 cd web
@@ -10,6 +10,6 @@ npm install
 npm run build
 ```
 
-Builds straight into `../public`. Dev mode with the server running on port 3005: `npm run dev`.
-
-Orb: `thinking-orbs` (idle, uploading). Bot: `bot-avatars` clover (working, paused, done). Beam: `border-beam` rides the window border while busy.
+Files: `src/App.jsx` (macOS desktop: menu bar, windows, dock, Wi-Fi menu), `src/Optimizer.jsx` (upload / optimize / download logic),
+`src/styles.css` (flat glass, gradients only on buttons), `src/Logo.jsx`, `src/icons.jsx`.
+Libraries: `thinking-orbs` (idle, uploading), `bot-avatars` clover (working, paused, done), `border-beam` (window border while busy).

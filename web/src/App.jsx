@@ -1,108 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ThinkingOrb } from 'thinking-orbs';
-import { BotAvatar } from 'bot-avatars';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BorderBeam } from 'border-beam';
 import Logo from './Logo.jsx';
+import Optimizer from './Optimizer.jsx';
 import {
-  CheckIcon, ChevronIcon, CloseIcon, DownloadIcon, FpsIcon, HdrIcon, KeyIcon, LayersIcon,
-  PauseIcon, PlayIcon, ShieldIcon, SparkIcon, UploadIcon, WifiIcon
+  CheckIcon, ChevronIcon, FpsIcon, HdrIcon, HelpIcon, LayersIcon, ListIcon, ShieldIcon, SparkIcon, WifiIcon, WifiOffIcon
 } from './icons.jsx';
 
-const MAX_BYTES = 600 * 1024 * 1024;
-const CHUNK = 8 * 1024 * 1024;
-const VANILLA = '#F6E7C1';
-const MODES = [
-  { id: 'hdr', label: 'FPS + Quality + HDR', Icon: HdrIcon },
-  { id: 'standard', label: 'FPS + Quality', Icon: FpsIcon }
-];
-
-const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
-const isStandalone = () =>
-  typeof window !== 'undefined' &&
-  (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+const DOCK_H = 92;      // space reserved for the dock
+const BAR_H = 30;       // menu bar height
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
-const fileKey = (f) => `${f.name}|${f.size}|${f.lastModified}`;
-const readMap = () => { try { return JSON.parse(lsGet('obitoUploads') || '{}'); } catch { return {}; } };
-const writeMap = (m) => lsSet('obitoUploads', JSON.stringify(m));
-
-/* ---------- macOS-style chrome ---------- */
-
-function MenuBar() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 20000); return () => clearInterval(t); }, []);
-  const clock = now.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-  return (
-    <nav className="menubar" aria-label="Main">
-      <div className="mb-left">
-        <a className="mb-brand" href="#optimizer"><Logo size={18} /><b>OBITO STUDIO</b></a>
-        <a href="#optimizer">Optimizer</a>
-        <a href="#how">How it works</a>
-        <a href="#faq">FAQ</a>
-      </div>
-      <div className="mb-right"><WifiIcon width={16} height={16} /><span>{clock}</span></div>
-    </nav>
-  );
-}
-
-function Window({ title, id, className = '', children }) {
-  return (
-    <section className={'win ' + className} id={id}>
-      <header className="win-bar">
-        <span className="lights" aria-hidden="true"><i className="l-r" /><i className="l-y" /><i className="l-g" /></span>
-        <b>{title}</b>
-        <span className="lights-pad" />
-      </header>
-      <div className="win-body">{children}</div>
-    </section>
-  );
-}
-
-function ModeSelect({ value, onChange }) {
-  return (
-    <div className="modes" role="radiogroup" aria-label="Optimization type">
-      {MODES.map(({ id, label, Icon }) => (
-        <button key={id} type="button" role="radio" aria-checked={value === id}
-          className={'mode' + (value === id ? ' on' : '')} onClick={() => onChange(id)}>
-          <span className="mode-ico"><Icon /></span>
-          <span className="mode-txt">{label}</span>
-          <span className="mode-tick"><CheckIcon width={14} height={14} strokeWidth={2.6} /></span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Orb({ state }) {
-  return (
-    <div className="orb" data-state={state}>
-      <span className="halo h1" /><span className="halo h2" />
-      <ThinkingOrb state={state} size={64} theme="dark" color={VANILLA} />
-    </div>
-  );
-}
-
-function Bot({ state }) {
-  return (
-    <div className="bot" data-state={state}>
-      <span className="halo h1" />
-      <BotAvatar type="clover" size={92} state={state} theme="dark" />
-    </div>
-  );
-}
-
-function Progress({ value, paused, smooth }) {
-  return (
-    <div className={'progress' + (paused ? ' paused' : '')} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)}>
-      <i style={{ width: Math.max(2, Math.min(100, value)) + '%', transition: smooth ? 'width 1.4s linear' : 'none' }} />
-    </div>
-  );
-}
 
 /* ---------- content ---------- */
 
 const FEATURES = [
-  { Icon: FpsIcon, t: 'Built for 60 & 120 fps', d: 'The frame-rate timing is adjusted so TikTok is less likely to flatten fast footage to 30 fps.' },
+  { Icon: FpsIcon, t: 'Built for 60 & 120 fps', d: 'Frame-rate timing is adjusted so TikTok is less likely to flatten fast footage to 30 fps.' },
   { Icon: LayersIcon, t: 'No re-encoding', d: 'Your video is repackaged, not recompressed. Pixels are copied as they are, so nothing gets softer.' },
   { Icon: HdrIcon, t: 'HDR clips stay HDR', d: 'The HDR button prepares iPhone HDR videos so their colour information survives the upload.' },
   { Icon: ShieldIcon, t: 'Private by design', d: 'It runs on your own server. Files are deleted after you download, or after one hour.' }
@@ -113,7 +25,7 @@ const STEPS = [
   { n: '3', t: 'Download and post', d: 'Save the file, then upload it through TikTok Studio.' }
 ];
 const FAQ = [
-  ['Does it re-encode my video?', 'No. The video and audio are copied as they are and only the container and timing are rewritten, which is why quality stays identical and it finishes quickly.'],
+  ['Does it re-encode my video?', 'No. Video and audio are copied as they are and only the container and timing are rewritten, so quality stays identical and it finishes quickly.'],
   ['What is the difference between the two buttons?', 'FPS + Quality fixes the frame-rate timing and keeps your quality. FPS + Quality + HDR does the same and also prepares HDR clips for TikTok. If your video is not HDR, either works.'],
   ['What if I pause or cancel an upload?', 'Nothing is thrown away. The part already uploaded stays on the server for an hour, so choosing the same video again, or tapping Continue, picks up where it stopped.'],
   ['Why does my gallery show no duration?', 'The optimized file is made for TikTok, and some players show no duration for it. Upload it through TikTok Studio to see how it posts.'],
@@ -121,352 +33,352 @@ const FAQ = [
   ['Where do my files go?', 'They stay on your own server and are deleted after you download the result, or after one hour.']
 ];
 
-/* ---------- app ---------- */
+function Features() {
+  return (
+    <div className="features">
+      {FEATURES.map(({ Icon, t, d }) => (
+        <article className="feat" key={t}>
+          <span className="feat-ico"><Icon width={20} height={20} /></span>
+          <div><h3>{t}</h3><p>{d}</p></div>
+        </article>
+      ))}
+    </div>
+  );
+}
+function Steps() {
+  return (
+    <ol className="steps">
+      {STEPS.map(({ n, t, d }) => (
+        <li key={n}><span className="step-n">{n}</span><div><h3>{t}</h3><p>{d}</p></div></li>
+      ))}
+    </ol>
+  );
+}
+function Faq() {
+  return (
+    <div className="faq">
+      {FAQ.map(([q, a]) => (
+        <details key={q}><summary>{q}<ChevronIcon width={18} height={18} /></summary><p>{a}</p></details>
+      ))}
+    </div>
+  );
+}
 
-export default function App() {
-  const [phase, setPhase] = useState('idle'); // idle | upload | paused | queued | process | done | error
-  const [mode, setMode] = useState('hdr');
-  const [pct, setPct] = useState(0);
-  const [file, setFile] = useState(null);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const [key, setKey] = useState(() => lsGet('obitoKey') || '');
-  const [needKey, setNeedKey] = useState(false);
-  const [drag, setDrag] = useState(false);
-  const [kept, setKept] = useState(null); // { id, pct, name } - progress kept after cancel
-  const [dl, setDl] = useState({ state: 'idle', pct: 0 });
-  const input = useRef(null);
-  const xhrRef = useRef(null);
-  const timer = useRef(null);
-  const upId = useRef(null);
-  const jobId = useRef(null);
-  const fileRef = useRef(null);
-  const flags = useRef({ pause: false, cancel: false });
-  const keyRef = useRef(key);
-  const modeRef = useRef(mode);
-  const savedFile = useRef(null);
-  keyRef.current = key;
-  modeRef.current = mode;
+const APPS = [
+  { id: 'optimizer', title: 'Optimizer', win: 'OBITO STUDIO — Optimizer', w: 520, dock: <Logo size={40} /> },
+  { id: 'features', title: 'What you get', win: 'What you get', w: 340, dock: <SparkIcon width={22} height={22} /> },
+  { id: 'how', title: 'How it works', win: 'How it works', w: 340, dock: <ListIcon width={22} height={22} /> },
+  { id: 'faq', title: 'FAQ', win: 'FAQ', w: 340, dock: <HelpIcon width={22} height={22} /> }
+];
 
-  const headers = useCallback(() => (keyRef.current ? { 'x-access-token': keyRef.current } : {}), []);
-  const withKey = useCallback((url) => (keyRef.current ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(keyRef.current) : url), []);
-  useEffect(() => () => clearInterval(timer.current), []);
+function layoutFor(vw) {
+  const cx = Math.round((vw - 520) / 2);
+  const left = Math.max(16, cx - 340 - 24);
+  const right = Math.min(vw - 340 - 16, cx + 520 + 24);
+  return {
+    optimizer: { x: cx, y: BAR_H + 22 },
+    how: { x: left, y: BAR_H + 22 },
+    faq: { x: left, y: BAR_H + 22 + 312 },
+    features: { x: right, y: BAR_H + 22 }
+  };
+}
 
-  const fail = useCallback((msg, askKey = false) => {
-    clearInterval(timer.current);
-    setError(msg); setNeedKey(askKey); setPhase('error');
+/* ---------- menu bar ---------- */
+
+function useOnOutside(ref, fn) {
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) fn(); };
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
+  }, [ref, fn]);
+}
+
+function WifiMenu({ apiKey }) {
+  const [open, setOpen] = useState(false);
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [info, setInfo] = useState(null); // { ssid, latency, error }
+  const [conn, setConn] = useState(null);
+  const ref = useRef(null);
+  useOnOutside(ref, useCallback(() => setOpen(false), []));
+
+  useEffect(() => {
+    const on = () => setOnline(true); const off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  /* ----- job polling ----- */
-  const poll = useCallback((id) => {
-    clearInterval(timer.current);
-    timer.current = setInterval(async () => {
-      try {
-        const r = await fetch(withKey('/api/jobs/' + id), { headers: headers() });
-        if (r.status === 401) return fail('Access key needed.', true);
-        if (r.status === 404) return fail('This job expired. Choose the video again.');
-        const job = await r.json();
-        if (job.status === 'queued') setPhase('queued');
-        else if (job.status === 'processing') { setPhase('process'); setPct(job.progress || 0); }
-        else if (job.status === 'failed') fail(job.error || 'Something went wrong. Try again.');
-        else if (job.status === 'done') {
-          clearInterval(timer.current);
-          setResult({ id, bytes: job.outputBytes || 0 }); setPct(100); setPhase('done');
-        }
-      } catch { fail('Lost connection to the server.'); }
-    }, 1500);
-  }, [fail, headers, withKey]);
-
-  const startJob = useCallback(async (uploadId) => {
-    setPhase('queued'); setPct(0);
+  const refresh = useCallback(async () => {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    setConn(c ? { type: c.type, eff: c.effectiveType, down: c.downlink, rtt: c.rtt } : null);
+    const t0 = performance.now();
     try {
-      const r = await fetch(withKey('/api/uploads/' + uploadId + '/start'), {
-        method: 'POST', headers: { ...headers(), 'content-type': 'application/json' }, body: JSON.stringify({ mode: modeRef.current })
-      });
-      if (r.status === 401) return fail('Access key needed.', true);
-      if (r.status === 404) { setKept(null); return fail('The saved upload expired. Choose the video again.'); }
-      if (!r.ok) return fail('Could not start optimizing.');
-      jobId.current = (await r.json()).id;
-      poll(jobId.current);
-    } catch { fail('Cannot reach the server.'); }
-  }, [fail, headers, poll, withKey]);
+      const r = await fetch('/api/network' + (apiKey ? '?token=' + encodeURIComponent(apiKey) : ''), { headers: apiKey ? { 'x-access-token': apiKey } : {} });
+      const latency = Math.round(performance.now() - t0);
+      if (r.status === 401) return setInfo({ error: 'Enter your access key to see the server network.', latency });
+      if (!r.ok) return setInfo({ error: 'Server network unavailable.', latency });
+      const j = await r.json();
+      setInfo({ ssid: j.ssid, wired: j.wired, latency });
+    } catch { setInfo({ error: 'Server unreachable.' }); }
+  }, [apiKey]);
 
-  /* ----- resumable upload ----- */
-  const ensureUpload = useCallback(async (f) => {
-    const map = readMap(); const k = fileKey(f);
-    const known = map[k];
-    if (known) {
-      const r = await fetch(withKey('/api/uploads/' + known), { headers: headers() });
-      if (r.status === 401) throw Object.assign(new Error('key'), { key: true });
-      if (r.ok) { const j = await r.json(); if (j.size === f.size) return { id: known, received: j.received }; }
-    }
-    const r = await fetch(withKey('/api/uploads'), {
-      method: 'POST', headers: { ...headers(), 'content-type': 'application/json' }, body: JSON.stringify({ name: f.name, size: f.size })
-    });
-    if (r.status === 401) throw Object.assign(new Error('key'), { key: true });
-    if (!r.ok) { let m = 'Upload failed (' + r.status + ').'; try { m = (await r.json()).error || m; } catch { /* default */ } throw new Error(m); }
-    const j = await r.json();
-    map[k] = j.id; writeMap(map);
-    return { id: j.id, received: 0 };
-  }, [headers, withKey]);
-
-  const putChunk = useCallback((id, offset, blob, onLoaded) => new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
-    xhr.open('PUT', withKey('/api/uploads/' + id + '?offset=' + offset));
-    for (const [k, v] of Object.entries(headers())) xhr.setRequestHeader(k, v);
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onLoaded(e.loaded); };
-    xhr.onload = () => {
-      let j = {}; try { j = JSON.parse(xhr.responseText); } catch { /* ignore */ }
-      if (xhr.status === 200) resolve(j.received);
-      else if (xhr.status === 409 && typeof j.received === 'number') resolve(j.received); // resync
-      else if (xhr.status === 401) reject(Object.assign(new Error('key'), { key: true }));
-      else reject(new Error(j.error || 'Upload failed (' + xhr.status + ').'));
-    };
-    xhr.onerror = () => reject(Object.assign(new Error('network'), { network: true }));
-    xhr.onabort = () => reject(Object.assign(new Error('abort'), { aborted: true }));
-    xhr.send(blob);
-  }), [headers, withKey]);
-
-  const runUpload = useCallback(async () => {
-    const f = fileRef.current; if (!f) return;
-    flags.current = { pause: false, cancel: false };
-    setPhase('upload'); setError(''); setNeedKey(false);
-    try {
-      const { id, received: start } = await ensureUpload(f);
-      upId.current = id;
-      let received = start;
-      setPct((received / f.size) * 100);
-      while (received < f.size) {
-        if (flags.current.cancel) return;
-        if (flags.current.pause) { setPhase('paused'); return; }
-        const end = Math.min(received + CHUNK, f.size);
-        const base = received;
-        received = await putChunk(id, received, f.slice(received, end), (loaded) => setPct(((base + loaded) / f.size) * 100));
-        setPct((received / f.size) * 100);
-      }
-      await startJob(id);
-    } catch (e) {
-      if (e.aborted) { if (flags.current.pause) setPhase('paused'); return; }
-      if (e.key) return fail('Access key needed.', true);
-      if (e.network) { setError('Connection lost. Tap Resume to continue.'); return setPhase('paused'); }
-      fail(e.message || 'Upload failed.');
-    }
-  }, [ensureUpload, fail, putChunk, startJob]);
-
-  const start = useCallback((f) => {
-    if (!f) return;
-    if (f.size > MAX_BYTES) { setFile(f); return fail('That file is over 600 MB.'); }
-    if (f.type && !f.type.startsWith('video/')) return fail('Please choose a video file.');
-    fileRef.current = f; setFile(f); setResult(null); setKept(null); setDl({ state: 'idle', pct: 0 }); savedFile.current = null;
-    runUpload();
-  }, [fail, runUpload]);
-
-  const pause = useCallback(() => { flags.current.pause = true; try { xhrRef.current?.abort(); } catch { /* ignore */ } setPhase('paused'); }, []);
-  const resume = useCallback(() => { setError(''); runUpload(); }, [runUpload]);
-
-  const cancel = useCallback(async () => {
-    flags.current.cancel = true;
-    try { xhrRef.current?.abort(); } catch { /* ignore */ }
-    clearInterval(timer.current);
-    const wasJob = jobId.current && (phase === 'queued' || phase === 'process');
-    if (wasJob) {
-      try { await fetch(withKey('/api/jobs/' + jobId.current), { method: 'DELETE', headers: headers() }); } catch { /* ignore */ }
-      jobId.current = null;
-    }
-    // keep the uploaded part so the same video continues instead of starting again
-    const f = fileRef.current;
-    setKept(upId.current && f ? { id: upId.current, pct: wasJob ? 100 : pct, name: f.name } : null);
-    setPhase('idle'); setPct(0); setError('');
-  }, [headers, pct, phase, withKey]);
-
-  const continueKept = useCallback(() => {
-    const f = fileRef.current;
-    if (!f) return input.current?.click(); // page was reloaded: pick the same video, it resumes automatically
-    setKept(null);
-    runUpload();
-  }, [runUpload]);
-
-  const discardKept = useCallback(async () => {
-    if (kept?.id) { try { await fetch(withKey('/api/uploads/' + kept.id), { method: 'DELETE', headers: headers() }); } catch { /* ignore */ } }
-    const f = fileRef.current;
-    if (f) { const m = readMap(); delete m[fileKey(f)]; writeMap(m); }
-    fileRef.current = null; upId.current = null; setFile(null); setKept(null);
-  }, [headers, kept, withKey]);
-
-  const reset = useCallback(() => {
-    clearInterval(timer.current);
-    jobId.current = null; upId.current = null; fileRef.current = null; savedFile.current = null;
-    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null);
-    setDl({ state: 'idle', pct: 0 });
-    if (input.current) input.current.value = '';
-  }, []);
-
-  /* ----- home-screen app download (fetch, then share sheet) ----- */
-  const prepareFile = useCallback(async () => {
-    if (!result) return;
-    setDl({ state: 'loading', pct: 0 });
-    try {
-      const r = await fetch(withKey('/api/jobs/' + result.id + '/download'), { headers: headers() });
-      if (!r.ok) throw new Error('status ' + r.status);
-      const total = Number(r.headers.get('content-length')) || result.bytes || 0;
-      const reader = r.body.getReader(); const chunks = []; let got = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); got += value.length;
-        if (total) setDl({ state: 'loading', pct: Math.min(99, (got / total) * 100) });
-      }
-      const base = (file?.name || 'video').replace(/\.[^.]+$/, '');
-      savedFile.current = new File(chunks, base + '-optimized.mp4', { type: 'video/mp4' });
-      setDl({ state: 'ready', pct: 100 });
-    } catch { setDl({ state: 'error', pct: 0 }); }
-  }, [file, headers, result, withKey]);
-
-  const saveFile = useCallback(async () => {
-    const f = savedFile.current; if (!f) return;
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: f.name }); return; }
-    } catch (e) { if (e && e.name === 'AbortError') return; }
-    const url = URL.createObjectURL(f); const a = document.createElement('a');
-    a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }, []);
-
-  const onKey = (v) => { setKey(v); lsSet('obitoKey', v); };
-  const onDrop = (e) => { e.preventDefault(); setDrag(false); if (phase === 'idle') start(e.dataTransfer.files?.[0]); };
-
-  const busy = phase === 'upload' || phase === 'queued' || phase === 'process';
-  const beamOn = busy;
-  const title = { idle: 'Upload your video', upload: 'Uploading', paused: 'Paused', queued: 'Getting ready', process: 'Optimizing', done: 'Your video is ready', error: 'Something went wrong' }[phase];
-  const sub = {
-    idle: 'MP4 or MOV · up to 600 MB',
-    upload: file ? file.name : '', queued: file ? file.name : '', process: file ? file.name : '',
-    paused: error || (Math.round(pct) + '% uploaded · tap Resume to continue'),
-    done: result?.bytes ? fmt(result.bytes) : file?.name || '',
-    error
-  }[phase];
-
-  const stage =
-    phase === 'done' ? <Bot state="default" /> :
-    phase === 'process' ? <Bot state="working" /> :
-    phase === 'paused' ? <Bot state="sleeping" /> :
-    phase === 'error' ? <div className="err-badge"><CloseIcon width={26} height={26} strokeWidth={2.4} /></div> :
-    <Orb state={phase === 'upload' || phase === 'queued' ? 'connecting' : 'breathing'} />;
+  const toggle = () => { const n = !open; setOpen(n); if (n) refresh(); };
+  const Icon = online ? WifiIcon : WifiOffIcon;
+  const typeLabel = conn?.type && conn.type !== 'unknown' ? ({ wifi: 'Wi-Fi', cellular: 'Cellular', ethernet: 'Ethernet' }[conn.type] || conn.type) : null;
 
   return (
-    <div className="app">
-      <div className="cosmos" aria-hidden="true">
-        <span className="blob b1" /><span className="blob b2" /><span className="blob b3" />
-        <span className="stars s1" /><span className="stars s2" /><span className="stars s3" />
-      </div>
-      <MenuBar />
+    <div className="mb-menu" ref={ref}>
+      <button type="button" className={'mb-btn' + (open ? ' on' : '')} onClick={toggle} aria-label="Wi-Fi status" aria-expanded={open}>
+        <Icon width={17} height={17} />
+      </button>
+      {open && (
+        <div className="drop-menu wifi" role="dialog" aria-label="Wi-Fi">
+          <div className="dm-head"><b>Wi-Fi</b><span className={'dm-pill' + (online ? ' ok' : '')}>{online ? 'Online' : 'Offline'}</span></div>
+          <div className="dm-sec">Server network</div>
+          {info?.ssid ? (
+            <div className="dm-row net"><CheckIcon width={15} height={15} strokeWidth={2.6} /><b>{info.ssid}</b>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
+          ) : info?.wired ? (
+            <div className="dm-row"><span className="dim">Connected by cable (no Wi-Fi name)</span>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
+          ) : info?.error ? (
+            <div className="dm-row"><span className="dim">{info.error}</span></div>
+          ) : info ? (
+            <div className="dm-row"><span className="dim">Network name not available</span>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
+          ) : (
+            <div className="dm-row"><span className="dim">Checking…</span></div>
+          )}
+          <div className="dm-sec">This device</div>
+          <div className="dm-row"><span>{online ? 'Connected' : 'No connection'}{typeLabel ? ' · ' + typeLabel : ''}</span>{conn?.down ? <span>{conn.down} Mbps</span> : null}</div>
+          {conn?.eff && <div className="dm-row"><span className="dim">Quality</span><span>{conn.eff.toUpperCase()}{conn.rtt ? ' · ' + conn.rtt + ' ms' : ''}</span></div>}
+          <p className="dm-note">Websites cannot read your device&apos;s Wi-Fi name, so this shows the network of the computer running OBITO STUDIO.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <main className="shell">
-        <section className="hero">
-          <h1>Your clips, <em>TikTok-ready.</em></h1>
-          <p>Upload once. 60 and 120 fps videos keep their smoothness, quality stays untouched and HDR clips stay HDR. No re-encoding, no waiting around.</p>
-        </section>
-
-        <BorderBeam size="md" colorVariant="ocean" theme="dark" strength={1} borderRadius={22} active={beamOn} className="beam">
-          <Window title="OBITO STUDIO — Optimizer" id="optimizer" className={'main' + (drag ? ' drag' : '')}>
-            <div className="drop"
-              onDragOver={(e) => { e.preventDefault(); if (phase === 'idle') setDrag(true); }}
-              onDragLeave={() => setDrag(false)} onDrop={onDrop}>
-              {stage}
-              <h2 className="title" aria-live="polite">{title}</h2>
-              <p className={'sub' + (phase === 'error' ? ' sub-err' : '')}>{sub}</p>
-
-              {(busy || phase === 'paused') && (
-                <div className="run">
-                  <Progress value={phase === 'queued' ? 4 : pct} paused={phase === 'paused'} smooth={phase === 'process'} />
-                  <div className="run-row">
-                    <span>{phase === 'queued' ? 'Waiting' : Math.round(pct) + '%'}</span>
-                    <button type="button" className="link" onClick={cancel}>Cancel</button>
-                  </div>
-                </div>
-              )}
+function MenuBar({ wins, focused, onOpen, onReset, apiKey }) {
+  const [now, setNow] = useState(() => new Date());
+  const [menu, setMenu] = useState(null);
+  const ref = useRef(null);
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(t); }, []);
+  useOnOutside(ref, useCallback(() => setMenu(null), []));
+  const day = now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const pick = (fn) => () => { setMenu(null); fn(); };
+  return (
+    <nav className="menubar" aria-label="Menu bar" ref={ref}>
+      <div className="mb-left">
+        <div className="mb-menu">
+          <button type="button" className={'mb-btn logo-btn' + (menu === 'apple' ? ' on' : '')} onClick={() => setMenu(menu === 'apple' ? null : 'apple')} aria-label="OBITO STUDIO menu"><Logo size={17} /></button>
+          {menu === 'apple' && (
+            <div className="drop-menu">
+              <button type="button" onClick={pick(() => onOpen('features'))}>About OBITO STUDIO</button>
+              <hr />
+              <button type="button" onClick={pick(onReset)}>Reset window layout</button>
             </div>
-
-            {phase === 'upload' && (
-              <button type="button" className="btn glass" onClick={pause}><PauseIcon /> Pause</button>
-            )}
-            {phase === 'paused' && (
-              <button type="button" className="btn glass primary" onClick={resume}><PlayIcon /> Resume</button>
-            )}
-
-            {phase === 'idle' && (
-              <>
-                {kept && (
-                  <div className="kept">
-                    <div><b>{kept.name}</b><span>{Math.round(kept.pct)}% already uploaded</span></div>
-                    <button type="button" className="chip" onClick={continueKept}>Continue</button>
-                    <button type="button" className="chip ghost" onClick={discardKept} aria-label="Discard"><CloseIcon width={14} height={14} /></button>
-                  </div>
-                )}
-                <ModeSelect value={mode} onChange={setMode} />
-                <button type="button" className="btn glass primary" onClick={() => input.current?.click()}>
-                  <UploadIcon /> Choose video
+          )}
+        </div>
+        <b className="mb-app">OBITO STUDIO</b>
+        <div className="mb-menu">
+          <button type="button" className={'mb-btn' + (menu === 'window' ? ' on' : '')} onClick={() => setMenu(menu === 'window' ? null : 'window')}>Window</button>
+          {menu === 'window' && (
+            <div className="drop-menu">
+              {APPS.map((a) => (
+                <button type="button" key={a.id} onClick={pick(() => onOpen(a.id))}>
+                  <span className="tick">{wins[a.id].open && !wins[a.id].min ? <CheckIcon width={13} height={13} strokeWidth={2.8} /> : null}</span>{a.title}
                 </button>
-              </>
-            )}
+              ))}
+              <hr />
+              <button type="button" onClick={pick(onReset)}>Arrange windows</button>
+            </div>
+          )}
+        </div>
+        <div className="mb-menu">
+          <button type="button" className={'mb-btn' + (menu === 'help' ? ' on' : '')} onClick={() => setMenu(menu === 'help' ? null : 'help')}>Help</button>
+          {menu === 'help' && (
+            <div className="drop-menu">
+              <button type="button" onClick={pick(() => onOpen('faq'))}>Questions (FAQ)</button>
+              <button type="button" onClick={pick(() => onOpen('how'))}>How it works</button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mb-right">
+        <WifiMenu apiKey={apiKey} />
+        <span className="mb-clock"><span className="cd">{day} </span>{time}</span>
+      </div>
+    </nav>
+  );
+}
 
-            {phase === 'done' && result && (
-              <>
-                {!isStandalone() ? (
-                  <a className="btn glass primary" href={withKey('/api/jobs/' + result.id + '/download')}><DownloadIcon /> Download</a>
-                ) : dl.state === 'ready' ? (
-                  <button type="button" className="btn glass primary" onClick={saveFile}><DownloadIcon /> Save to Files</button>
-                ) : (
-                  <button type="button" className="btn glass primary" onClick={prepareFile} disabled={dl.state === 'loading'}>
-                    <DownloadIcon />{dl.state === 'loading' ? 'Preparing ' + Math.round(dl.pct) + '%' : dl.state === 'error' ? 'Try again' : 'Download'}
-                  </button>
-                )}
-                <button type="button" className="btn glass soft" onClick={reset}>Optimize another</button>
-              </>
-            )}
+/* ---------- window ---------- */
 
-            {phase === 'error' && <button type="button" className="btn glass soft" onClick={reset}>Try again</button>}
+function Window({ app, st, desktop, focused, beam, beamActive, vh, onFocus, onClose, onMin, onZoom, onMove, children }) {
+  const drag = useRef(null);
+  const down = (e) => {
+    onFocus();
+    if (!desktop || st.max || e.target.closest('.lights')) return;
+    drag.current = { sx: e.clientX, sy: e.clientY, x: st.x, y: st.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const move = (e) => {
+    if (!drag.current) return;
+    onMove(drag.current.x + e.clientX - drag.current.sx, drag.current.y + e.clientY - drag.current.sy);
+  };
+  const up = () => { drag.current = null; };
 
-            {(needKey || phase === 'idle') && (
-              <label className={'keyrow' + (needKey ? ' need' : '')}>
-                <KeyIcon width={16} height={16} />
-                <input type="password" placeholder="Access key" value={key} autoComplete="current-password" onChange={(e) => onKey(e.target.value)} />
-              </label>
-            )}
-            <input ref={input} type="file" hidden accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" onChange={(e) => { start(e.target.files?.[0]); e.target.value = ''; }} />
+  const geom = desktop
+    ? (st.max
+      ? { left: 0, top: BAR_H, width: '100vw', height: `calc(100vh - ${BAR_H}px - ${DOCK_H - 14}px)` }
+      : { left: st.x, top: st.y, width: app.w, maxHeight: Math.max(260, vh - st.y - DOCK_H + 6) })
+    : {};
+  const cls = ['winwrap', st.max ? 'is-max' : '', !st.open ? 'is-closed' : '', st.min ? 'is-min' : '', focused ? 'is-focus' : '', st.anim ? 'anim' : '']
+    .filter(Boolean).join(' ');
+  const style = { ...geom, zIndex: st.max ? 900 + st.z : 10 + st.z, '--ox': st.ox + 'px', '--oy': st.oy + 'px' };
+
+  const section = (
+    <section className="win" id={app.id} aria-label={app.title}>
+      <header className="win-bar" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={onZoom}>
+        <span className="lights">
+          <button type="button" className="l-r" aria-label={'Close ' + app.title} onClick={onClose}><svg viewBox="0 0 10 10"><path d="M2.6 2.6l4.8 4.8M7.4 2.6 2.6 7.4" /></svg></button>
+          <button type="button" className="l-y" aria-label={'Minimize ' + app.title} onClick={onMin}><svg viewBox="0 0 10 10"><path d="M2.2 5h5.6" /></svg></button>
+          <button type="button" className="l-g" aria-label={(st.max ? 'Exit full size ' : 'Zoom ') + app.title} onClick={onZoom}><svg viewBox="0 0 10 10"><path d={st.max ? 'M3 7V4.2M3 7h2.8M7 3v2.8M7 3H4.2' : 'M2.6 7.4V4.6M2.6 7.4h2.8M7.4 2.6v2.8M7.4 2.6H4.6'} /></svg></button>
+        </span>
+        <b>{app.win}</b>
+        <span className="lights-pad" />
+      </header>
+      <div className="win-body">{children}</div>
+    </section>
+  );
+  return (
+    <div className={cls} style={style} onPointerDown={onFocus}>
+      {beam ? <BorderBeam size="md" colorVariant="ocean" theme="dark" strength={1} borderRadius={14} active={beamActive} className="beam">{section}</BorderBeam> : section}
+    </div>
+  );
+}
+
+/* ---------- dock ---------- */
+
+function Dock({ wins, focused, onTap }) {
+  const [hover, setHover] = useState(null);
+  const idx = APPS.findIndex((a) => a.id === hover);
+  return (
+    <div className="dock-wrap">
+      <div className="dock" onMouseLeave={() => setHover(null)}>
+        {APPS.map((a, i) => {
+          const d = idx < 0 ? 99 : Math.abs(i - idx);
+          const scale = d === 0 ? 1.38 : d === 1 ? 1.16 : 1;
+          const w = wins[a.id];
+          return (
+            <button type="button" key={a.id} id={'dock-' + a.id} className={'dock-item' + (a.id === 'optimizer' ? ' brand' : '')}
+              style={{ transform: `translateY(${(1 - scale) * 14}px) scale(${scale})` }}
+              onMouseEnter={() => setHover(a.id)} onClick={() => onTap(a.id)} aria-label={a.title}>
+              <span className="dock-ico">{a.dock}</span>
+              {hover === a.id && <span className="dock-tip">{a.title}</span>}
+              <i className={'dock-dot' + (w.open ? ' on' : '') + (w.min ? ' min' : '')} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- desktop ---------- */
+
+const initialWin = (pos, i) => ({ open: true, min: false, max: false, x: pos.x, y: pos.y, z: i, ox: 0, oy: 0, anim: false });
+
+export default function App() {
+  const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 900px)') : null;
+  const [desktop, setDesktop] = useState(mq ? mq.matches : false);
+  const [vw, setVw] = useState(typeof window === 'undefined' ? 1280 : window.innerWidth);
+  const [vh, setVh] = useState(typeof window === 'undefined' ? 800 : window.innerHeight);
+  const [apiKey, setApiKey] = useState(() => lsGet('obitoKey') || '');
+  const [busy, setBusy] = useState(false);
+  const zRef = useRef(4);
+  const [focused, setFocused] = useState('optimizer');
+  const [wins, setWins] = useState(() => {
+    const L = layoutFor(typeof window === 'undefined' ? 1280 : window.innerWidth);
+    return Object.fromEntries(APPS.map((a, i) => [a.id, initialWin(L[a.id], i)]));
+  });
+
+  useLayoutEffect(() => {
+    const on = () => { setDesktop(window.matchMedia('(min-width: 900px)').matches); setVw(window.innerWidth); setVh(window.innerHeight); };
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+
+  const onKeyChange = useCallback((v) => { setApiKey(v); lsSet('obitoKey', v); }, []);
+  const patch = useCallback((id, p) => setWins((w) => ({ ...w, [id]: { ...w[id], ...p } })), []);
+  const focus = useCallback((id) => { zRef.current += 1; setFocused(id); patch(id, { z: zRef.current }); }, [patch]);
+
+  const dockPoint = (id, st) => {
+    const el = document.getElementById('dock-' + id);
+    const wrap = document.getElementById(id)?.parentElement;
+    if (!el || !wrap) return { ox: 0, oy: 0 };
+    const d = el.getBoundingClientRect(); const r = wrap.getBoundingClientRect();
+    return { ox: d.left + d.width / 2 - r.left, oy: d.top + d.height / 2 - r.top, st };
+  };
+
+  const flashAnim = useCallback((id) => { patch(id, { anim: true }); setTimeout(() => patch(id, { anim: false }), 420); }, [patch]);
+
+  const close = (id) => { patch(id, { open: false, max: false }); };
+  const minimize = (id) => { const { ox, oy } = dockPoint(id); patch(id, { ox, oy, min: true }); };
+  const zoom = (id) => { flashAnim(id); patch(id, { max: !wins[id].max, min: false }); focus(id); };
+  const openApp = useCallback((id) => {
+    const el = document.getElementById('dock-' + id);
+    const wrap = document.getElementById(id)?.parentElement;
+    if (el && wrap && !wins[id].open) {
+      const d = el.getBoundingClientRect(); const r = wrap.getBoundingClientRect();
+      patch(id, { ox: d.left + d.width / 2 - r.left, oy: d.top + d.height / 2 - r.top });
+    }
+    patch(id, { open: true, min: false });
+    requestAnimationFrame(() => focus(id));
+  }, [focus, patch, wins]);
+  const dockTap = (id) => {
+    const w = wins[id];
+    if (!w.open || w.min) openApp(id); else focus(id);
+    if (!desktop) document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const move = (id, x, y) => patch(id, {
+    x: Math.min(Math.max(x, 60 - APPS.find((a) => a.id === id).w), vw - 60),
+    y: Math.min(Math.max(y, BAR_H), vh - DOCK_H)
+  });
+  const resetLayout = () => {
+    const L = layoutFor(window.innerWidth);
+    setWins(Object.fromEntries(APPS.map((a, i) => [a.id, { ...initialWin(L[a.id], i), max: false }])));
+    setFocused('optimizer');
+  };
+
+  return (
+    <div className={'app ' + (desktop ? 'is-desktop' : 'is-mobile')}>
+      <div className="cosmos" aria-hidden="true">
+        <span className="planet p1" /><span className="planet p2" /><span className="planet p3" />
+        <span className="stars s1" /><span className="stars s2" />
+      </div>
+
+      <MenuBar wins={wins} focused={focused} onOpen={openApp} onReset={resetLayout} apiKey={apiKey} />
+
+      <main className="desk">
+        {!desktop && (
+          <section className="hero">
+            <h1>Your clips, <em>TikTok‑ready.</em></h1>
+            <p>Upload once. 60 and 120 fps videos keep their smoothness, quality stays untouched and HDR clips stay HDR. No re-encoding.</p>
+          </section>
+        )}
+        {APPS.map((a) => (
+          <Window key={a.id} app={a} st={wins[a.id]} desktop={desktop} vh={vh} focused={focused === a.id}
+            beam={a.id === 'optimizer'} beamActive={busy}
+            onFocus={() => focus(a.id)} onClose={() => close(a.id)} onMin={() => minimize(a.id)} onZoom={() => zoom(a.id)}
+            onMove={(x, y) => move(a.id, x, y)}>
+            {a.id === 'optimizer' && <Optimizer apiKey={apiKey} onKeyChange={onKeyChange} onBusy={setBusy} />}
+            {a.id === 'features' && <Features />}
+            {a.id === 'how' && <Steps />}
+            {a.id === 'faq' && <Faq />}
           </Window>
-        </BorderBeam>
-
-        <Window title="What you get" id="features">
-          <div className="features">
-            {FEATURES.map(({ Icon, t, d }) => (
-              <article className="feat" key={t}>
-                <span className="feat-ico"><Icon width={20} height={20} /></span>
-                <h3>{t}</h3><p>{d}</p>
-              </article>
-            ))}
-          </div>
-        </Window>
-
-        <Window title="How it works" id="how">
-          <ol className="steps">
-            {STEPS.map(({ n, t, d }) => (
-              <li key={n}><span className="step-n">{n}</span><div><h3>{t}</h3><p>{d}</p></div></li>
-            ))}
-          </ol>
-        </Window>
-
-        <Window title="FAQ" id="faq">
-          <div className="faq">
-            {FAQ.map(([q, a]) => (
-              <details key={q}><summary>{q}<ChevronIcon width={18} height={18} /></summary><p>{a}</p></details>
-            ))}
-          </div>
-        </Window>
-
-        <footer className="foot"><SparkIcon width={14} height={14} /> OBITO STUDIO · Files are deleted after download or 1 hour.</footer>
+        ))}
       </main>
+
+      <Dock wins={wins} focused={focused} onTap={dockTap} />
     </div>
   );
 }

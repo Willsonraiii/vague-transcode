@@ -43,3 +43,13 @@ export const ShieldIcon = (p) => (
 export const ChevronIcon = (p) => (
   <svg {...base} {...p}><path d="m7 10 5 5 5-5" /></svg>
 );
+
+export const ListIcon = (p) => (
+  <svg {...base} {...p}><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" fill="currentColor" /><circle cx="4.5" cy="12" r="1" fill="currentColor" /><circle cx="4.5" cy="18" r="1" fill="currentColor" /></svg>
+);
+export const HelpIcon = (p) => (
+  <svg {...base} {...p}><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8" /><circle cx="12" cy="17" r=".6" fill="currentColor" /></svg>
+);
+export const WifiOffIcon = (p) => (
+  <svg {...base} {...p}><path d="M3 3l18 18M2.5 9.5a14 14 0 0 1 4-2.6M9.5 5.2A14 14 0 0 1 21.5 9.5M5.5 13a9.6 9.6 0 0 1 3-1.9M13.4 11a9.6 9.6 0 0 1 5.1 2M8.6 16.4a5.2 5.2 0 0 1 6.8 0" /><circle cx="12" cy="19.6" r="1" fill="currentColor" /></svg>
+);
