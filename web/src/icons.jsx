@@ -54,7 +54,15 @@ export const WifiOffIcon = (p) => (
   <svg {...base} {...p}><path d="M3 3l18 18M2.5 9.5a14 14 0 0 1 4-2.6M9.5 5.2A14 14 0 0 1 21.5 9.5M5.5 13a9.6 9.6 0 0 1 3-1.9M13.4 11a9.6 9.6 0 0 1 5.1 2M8.6 16.4a5.2 5.2 0 0 1 6.8 0" /><circle cx="12" cy="19.6" r="1" fill="currentColor" /></svg>
 );
 export const ControlIcon = (p) => (
-  <svg {...base} {...p}><rect x="3" y="4.5" width="8" height="5.5" rx="2.75" /><circle cx="6" cy="7.25" r="1.4" fill="currentColor" stroke="none" /><path d="M14.5 7.25H21" /><rect x="13" y="14" width="8" height="5.5" rx="2.75" /><circle cx="18" cy="16.75" r="1.4" fill="currentColor" stroke="none" /><path d="M3 16.75h6.5" /></svg>
+  <svg width={20} height={20} viewBox="0 0 24 24" aria-hidden="true" {...p}>
+    <rect x="3" y="4" width="18" height="7" rx="3.5" fill="rgba(255,244,216,.32)" />
+    <circle cx="7" cy="7.5" r="2.6" fill="#fff" />
+    <rect x="3" y="13" width="18" height="7" rx="3.5" fill="#0a84ff" />
+    <circle cx="17" cy="16.5" r="2.6" fill="#fff" />
+  </svg>
+);
+export const InspectIcon = (p) => (
+  <svg {...base} {...p}><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /><path d="M8 10.5h1.6l1-2 1.4 4 1-2H14" /></svg>
 );
 export const SunIcon = (p) => (
   <svg {...base} {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4 19 19M19 5l-1.6 1.6M6.6 17.4 5 19" /></svg>

@@ -336,6 +336,25 @@ app.get('/api/network', async (_req, res) => {
   res.json({ ssid, wired: !ssid });
 });
 
+// --- TikTok Inspector (read-only): probes an uploaded video, then deletes it immediately ---
+const INSPECT_DIR = path.join(ROOT, 'inspect-tmp');
+await mkdir(INSPECT_DIR, { recursive: true });
+const inspectUpload = multer({ dest: INSPECT_DIR, limits: { fileSize: MAX_FILE_SIZE } });
+app.post('/api/inspect', inspectUpload.single('video'), (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No video received.' });
+  try {
+    const p = spawnSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file.path],
+      { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    if (p.status !== 0) return res.status(422).json({ error: 'Could not read this file as a video.' });
+    return res.json({ probe: JSON.parse(p.stdout || '{}') });
+  } catch {
+    return res.status(500).json({ error: 'Inspect failed.' });
+  } finally {
+    unlink(file.path).catch(() => { /* already gone */ });
+  }
+});
+
 app.get('/health', async (_req, res) => {
   const ff = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' });
   res.json({

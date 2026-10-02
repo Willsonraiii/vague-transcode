@@ -3,9 +3,10 @@ import { BorderBeam } from 'border-beam';
 import Logo from './Logo.jsx';
 import Optimizer from './Optimizer.jsx';
 import {
-  CheckIcon, ChevronIcon, ControlIcon, FpsIcon, HdrIcon, HelpIcon, LayersIcon, ListIcon,
+  CheckIcon, ChevronIcon, ControlIcon, FpsIcon, HdrIcon, HelpIcon, InspectIcon, LayersIcon, ListIcon,
   ShieldIcon, SparkIcon, SpeakerIcon, SunIcon, TailnetIcon, WifiIcon, WifiOffIcon
 } from './icons.jsx';
+import Inspector from './Inspector.jsx';
 
 const BAR_H = 34;
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } }
@@ -256,7 +257,6 @@ function MenuBar({ apiKey }) {
   return (
     <nav className="menubar" aria-label="Menu bar" onPointerMove={onMove} onPointerLeave={() => setTilt({ x: 0, y: 0 })}>
       <div className="mb-left">
-        <ControlCenter apiKey={apiKey} />
         <b className="mb-app">OBITO STUDIO</b>
       </div>
       <button type="button" className="mb-logo" style={{ transform: `perspective(300px) rotateY(${tilt.x * 10}deg) rotateX(${-tilt.y * 8}deg)` }}
@@ -264,6 +264,7 @@ function MenuBar({ apiKey }) {
         <Logo size={30} />
       </button>
       <div className="mb-right">
+        <ControlCenter apiKey={apiKey} />
         <WifiMenu apiKey={apiKey} />
         <span className="mb-clock"><span className="cd">{day} </span>{time}</span>
       </div>
@@ -275,6 +276,7 @@ function MenuBar({ apiKey }) {
 
 const DOCK_APPS = [
   { id: 'optimizer', title: 'Optimizer', dock: <Logo size={34} /> },
+  { id: 'inspect', title: 'TikTok Inspector', dock: <InspectIcon width={24} height={24} /> },
   { id: 'how', title: 'How it works', dock: <ListIcon width={24} height={24} /> },
   { id: 'features', title: 'What you get', dock: <SparkIcon width={24} height={24} /> },
   { id: 'faq', title: 'FAQ', dock: <HelpIcon width={24} height={24} /> }
@@ -403,6 +405,9 @@ export default function App() {
         <Terminal />
         <Section id="optimizer" title="OBITO STUDIO — Optimizer" beam beamActive={busy}>
           <Optimizer apiKey={apiKey} onKeyChange={onKeyChange} onBusy={setBusy} />
+        </Section>
+        <Section id="inspect" title="TikTok Inspector">
+          <Inspector apiKey={apiKey} />
         </Section>
         <Section id="how" title="How it works"><Steps /></Section>
         <Section id="features" title="What you get"><Features /></Section>
