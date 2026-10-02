@@ -61,7 +61,13 @@ button{font:inherit;color:inherit}
 @keyframes orbit{to{transform:rotate(360deg)}}
 @keyframes sway{0%,100%{transform:rotate(-1.6deg)}50%{transform:rotate(1.6deg)}}
 @keyframes twk{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.2;transform:scale(.65)}}
-@media (max-width:640px){.mb-app{display:none}.mb-clock .cd{display:none}}
+@media (max-width:640px){
+  .mb-app{font-size:10.5px;letter-spacing:.1em;padding:0 6px}
+  .mb-clock .cd{display:none}
+  .mb-logo{margin-top:12px}
+  .mb-logo .logo-svg{width:46px;height:46px}
+  .cc{position:fixed;left:6px;right:6px;top:calc(var(--bar-h) + 6px);width:auto}
+}
 
 /* ---------- dropdowns (wifi) ---------- */
 .mb-menu{position:relative}
@@ -91,22 +97,27 @@ button{font:inherit;color:inherit}
 .cc .cc-tile,.cc .cc-mod{background:rgba(255,244,216,.12);border-color:rgba(255,244,216,.24)}
 .cc .cc-tile span,.cc .cc-sub{color:var(--text)}
 @keyframes cc-in{from{opacity:0;transform:translateY(-8px) scale(.97)}}
-.cc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.cc-mod{border-radius:14px;background:var(--tile);border:1px solid rgba(255,244,216,.14);padding:10px}
-.cc-mod.conn{display:flex;flex-direction:column;gap:10px;background:none;border:0;padding:0}
-.cc-tile{display:flex;align-items:center;gap:10px;border-radius:14px;background:var(--tile);border:1px solid rgba(255,244,216,.14);padding:10px}
-.cc-tile.hi{background:rgba(246,231,193,.16);border-color:rgba(246,231,193,.4)}
-.cc-ico{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--vanilla-hi);
+.cc-grid-legacy{display:none}
+.cc-top{display:grid;grid-template-columns:1fr 1.15fr;gap:10px;margin-bottom:10px}
+.cc-col{display:flex;flex-direction:column;gap:10px}
+.cc-tile{display:flex;align-items:center;gap:10px;border-radius:16px;background:rgba(255,244,216,.12);border:1px solid rgba(255,244,216,.24);padding:12px;min-height:58px}
+.cc-tile.hi{background:rgba(246,231,193,.18);border-color:rgba(246,231,193,.45)}
+.cc-ico{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--vanilla-hi);
   background:rgba(246,231,193,.2);border:1px solid rgba(246,231,193,.35)}
 .cc-tile div{display:flex;flex-direction:column;line-height:1.25;min-width:0}
-.cc-tile b{font-size:12.5px}
-.cc-tile span{font-size:11.5px;color:var(--text-dim)}
-.cc-mod.now{display:flex;flex-direction:column;justify-content:center;gap:2px}
-.cc-title{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint)}
-.cc-big{font-size:15px;font-weight:800;color:var(--vanilla-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cc-sub{font-size:11.5px;color:var(--text-dim)}
-.cc-mod.slider{grid-column:1 / -1;display:flex;align-items:center;gap:10px}
-.cc-mod.slider .cc-ico{width:26px;height:26px}
+.cc-tile b{font-size:13px}
+.cc-tile span{font-size:11.5px;color:var(--text)}
+.cc-card{display:flex;flex-direction:column;justify-content:center;gap:3px;border-radius:16px;padding:12px 14px;
+  background:rgba(246,231,193,.14);border:1px solid rgba(246,231,193,.4)}
+.cc-title{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);font-weight:800}
+.cc-big{font-size:17px;font-weight:800;color:var(--vanilla-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-sub{font-size:11.5px;color:var(--text)}
+.cc-mod.slider{display:flex;align-items:center;gap:10px;border-radius:99px;background:rgba(255,244,216,.12);border:1px solid rgba(255,244,216,.2);padding:8px 12px;margin-bottom:10px}
+.cc-mod.slider .cc-ico{width:26px;height:26px;background:none;border:0}
+.cc-nav{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cc-navtile{border-radius:16px;min-height:56px;font-size:13.5px;font-weight:700;color:var(--vanilla-hi);cursor:pointer;
+  background:rgba(255,244,216,.12);border:1px solid rgba(255,244,216,.24);transition:background .15s}
+.cc-navtile:hover{background:rgba(246,231,193,.2)}
 .cc-mod input[type=range]{flex:1;appearance:none;-webkit-appearance:none;height:26px;border-radius:99px;background:rgba(255,244,216,.14);outline:0;border:0}
 .cc-mod input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;
   box-shadow:0 2px 8px rgba(4,2,22,.5),inset 0 -2px 4px rgba(0,0,0,.12);cursor:pointer}

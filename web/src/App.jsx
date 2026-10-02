@@ -149,30 +149,35 @@ function ControlCenter({ apiKey }) {
       </button>
       {open && (
         <div className="cc" role="dialog" aria-label="Control Centre">
-          <div className="cc-grid">
-            <div className="cc-mod conn">
+          <div className="cc-top">
+            <div className="cc-col">
               <div className={'cc-tile' + (online ? ' hi' : '')}>
-                <span className="cc-ico"><WifiIcon width={17} height={17} /></span>
+                <span className="cc-ico"><WifiIcon width={18} height={18} /></span>
                 <div><b>Wi‑Fi</b><span>{online ? 'On' : 'Off'}</span></div>
               </div>
               <div className="cc-tile">
-                <span className="cc-ico"><TailnetIcon width={17} height={17} /></span>
+                <span className="cc-ico"><TailnetIcon width={18} height={18} /></span>
                 <div><b>Tailnet</b><span>Private</span></div>
               </div>
             </div>
-            <div className="cc-mod now">
-              <b className="cc-title">Server network</b>
-              <span className="cc-big">{ssid || (wired ? 'Wired' : online ? 'Studio server' : 'Offline')}</span>
+            <div className="cc-card">
+              <span className="cc-title">Server network</span>
+              <b className="cc-big">{ssid || (wired ? 'Wired' : online ? 'Studio server' : 'Offline')}</b>
               <span className="cc-sub">{online ? 'reachable on this tailnet' : 'no connection'}</span>
             </div>
-            <label className="cc-mod slider">
-              <span className="cc-ico"><SunIcon width={16} height={16} /></span>
-              <input type="range" min="40" max="100" value={bright} onChange={(e) => setBright(Number(e.target.value))} aria-label="Brightness" />
-            </label>
-            <label className="cc-mod slider">
-              <span className="cc-ico"><SpeakerIcon width={16} height={16} /></span>
-              <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(Number(e.target.value))} aria-label="Volume" />
-            </label>
+          </div>
+          <label className="cc-mod slider">
+            <span className="cc-ico"><SunIcon width={16} height={16} /></span>
+            <input type="range" min="40" max="100" value={bright} onChange={(e) => setBright(Number(e.target.value))} aria-label="Brightness" />
+          </label>
+          <label className="cc-mod slider">
+            <span className="cc-ico"><SpeakerIcon width={16} height={16} /></span>
+            <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(Number(e.target.value))} aria-label="Volume" />
+          </label>
+          <div className="cc-nav">
+            {[['optimizer', 'Optimizer'], ['inspect', 'Inspector'], ['how', 'How it works'], ['faq', 'FAQ']].map(([id, t]) => (
+              <button type="button" key={id} className="cc-navtile" onClick={() => { setOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id === 'optimizer' ? 'center' : 'start' }); }}>{t}</button>
+            ))}
           </div>
         </div>
       )}
