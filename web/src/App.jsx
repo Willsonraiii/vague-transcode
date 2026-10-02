@@ -400,6 +400,7 @@ export default function App() {
       <div className="dimmer" aria-hidden="true" />
 
       <MenuBar apiKey={apiKey} />
+      <div className="top-fade" aria-hidden="true" />
 
       <main className="page">
         <Terminal />
