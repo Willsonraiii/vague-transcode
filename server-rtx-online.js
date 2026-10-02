@@ -355,6 +355,61 @@ app.post('/api/inspect', inspectUpload.single('video'), (req, res) => {
   }
 });
 
+// --- TikTok Inspector by LINK: username via oEmbed, page metadata, then download+probe for full detail ---
+const TIKTOK_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+app.post('/api/inspect-link', express.json({ limit: '10kb' }), async (req, res) => {
+  const url = String(req.body?.url || '').trim();
+  if (!/^https?:\/\/([a-z0-9-]+\.)*tiktok\.com\//i.test(url)) return res.status(400).json({ error: 'Paste a full TikTok link (https://www.tiktok.com/…).' });
+  const out = { user: null, title: null, page: null, probe: null, note: null };
+  try {
+    const r = await fetch('https://www.tiktok.com/oembed?url=' + encodeURIComponent(url), { headers: { 'user-agent': TIKTOK_UA }, signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const j = await r.json(); if (j.author_unique_id) out.user = '@' + j.author_unique_id; out.title = j.title || null; }
+  } catch { /* oEmbed optional */ }
+  let videoUrl = null;
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': TIKTOK_UA, 'accept-language': 'en-US,en;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(12000) });
+    const html = await r.text();
+    const m = /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([^<]+)<\/script>/.exec(html)
+      || /<script id="SIGI_STATE" type="application\/json">([^<]+)<\/script>/.exec(html);
+    if (m) {
+      const data = JSON.parse(m[1]);
+      const item = data?.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct
+        || Object.values(data?.ItemModule || {}).find((v) => v && v.video) || null;
+      const v = item?.video || null;
+      if (v) {
+        out.page = {
+          width: v.width || null, height: v.height || null,
+          duration: item?.video?.duration || v.duration || null,
+          bitrate: v.bitrate || null, ratio: v.ratio || null,
+          author: item?.author?.uniqueId || null,
+          stats: item?.stats ? { plays: item.stats.playCount, likes: item.stats.diggCount, comments: item.stats.commentCount, shares: item.stats.shareCount } : null
+        };
+        if (out.page.author) out.user = out.user || '@' + out.page.author;
+        videoUrl = v.downloadAddr || v.playAddr || (v.playApi ? 'https://' + v.playApi : null) || v.bitrateInfo?.[0]?.PlayAddr?.UrlList?.[0] || null;
+      }
+    }
+  } catch { /* page fetch optional */ }
+  if (videoUrl) {
+    try {
+      const vr = await fetch(videoUrl, { headers: { 'user-agent': TIKTOK_UA, referer: 'https://www.tiktok.com/' }, signal: AbortSignal.timeout(60000) });
+      if (vr.ok) {
+        const buf = Buffer.from(await vr.arrayBuffer());
+        if (buf.length > 100000 && buf.length <= MAX_FILE_SIZE) {
+          const tmp = path.join(INSPECT_DIR, 'link-' + randomBytes(8).toString('hex') + '.mp4');
+          await writeFile(tmp, buf);
+          const p = spawnSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', tmp], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+          await unlink(tmp).catch(() => { /* already gone */ });
+          if (p.status === 0) out.probe = JSON.parse(p.stdout || 'null');
+        }
+      }
+    } catch { /* blocked */ }
+    if (!out.probe) out.note = 'TikTok blocked the direct stream download — showing link info only. Drop the saved file for full fps/HDR/Dolby detail.';
+  } else if (!out.page && !out.user) {
+    out.note = 'Could not read this link (TikTok may block server requests). Drop the saved video file instead.';
+  }
+  res.json(out);
+});
+
 app.get('/health', async (_req, res) => {
   const ff = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' });
   res.json({
