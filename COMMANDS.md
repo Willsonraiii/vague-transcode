@@ -222,3 +222,61 @@ source ~/.bashrc
 - **https address dead** — serve stopped: run `tailscale serve --bg 3005` again on that PC.
 - **Pipeline error about timescale** — that source's time base does not divide 19200; not supported yet.
 - **WiFi menu shows no name** — the PC has no Wi-Fi (it will say "connected by cable") or the tools are missing; on Linux it tries `iwgetid` then `nmcli`.
+
+## 13. Run permanently on Linux (systemd + Tailscale)
+
+Stop any hand-started server first (Ctrl+C), then install the service once:
+
+```bash
+cd ~/Desktop/vague-transcode
+NODE=$(which node)
+sudo tee /etc/systemd/system/obito-studio.service >/dev/null <<EOF
+[Unit]
+Description=OBITO STUDIO optimizer
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$HOME/Desktop/vague-transcode
+Environment=ACCESS_TOKEN=obito
+Environment=PORT=3005
+Environment=PATH=$PATH
+ExecStart=$NODE server-rtx-online.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now obito-studio
+sudo systemctl status obito-studio --no-pager | head -8
+```
+
+Keep Tailscale on and shared (once):
+
+```bash
+sudo systemctl enable --now tailscaled
+sudo tailscale up
+sudo tailscale serve --bg 3005      # private https://<machine>.<tailnet>.ts.net
+```
+
+Stop the laptop sleeping (the phone cannot reach a sleeping laptop):
+
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+# undo: sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target
+```
+
+Controls:
+
+- Status: `sudo systemctl status obito-studio`
+- Stop for now: `sudo systemctl stop obito-studio`
+- Start again: `sudo systemctl start obito-studio`
+- Disable for good: `sudo systemctl disable --now obito-studio`
+- Tailscale sharing off: `sudo tailscale serve reset`
+- After a code update: `git pull && sudo systemctl restart obito-studio`
+- Logs: `journalctl -u obito-studio -f`
+- Change the key: `sudo nano /etc/systemd/system/obito-studio.service`, then `sudo systemctl daemon-reload && sudo systemctl restart obito-studio`
