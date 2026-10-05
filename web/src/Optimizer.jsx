@@ -280,6 +280,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const busy = phase === 'upload' || phase === 'queued' || phase === 'process';
   useEffect(() => { onBusy && onBusy(busy); }, [busy, onBusy]);
   const title = { idle: 'Upload your video', upload: 'Uploading', paused: 'Paused', queued: 'Getting ready', process: 'Optimizing', done: 'Your video is ready', error: 'Something went wrong' }[phase];
+  const upTerm = phase === 'upload' && file
+    ? [`[up] sending ${file.name} (${(file.size / 1048576).toFixed(1)} MB)`, `[up] ${Math.round(pct)}% received by server`]
+    : [];
+  const termLines = [...upTerm, ...log.slice(-12)];
+  const termOn = termLines.length > 0 && phase !== 'idle' && phase !== 'paused';
   const sub = {
     idle: 'MP4 or MOV · up to 600 MB',
     upload: file ? file.name : '', queued: file ? file.name : '', process: file ? file.name : '',
@@ -314,14 +319,14 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                 </div>
               )}
 
-              {log.length > 0 && (phase === 'queued' || phase === 'process' || phase === 'done' || phase === 'error') && (
+              {termOn && (
                 <div className="job-term" aria-hidden="true">
                   <div className="jt-bar"><i /><i /><i /><b>obito@studio — rtx live</b></div>
                   <div className="jt-body">
-                    {log.slice(-12).map((l, i) => (
+                    {termLines.map((l, i) => (
                       <div key={i} className={l.startsWith('[ff]') ? 'dim' : ''}>{l}</div>
                     ))}
-                    {(phase === 'queued' || phase === 'process') && <div className="jt-cur">▍</div>}
+                    {(phase === 'queued' || phase === 'process' || phase === 'upload') && <div className="jt-cur">▍</div>}
                   </div>
                 </div>
               )}
