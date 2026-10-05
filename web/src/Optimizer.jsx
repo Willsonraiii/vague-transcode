@@ -314,7 +314,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                 </div>
               )}
 
-              {log.length > 0 && (phase === 'queued' || phase === 'process' || phase === 'done') && (
+              {log.length > 0 && (phase === 'queued' || phase === 'process' || phase === 'done' || phase === 'error') && (
                 <div className="job-term" aria-hidden="true">
                   <div className="jt-bar"><i /><i /><i /><b>obito@studio — rtx live</b></div>
                   <div className="jt-body">

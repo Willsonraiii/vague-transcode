@@ -704,7 +704,9 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' });
 });
 
-app.use(express.static(PUBLIC_DIR));
+app.use(express.static(PUBLIC_DIR, {
+  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-store'); },
+}));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`RTX online service listening on http://0.0.0.0:${PORT}`);
