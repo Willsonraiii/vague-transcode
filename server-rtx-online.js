@@ -289,12 +289,40 @@ setInterval(() => {
 // Access token guard (when ACCESS_TOKEN is set)
 // ---------------------------------------------------------------------------
 
+// Wrong-key attempts are counted per client; too many in a row locks that client out for a while,
+// so a short, easy access key is still safe on a public link.
+const failedKeyAttempts = new Map(); // client -> { count, first, lockedUntil }
+const KEY_MAX_FAILS = 8;
+const KEY_WINDOW_MS = 10 * 60 * 1000;
+const KEY_LOCK_MS = 10 * 60 * 1000;
+function clientId(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return xff || req.socket.remoteAddress || 'unknown';
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, f] of failedKeyAttempts) if (now - f.first > KEY_WINDOW_MS && now > f.lockedUntil) failedKeyAttempts.delete(id);
+}, 60 * 1000).unref();
 app.use('/api', (req, res, next) => {
   if (!ACCESS_TOKEN) return next();
-  const given = req.headers['x-access-token'] || req.query.token;
+  const id = clientId(req);
+  const rec = failedKeyAttempts.get(id);
+  if (rec && Date.now() < rec.lockedUntil) {
+    res.set('Retry-After', String(Math.ceil((rec.lockedUntil - Date.now()) / 1000)));
+    return res.status(429).json({ error: 'Too many wrong keys. Try again in a few minutes.' });
+  }
+  const given = String(req.headers['x-access-token'] || req.query.token || '');
   if (given !== ACCESS_TOKEN) {
+    if (given) { // only real wrong guesses count; a missing key (page not unlocked yet) does not
+      const now = Date.now();
+      const r = rec && now - rec.first <= KEY_WINDOW_MS ? rec : { count: 0, first: now, lockedUntil: 0 };
+      r.count += 1;
+      if (r.count >= KEY_MAX_FAILS) r.lockedUntil = now + KEY_LOCK_MS;
+      failedKeyAttempts.set(id, r);
+    }
     return res.status(401).json({ error: 'Unauthorized — wrong or missing access token.' });
   }
+  if (rec) failedKeyAttempts.delete(id);
   next();
 });
 
