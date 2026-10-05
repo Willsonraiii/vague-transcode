@@ -132,6 +132,8 @@ function publicJob(job) {
     outputBytes: job.outputBytes ?? null,
     error: job.error ?? null,
     log: job.log ?? [],
+    probeIn: job.probeIn ?? null,
+    probeOut: job.probeOut ?? null,
   };
 }
 

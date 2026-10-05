@@ -12,6 +12,8 @@ const MODES = [
 ];
 
 const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+const hdrLabel = (t) => (!t || t === 'unknown' || t === 'sdr' ? 'SDR' : t === 'smpte2084' ? 'HDR10 / PQ' : t === 'arib-std-b67' ? 'HLG' : String(t).toUpperCase());
+const fmtDur = (s) => (s ? Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0') : '—');
 const isStandalone = () =>
   typeof window !== 'undefined' &&
   (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
@@ -108,6 +110,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         if (r.status === 404) return fail('This job expired. Choose the video again.');
         const job = await r.json();
         if (Array.isArray(job.log)) setLog(job.log);
+        if (job.probeIn) setSrc(job.probeIn);
         if (job.status === 'queued') setPhase('queued');
         else if (job.status === 'processing') { setPhase('process'); setPct(job.progress || 0); }
         else if (job.status === 'failed') fail(job.error || 'Something went wrong. Try again.');
@@ -316,6 +319,19 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                     <span>{phase === 'queued' ? 'Waiting' : Math.round(pct) + '%'}</span>
                     <button type="button" className="link" onClick={cancel}>Cancel</button>
                   </div>
+                </div>
+              )}
+
+              {src && phase !== 'idle' && phase !== 'upload' && (
+                <div className="src-details" aria-label="Source video details">
+                  <div><i>fps</i> : {src.fps}{src.ts ? ` (1/${src.ts})` : ''}</div>
+                  <div><i>resolution</i> : {src.w}×{src.h}</div>
+                  <div><i>codec</i> : {(src.codec || '—').toUpperCase()}</div>
+                  <div><i>hdr</i> : {hdrLabel(src.transfer)}</div>
+                  <div><i>dolby vision</i> : {src.dv ? 'profile ' + src.dv : 'none'}</div>
+                  <div><i>audio</i> : {src.audio} track{src.audio === 1 ? '' : 's'}</div>
+                  <div><i>duration</i> : {fmtDur(src.dur)}</div>
+                  <div><i>size</i> : {fmt(src.size)}</div>
                 </div>
               )}
 

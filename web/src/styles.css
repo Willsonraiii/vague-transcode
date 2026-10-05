@@ -336,6 +336,13 @@ button{font:inherit;color:inherit}
 .pill.no{background:rgba(255,159,178,.12);color:var(--err);border:1px solid rgba(255,159,178,.35)}
 .insp-note{margin:0;font-size:11.5px;color:var(--text-faint)}
 
+/* ---------- source identity card: the video's own details, first ---------- */
+.src-details{margin-top:12px;text-align:left;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px;color:var(--text);background:rgba(246,231,193,.07);border:1px solid rgba(246,231,193,.2);
+  border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:3px}
+.src-details div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-details i{font-style:normal;color:var(--text-faint)}
+
 /* ---------- live pipeline terminal (mini macOS window) ---------- */
 .job-term{margin-top:12px;border-radius:12px;overflow:hidden;text-align:left;background:rgba(8,5,20,.78);
   border:1px solid rgba(255,244,216,.16);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
