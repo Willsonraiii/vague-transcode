@@ -7,6 +7,7 @@ import {
   ShieldIcon, SparkIcon, SpeakerIcon, SunIcon, TailnetIcon, WifiIcon, WifiOffIcon
 } from './icons.jsx';
 import Inspector from './Inspector.jsx';
+import Library from './Library.jsx';
 
 const BAR_H = 34;
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } }
@@ -175,7 +176,7 @@ function ControlCenter({ apiKey }) {
             <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(Number(e.target.value))} aria-label="Volume" />
           </label>
           <div className="cc-nav">
-            {[['optimizer', 'Optimizer'], ['inspect', 'Inspector'], ['how', 'How it works'], ['faq', 'FAQ']].map(([id, t]) => (
+            {[['optimizer', 'Optimizer'], ['inspect', 'Inspector'], ['library', 'Library'], ['how', 'How it works'], ['faq', 'FAQ']].map(([id, t]) => (
               <button type="button" key={id} className="cc-navtile" onClick={() => { setOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id === 'optimizer' ? 'center' : 'start' }); }}>{t}</button>
             ))}
           </div>
@@ -264,10 +265,12 @@ function MenuBar({ apiKey }) {
       <div className="mb-left">
         <b className="mb-app">OBITO STUDIO</b>
       </div>
-      <button type="button" className="mb-logo" style={{ transform: `perspective(300px) rotateY(${tilt.x * 10}deg) rotateX(${-tilt.y * 8}deg)` }}
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="OBITO STUDIO — back to top">
-        <Logo size={30} />
-      </button>
+      <div className="mb-logo-wrap">
+        <button type="button" className="mb-logo" style={{ transform: `perspective(300px) rotateY(${tilt.x * 10}deg) rotateX(${-tilt.y * 8}deg)` }}
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="OBITO STUDIO — back to top">
+          <Logo size={30} />
+        </button>
+      </div>
       <div className="mb-right">
         <ControlCenter apiKey={apiKey} />
         <WifiMenu apiKey={apiKey} />
@@ -282,6 +285,7 @@ function MenuBar({ apiKey }) {
 const DOCK_APPS = [
   { id: 'optimizer', title: 'Optimizer', dock: <Logo size={34} /> },
   { id: 'inspect', title: 'TikTok Inspector', dock: <InspectIcon width={24} height={24} /> },
+  { id: 'library', title: 'Library', dock: <LayersIcon width={24} height={24} /> },
   { id: 'how', title: 'How it works', dock: <ListIcon width={24} height={24} /> },
   { id: 'features', title: 'What you get', dock: <SparkIcon width={24} height={24} /> },
   { id: 'faq', title: 'FAQ', dock: <HelpIcon width={24} height={24} /> }
@@ -414,6 +418,9 @@ export default function App() {
         </Section>
         <Section id="inspect" title="TikTok Inspector">
           <Inspector apiKey={apiKey} />
+        </Section>
+        <Section id="library" title="Library — your videos">
+          <Library apiKey={apiKey} />
         </Section>
         <Section id="how" title="How it works"><Steps /></Section>
         <Section id="features" title="What you get"><Features /></Section>

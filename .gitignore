@@ -8,3 +8,4 @@ tmp/
 *.m4v
 *.hevc
 *.bin
+library.json

@@ -70,6 +70,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const [pct, setPct] = useState(0);
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
+  const [log, setLog] = useState([]);
   const [error, setError] = useState('');
   const [needKey, setNeedKey] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -106,6 +107,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         if (r.status === 401) return fail('Access key needed.', true);
         if (r.status === 404) return fail('This job expired. Choose the video again.');
         const job = await r.json();
+        if (Array.isArray(job.log)) setLog(job.log);
         if (job.status === 'queued') setPhase('queued');
         else if (job.status === 'processing') { setPhase('process'); setPct(job.progress || 0); }
         else if (job.status === 'failed') fail(job.error || 'Something went wrong. Try again.');
@@ -237,7 +239,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const reset = useCallback(() => {
     clearInterval(timer.current);
     jobId.current = null; upId.current = null; fileRef.current = null; savedFile.current = null;
-    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null);
+    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]);
     setDl({ state: 'idle', pct: 0 });
     if (input.current) input.current.value = '';
   }, []);
@@ -308,6 +310,18 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                   <div className="run-row">
                     <span>{phase === 'queued' ? 'Waiting' : Math.round(pct) + '%'}</span>
                     <button type="button" className="link" onClick={cancel}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {log.length > 0 && (phase === 'queued' || phase === 'process' || phase === 'done') && (
+                <div className="job-term" aria-hidden="true">
+                  <div className="jt-bar"><i /><i /><i /><b>obito@studio — rtx live</b></div>
+                  <div className="jt-body">
+                    {log.slice(-12).map((l, i) => (
+                      <div key={i} className={l.startsWith('[ff]') ? 'dim' : ''}>{l}</div>
+                    ))}
+                    {(phase === 'queued' || phase === 'process') && <div className="jt-cur">▍</div>}
                   </div>
                 </div>
               )}
