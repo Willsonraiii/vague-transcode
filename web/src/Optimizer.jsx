@@ -14,6 +14,18 @@ const MODES = [
 const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 const hdrLabel = (t) => (!t || t === 'unknown' || t === 'sdr' ? 'SDR' : t === 'smpte2084' ? 'HDR10 / PQ' : t === 'arib-std-b67' ? 'HLG' : String(t).toUpperCase());
 const fmtDur = (s) => (s ? Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0') : '—');
+const ProbeRows = ({ p, realFps }) => (
+  <>
+    <div><i>fps</i> : {realFps && realFps !== p.fps ? `${realFps} → ${p.fps} for TikTok` : `${p.fps}${p.ts ? ` (1/${p.ts})` : ''}`}</div>
+    <div><i>resolution</i> : {p.w}×{p.h}</div>
+    <div><i>codec</i> : {(p.codec || '—').toUpperCase()}</div>
+    <div><i>hdr</i> : {hdrLabel(p.transfer)}</div>
+    <div><i>dolby vision</i> : {p.dv ? 'profile ' + p.dv : 'none'}</div>
+    <div><i>audio</i> : {p.audio} track{p.audio === 1 ? '' : 's'}</div>
+    <div><i>duration</i> : {fmtDur(p.dur)}</div>
+    <div><i>size</i> : {fmt(p.size)}</div>
+  </>
+);
 const isStandalone = () =>
   typeof window !== 'undefined' &&
   (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
@@ -73,6 +85,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [log, setLog] = useState([]);
+  const [src, setSrc] = useState(null);
+  const [out, setOut] = useState(null);
   const [error, setError] = useState('');
   const [needKey, setNeedKey] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -111,12 +125,13 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         const job = await r.json();
         if (Array.isArray(job.log)) setLog(job.log);
         if (job.probeIn) setSrc(job.probeIn);
+        if (job.probeOut) setOut(job.probeOut);
         if (job.status === 'queued') setPhase('queued');
         else if (job.status === 'processing') { setPhase('process'); setPct(job.progress || 0); }
         else if (job.status === 'failed') fail(job.error || 'Something went wrong. Try again.');
         else if (job.status === 'done') {
           clearInterval(timer.current);
-          setResult({ id, bytes: job.outputBytes || 0 }); setPct(100); setPhase('done');
+          setResult({ id, bytes: job.outputBytes || 0, srcFps: job.result?.derived?.sourceFps }); setPct(100); setPhase('done');
         }
       } catch { fail('Lost connection to the server.'); }
     }, 1500);
@@ -190,7 +205,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         received = await putChunk(id, received, f.slice(received, end), (loaded) => setPct(((base + loaded) / f.size) * 100));
         setPct((received / f.size) * 100);
       }
-      await startJob(id);
+      // upload complete: show the video's own details first, user confirms, then optimize
+      const pr = await fetch(withKey('/api/uploads/' + id + '/probe'), { headers: headers() });
+      if (pr.ok) { const pj = await pr.json().catch(() => null); if (pj && pj.probe) setSrc(pj.probe); }
+      setPhase('confirm');
     } catch (e) {
       if (e.aborted) { if (flags.current.pause) setPhase('paused'); return; }
       if (e.key) return fail('Access key needed.', true);
@@ -242,7 +260,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const reset = useCallback(() => {
     clearInterval(timer.current);
     jobId.current = null; upId.current = null; fileRef.current = null; savedFile.current = null;
-    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]);
+    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]); setSrc(null); setOut(null);
     setDl({ state: 'idle', pct: 0 });
     if (input.current) input.current.value = '';
   }, []);
@@ -282,7 +300,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
   const busy = phase === 'upload' || phase === 'queued' || phase === 'process';
   useEffect(() => { onBusy && onBusy(busy); }, [busy, onBusy]);
-  const title = { idle: 'Upload your video', upload: 'Uploading', paused: 'Paused', queued: 'Getting ready', process: 'Optimizing', done: 'Your video is ready', error: 'Something went wrong' }[phase];
+  const title = { idle: 'Upload your video', upload: 'Uploading', paused: 'Paused', confirm: 'Check your video', queued: 'Getting ready', process: 'Optimizing', done: 'Your video is ready', error: 'Something went wrong' }[phase];
   const upTerm = phase === 'upload' && file
     ? [`[up] sending ${file.name} (${(file.size / 1048576).toFixed(1)} MB)`, `[up] ${Math.round(pct)}% received by server`]
     : [];
@@ -290,7 +308,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const termOn = termLines.length > 0 && phase !== 'idle' && phase !== 'paused';
   const sub = {
     idle: 'MP4 or MOV · up to 600 MB',
-    upload: file ? file.name : '', queued: file ? file.name : '', process: file ? file.name : '',
+    upload: file ? file.name : '', confirm: file ? file.name : '', queued: file ? file.name : '', process: file ? file.name : '',
     paused: error || (Math.round(pct) + '% uploaded · tap Resume to continue'),
     done: result?.bytes ? fmt(result.bytes) : file?.name || '',
     error
@@ -324,14 +342,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
               {src && phase !== 'idle' && phase !== 'upload' && (
                 <div className="src-details" aria-label="Source video details">
-                  <div><i>fps</i> : {src.fps}{src.ts ? ` (1/${src.ts})` : ''}</div>
-                  <div><i>resolution</i> : {src.w}×{src.h}</div>
-                  <div><i>codec</i> : {(src.codec || '—').toUpperCase()}</div>
-                  <div><i>hdr</i> : {hdrLabel(src.transfer)}</div>
-                  <div><i>dolby vision</i> : {src.dv ? 'profile ' + src.dv : 'none'}</div>
-                  <div><i>audio</i> : {src.audio} track{src.audio === 1 ? '' : 's'}</div>
-                  <div><i>duration</i> : {fmtDur(src.dur)}</div>
-                  <div><i>size</i> : {fmt(src.size)}</div>
+                  <b className="sd-head">your video</b>
+                  <ProbeRows p={src} />
                 </div>
               )}
 
@@ -355,6 +367,13 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               <button type="button" className="btn glass primary" onClick={resume}><PlayIcon /> Resume</button>
             )}
 
+            {phase === 'confirm' && (
+              <>
+                <button type="button" className="btn glass primary" onClick={() => startJob(upId.current)}><PlayIcon /> Looks right — optimize</button>
+                <button type="button" className="btn glass soft" onClick={reset}>Choose another</button>
+              </>
+            )}
+
             {phase === 'idle' && (
               <>
                 {kept && (
@@ -373,6 +392,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
             {phase === 'done' && result && (
               <>
+                {out && (
+                  <div className="src-details" aria-label="Optimized video details">
+                    <b className="sd-head">optimized</b>
+                    <ProbeRows p={out} realFps={result.srcFps} />
+                  </div>
+                )}
                 {!isStandalone() ? (
                   <a className="btn glass primary" href={withKey('/api/jobs/' + result.id + '/download')}><DownloadIcon /> Download</a>
                 ) : dl.state === 'ready' ? (

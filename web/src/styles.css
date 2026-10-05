@@ -342,6 +342,7 @@ button{font:inherit;color:inherit}
   border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:3px}
 .src-details div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .src-details i{font-style:normal;color:var(--text-faint)}
+.src-details .sd-head{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--vanilla-hi);margin-bottom:2px}
 
 /* ---------- live pipeline terminal (mini macOS window) ---------- */
 .job-term{margin-top:12px;border-radius:12px;overflow:hidden;text-align:left;background:rgba(8,5,20,.78);

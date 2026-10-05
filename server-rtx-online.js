@@ -618,6 +618,15 @@ app.put('/api/uploads/:id', async (req, res) => {
   }
 });
 
+app.post('/api/uploads/:id/probe', express.json({ limit: '10kb' }), async (req, res) => {
+  const id = req.params.id;
+  if (!validJobId(id)) return res.status(400).json({ error: 'Bad upload id.' });
+  const up = await readUpload(id);
+  if (!up) return res.status(404).json({ error: 'Unknown upload.' });
+  if (up.received !== up.size) return res.status(409).json({ error: 'Upload is not complete.', received: up.received });
+  res.json({ probe: summarizeProbe(probeFile(uploadPaths(id).data)) });
+});
+
 app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, res) => {
   try {
     const uploadId = req.params.id;
