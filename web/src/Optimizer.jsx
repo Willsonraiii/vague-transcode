@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { BotAvatar } from 'bot-avatars';
 import { CheckIcon, CloseIcon, DownloadIcon, FpsIcon, HdrIcon, KeyIcon, PauseIcon, PlayIcon, UploadIcon } from './icons.jsx';
+import { probeLocalFile } from './localProbe.js';
 
 const MAX_BYTES = 600 * 1024 * 1024;
 const CHUNK = 8 * 1024 * 1024;
@@ -87,6 +88,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const [log, setLog] = useState([]);
   const [src, setSrc] = useState(null);
   const [out, setOut] = useState(null);
+  const [confirmAt, setConfirmAt] = useState('pre'); // 'pre' = before upload, 'post' = fallback after upload
+  const srcRef = useRef(null);
   const [error, setError] = useState('');
   const [needKey, setNeedKey] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -205,10 +208,15 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         received = await putChunk(id, received, f.slice(received, end), (loaded) => setPct(((base + loaded) / f.size) * 100));
         setPct((received / f.size) * 100);
       }
-      // upload complete: show the video's own details first, user confirms, then optimize
-      const pr = await fetch(withKey('/api/uploads/' + id + '/probe'), { headers: headers() });
-      if (pr.ok) { const pj = await pr.json().catch(() => null); if (pj && pj.probe) setSrc(pj.probe); }
-      setPhase('confirm');
+      if (srcRef.current) {
+        await startJob(id); // details were confirmed before the upload
+      } else {
+        // fallback: read details from the server after upload, then confirm
+        const pr = await fetch(withKey('/api/uploads/' + id + '/probe'), { headers: headers() });
+        if (pr.ok) { const pj = await pr.json().catch(() => null); if (pj && pj.probe) { srcRef.current = pj.probe; setSrc(pj.probe); } }
+        setConfirmAt('post');
+        setPhase('confirm');
+      }
     } catch (e) {
       if (e.aborted) { if (flags.current.pause) setPhase('paused'); return; }
       if (e.key) return fail('Access key needed.', true);
@@ -222,7 +230,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     if (f.size > MAX_BYTES) { setFile(f); return fail('That file is over 600 MB.'); }
     if (f.type && !f.type.startsWith('video/')) return fail('Please choose a video file.');
     fileRef.current = f; setFile(f); setResult(null); setKept(null); setDl({ state: 'idle', pct: 0 }); savedFile.current = null;
-    runUpload();
+    setConfirmAt('pre');
+    probeLocalFile(f).then((p) => {
+      if (p) { srcRef.current = p; setSrc(p); setPhase('confirm'); } // show details first, nothing uploaded yet
+      else runUpload();
+    });
   }, [fail, runUpload]);
 
   const pause = useCallback(() => { flags.current.pause = true; try { xhrRef.current?.abort(); } catch { /* ignore */ } setPhase('paused'); }, []);
@@ -260,7 +272,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const reset = useCallback(() => {
     clearInterval(timer.current);
     jobId.current = null; upId.current = null; fileRef.current = null; savedFile.current = null;
-    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]); setSrc(null); setOut(null);
+    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]); setSrc(null); setOut(null); setConfirmAt('pre');
+    srcRef.current = null;
     setDl({ state: 'idle', pct: 0 });
     if (input.current) input.current.value = '';
   }, []);
@@ -342,8 +355,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
               {src && phase !== 'idle' && phase !== 'upload' && (
                 <div className="src-details" aria-label="Source video details">
-                  <b className="sd-head">your video</b>
-                  <ProbeRows p={src} />
+                  <div className="jt-bar"><i /><i /><i /><b>your video — details</b></div>
+                  <div className="sd-body"><ProbeRows p={src} /></div>
+                  <p className="sd-note">{confirmAt === 'pre' ? 'read on this device — nothing uploaded yet' : 'read from your upload'}</p>
                 </div>
               )}
 
@@ -369,7 +383,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
             {phase === 'confirm' && (
               <>
-                <button type="button" className="btn glass primary" onClick={() => startJob(upId.current)}><PlayIcon /> Looks right — optimize</button>
+                <button type="button" className="btn glass primary" onClick={() => (confirmAt === 'pre' ? runUpload() : startJob(upId.current))}>
+                  <PlayIcon /> {confirmAt === 'pre' ? 'Looks right — upload & optimize' : 'Looks right — optimize'}
+                </button>
                 <button type="button" className="btn glass soft" onClick={reset}>Choose another</button>
               </>
             )}
@@ -394,8 +410,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               <>
                 {out && (
                   <div className="src-details" aria-label="Optimized video details">
-                    <b className="sd-head">optimized</b>
-                    <ProbeRows p={out} realFps={result.srcFps} />
+                    <div className="jt-bar"><i /><i /><i /><b>optimized — details</b></div>
+                    <div className="sd-body"><ProbeRows p={out} realFps={result.srcFps} /></div>
+                    <p className="sd-note">repackaged on your server — pixels untouched</p>
                   </div>
                 )}
                 {!isStandalone() ? (
