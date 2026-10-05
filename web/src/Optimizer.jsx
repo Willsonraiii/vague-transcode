@@ -349,7 +349,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
               {termOn && (
                 <div className="job-term" aria-hidden="true">
-                  <div className="jt-bar"><i /><i /><i /><b>obito@studio — rtx live</b></div>
+                  <div className="jt-bar"><i /><i /><i /><b>obito studio server — live</b></div>
                   <div className="jt-body">
                     {termLines.map((l, i) => (
                       <div key={i} className={l.startsWith('[ff]') ? 'dim' : ''}>{l}</div>

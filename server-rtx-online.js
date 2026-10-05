@@ -186,9 +186,9 @@ function startNextJob() {
   job.status = 'processing';
   job.progress = 0;
   job.stage = 'starting';
-  job.log = [`[rtx] optimizing ${job.fileName || 'video'} · mode ${job.mode}`];
+  job.log = [`[obito] optimizing ${job.fileName || 'video'} · mode ${job.mode}`];
   job.probeIn = summarizeProbe(probeFile(job.inputPath));
-  if (job.probeIn) logLine(job, `[rtx] source: ${job.probeIn.w}x${job.probeIn.h} · ${job.probeIn.fps} fps · ${job.probeIn.codec}${job.probeIn.transfer && job.probeIn.transfer !== 'unknown' ? ' · ' + job.probeIn.transfer : ''}`);
+  if (job.probeIn) logLine(job, `[obito] source: ${job.probeIn.w}x${job.probeIn.h} · ${job.probeIn.fps} fps · ${job.probeIn.codec}${job.probeIn.transfer && job.probeIn.transfer !== 'unknown' ? ' · ' + job.probeIn.transfer : ''}`);
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes)`);
 
@@ -220,7 +220,7 @@ function startNextJob() {
     if (m) {
       job.progress = Number(m[1]);
       job.stage = m[2].trim();
-      logLine(job, `[rtx] ${m[1]}% — ${m[2].trim()}`);
+      logLine(job, `[obito] ${m[1]}% — ${m[2].trim()}`);
     } else {
       chunk.split('\n').map((s) => s.trim()).filter(Boolean).slice(-4).forEach((l) => logLine(job, '[ff] ' + l));
     }
@@ -248,9 +248,9 @@ function startNextJob() {
       if (line) {
         try { job.result = JSON.parse(line.slice('PIPELINE_RESULT '.length)); } catch {}
       }
-      logLine(job, '[rtx] repackaged — copy test & probe…');
+      logLine(job, '[obito] repackaged — copy test & probe…');
       job.probeOut = summarizeProbe(probeFile(job.outputPath));
-      logLine(job, `[rtx] done ✓ output ${job.probeOut ? job.probeOut.w + 'x' + job.probeOut.h + ' · ' + job.probeOut.fps + ' fps' : ''}${job.probeOut?.dv ? ' · DV stripped' : ''}`);
+      logLine(job, `[obito] done ✓ output ${job.probeOut ? job.probeOut.w + 'x' + job.probeOut.h + ' · ' + job.probeOut.fps + ' fps' : ''}${job.probeOut?.dv ? ' · DV stripped' : ''}`);
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'done', at: Date.now(), in: job.probeIn || null, out: job.probeOut || null, result: job.result || null }).catch(() => {});
       stat(job.outputPath)
         .then((s) => { job.outputBytes = s.size; })
@@ -262,13 +262,13 @@ function startNextJob() {
     } else if (job.timedOut) {
       job.status = 'failed';
       job.error = `processing timeout after ${Math.round(PROCESS_TIMEOUT_MS / 60000)} min`;
-      logLine(job, '[rtx] failed — timeout');
+      logLine(job, '[obito] failed — timeout');
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'failed', at: Date.now(), in: job.probeIn || null, out: null, error: job.error }).catch(() => {});
       console.error(`[job ${job.id}] failed (timeout)`);
     } else {
       job.status = 'failed';
       job.error = (stderr || stdout || `pipeline exited with code ${code}`).split('\n').filter(Boolean).slice(-6).join(' | ');
-      logLine(job, '[rtx] failed — ' + (job.error || 'unknown'));
+      logLine(job, '[obito] failed — ' + (job.error || 'unknown'));
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'failed', at: Date.now(), in: job.probeIn || null, out: null, error: job.error }).catch(() => {});
       console.error(`[job ${job.id}] failed (code ${code})`);
     }
