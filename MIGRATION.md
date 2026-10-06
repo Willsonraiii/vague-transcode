@@ -1,6 +1,6 @@
 # OBITO STUDIO — The Project Book
 
-Last updated: 2026-10-02. **Read this file first. Then read COMMANDS.md.** That is enough to work safely.
+Last updated: 2026-10-06. **Read this file first. Then read COMMANDS.md.** That is enough to work safely.
 Older docs in the repo (`HANDOFF.md`, `NEXT-AGENT-PROMPT.md`, `ONLINE-SERVICE-PLAN.md`) are history logs. Read them only if you need old background. If they disagree with this book, **this book wins**.
 
 Repo: https://github.com/Willsonraiii/vague-transcode — branch `online-rtx-service`.
@@ -50,21 +50,27 @@ Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 6. Flat colors everywhere; gradients only on buttons. Logo = flat planet-ring "O".
 7. Free only, no credit card. Tailscale **serve** yes, Tailscale **funnel** no.
 
-## 5. Status — what is done (2026-10-02)
+## 5. Status — what is done (2026-10-06)
 
 - Pipeline validated (3 real videos, incl. 4K60 HDR). TikTok Studio confirmed HDR.
 - macOS-style desktop UI designed, built, pushed to GitHub (`579b989` and later commits).
 - The startup crash was fixed and pushed (`ff095ca`): removed two imports of files that never existed, removed two duplicate Wi-Fi routes, kept one working inline route. Server boots clean now.
 - Windows firewall rule added (TCP 3005 inbound) — phone can now reach `http://100.96.112.67:3005`.
 - `tailscale serve --bg 3005` running on Windows — phone can use the https address.
+- Check-before-upload details windows, Library, live pipeline terminal and the access-key lockout are pushed (`59e3649`, 5 Oct). **Windows, Linux and GitHub are all on `59e3649`.**
+- Two standalone tools live on the **Windows Desktop** (deliberately NOT in the repo):
+  - `check-optimized.mjs` — read-only output checker. Names the variant (RTX x2 timing / timescale method / container-only) and PASS/FAILs the invariants (frame count kept, stts regular, declared fps, timescale 19200, movie 1000, 2 audio tracks). Pure Node, no ffmpeg. Copy to `~/Desktop` on Linux.
+  - `optimize-keep-fps.mjs` — lossless remux that leaves the **declared fps alone** (the RTX pipeline halves it on purpose: 60 → 30). `--fps-patch auto` restores the half-fps method when wanted; `--keep-dv` keeps DV. Best run from the repo root (it imports `lib/remux.js`).
 
 ## 6. To-do (in order)
 
-1. **Linux laptop becomes the main server**: pull the repo, `npm install`, start server, `tailscale serve --bg 3005`, create the Linux launcher (COMMANDS.md section L4).
-2. **Real video test in the new UI** (from the phone: pick from Files app, not Photos), download, post, confirm HDR in TikTok Studio.
-3. Optional: remove the Cloudflare analytics script from the unused old root `index.html`.
-4. Optional: make the GitHub repo **private** (it is currently public; private is free). Doing so blocks nothing: the user's machines already authenticate, so push/pull keep working; agents simply stop being able to clone anonymously and use prompt C (upload a zip) or a git bundle instead.
-5. Future idea: browser-only version for free static hosting (not started).
+1. **Check the fps update actually reached GitHub**: on Linux `git fetch origin` then `git log origin/online-rtx-service..HEAD --oneline` — anything listed is committed but never pushed.
+2. **Linux laptop becomes the main server**: pull the repo, `npm install`, start server, `tailscale serve --bg 3005`, create the Linux launcher (COMMANDS.md section L4).
+3. **A/B the keep-fps output**: same clip through the normal (half-fps) path and through `optimize-keep-fps.mjs`, post both the same way, compare in "Did it survive?".
+4. **Real video test in the new UI** (from the phone: pick from Files app, not Photos), download, post, confirm HDR in TikTok Studio.
+5. Optional: remove the Cloudflare analytics script from the unused old root `index.html`.
+6. Optional: make the GitHub repo **private** (it is currently public; private is free). Doing so blocks nothing: the user's machines already authenticate, so push/pull keep working; agents simply stop being able to clone anonymously and use prompt C (upload a zip) or a git bundle instead.
+7. Future idea: browser-only version for free static hosting (not started).
 
 ## 7. Small gotchas to remember
 
@@ -75,6 +81,9 @@ Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 - iPhone: use **Safari** for downloads (the Home Screen app cannot download). Pick videos from **Files**, not Photos.
 - FFmpeg 9 (Windows) has no `-vsync`: use `-fps_mode passthrough` AFTER `-c copy`. FFmpeg 6.1 (Linux) accepts the same line. The pipeline itself uses neither, so it runs on both.
 - Never rewrite repo files with PowerShell `Get-Content | Set-Content` (garbles UTF-8). Use `.NET [IO.File]` or git restore.
+- **A bundle merge is not a sync.** After `git fetch <bundle>` + merge on any machine, run `git push origin online-rtx-service` immediately and keep the `.b64` bundle until the push is confirmed on GitHub. What happened once (5 Oct): the Linux merge was never pushed, so Windows could not see it; fixing it needed a force-push on Linux and a `git reset --hard origin/online-rtx-service` on Windows.
+- Before assuming work is lost on Windows: `git log -1 --format="%h %s"` and compare with `git ls-remote origin online-rtx-service`. GitHub is the meeting point — a commit that exists only locally on one machine is invisible to the other.
+- Windows was moved to GitHub's tip with `git reset --hard` on 2026-10-06 and the working tree was clean before it. Only do that with a clean tree.
 
 ## 8. Switching to a new agent (never lose the project)
 

@@ -280,3 +280,63 @@ Controls:
 - After a code update: `git pull && sudo systemctl restart obito-studio`
 - Logs: `journalctl -u obito-studio -f`
 - Change the key: `sudo nano /etc/systemd/system/obito-studio.service`, then `sudo systemctl daemon-reload && sudo systemctl restart obito-studio`
+
+---
+
+# 14 — CHECK AN OUTPUT, AND THE KEEP-FPS OPTION
+
+Two standalone tools (not in the repo — they live on the Desktop of each machine).
+
+## 14.1 Check what came out of the optimizer
+
+Read-only, no ffmpeg. Names the variant (RTX x2 timing / timescale method / container-only)
+and PASS/FAILs the invariants (frames kept, stts regular, declared fps, timescale 19200,
+movie timescale 1000, two audio tracks).
+
+Linux:
+```bash
+node ~/Desktop/check-optimized.mjs "SOURCE.mp4" "out/OUTPUT.mp4"
+```
+Windows (one line):
+```powershell
+node "$HOME\Desktop\check-optimized.mjs" "C:\path\source.mp4" "out\output.mp4"
+```
+(The source argument is optional — with one file it just prints the identity.)
+
+## 14.2 Optimize WITHOUT halving the fps
+
+The RTX pipeline makes the output declare half the source fps on purpose (60 → 30).
+This tool does the same lossless container work (faststart, edit lists, rebrand, DV strip,
+fps-neutral timescale → 19200) but leaves the declared fps alone. Run it from the repo root
+(it imports `lib/remux.js`).
+
+Linux:
+```bash
+cd ~/Desktop/vague-transcode
+node ~/Desktop/optimize-keep-fps.mjs "SOURCE.mp4" "out/OUTPUT.mp4"
+```
+Windows (one line at a time):
+```powershell
+cd $HOME\Desktop\vague-transcode-4k-test
+node "$HOME\Desktop\optimize-keep-fps.mjs" "C:\path\source.mp4" "out\output.mp4"
+```
+Options: `--fps-patch auto` (apply the half-fps method anyway), `--keep-dv`, `--no-signature`,
+`--zero-duration`. Always verify with 14.1.
+
+## 14.3 Keep the three machines in sync
+
+GitHub is the meeting point. A bundle merge is NOT a sync.
+
+Linux (after any merge):
+```bash
+cd ~/Desktop/vague-transcode
+git fetch origin
+git log origin/online-rtx-service..HEAD --oneline   # anything listed = not pushed yet
+git push origin online-rtx-service
+```
+Windows (before working):
+```powershell
+cd $HOME\Desktop\vague-transcode-4k-test
+git pull --ff-only origin online-rtx-service
+git log -1 --format="%h %s"
+```
