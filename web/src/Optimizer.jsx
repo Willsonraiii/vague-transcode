@@ -1,86 +1,180 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ThinkingOrb } from 'thinking-orbs';
 import { BotAvatar } from 'bot-avatars';
-import { CheckIcon, CloseIcon, DownloadIcon, FpsIcon, HdrIcon, KeyIcon, PauseIcon, PlayIcon, UploadIcon } from './icons.jsx';
+import {
+  CheckIcon, CloseIcon, DownloadIcon, FpsIcon, HdrIcon, KeyIcon,
+  PauseIcon, PlayIcon, UploadIcon, RefreshIcon, ShareIcon, SparkIcon
+} from './icons.jsx';
 import { probeLocalFile } from './localProbe.js';
 
 const MAX_BYTES = 600 * 1024 * 1024;
 const CHUNK = 8 * 1024 * 1024;
-const VANILLA = '#F6E7C1';
+
 const MODES = [
-  { id: 'hdr', label: 'FPS + Quality + HDR', Icon: HdrIcon },
-  { id: 'standard', label: 'FPS + Quality', Icon: FpsIcon }
+  { id: 'hdr', label: 'FPS + Quality + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
+  { id: 'standard', label: 'FPS + Quality', badge: 'Standard', Icon: FpsIcon }
 ];
 
 const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 const hdrLabel = (t) => (!t || t === 'unknown' || t === 'sdr' ? 'SDR' : t === 'smpte2084' ? 'HDR10 / PQ' : t === 'arib-std-b67' ? 'HLG' : String(t).toUpperCase());
 const fmtDur = (s) => (s ? Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0') : '—');
-const ProbeRows = ({ p, realFps }) => (
-  <>
-    <div><i>fps</i> : {realFps && realFps !== p.fps ? `${realFps} → ${p.fps} for TikTok` : `${p.fps}${p.ts ? ` (1/${p.ts})` : ''}`}</div>
-    <div><i>resolution</i> : {p.w}×{p.h}</div>
-    <div><i>codec</i> : {(p.codec || '—').toUpperCase()}</div>
-    <div><i>hdr</i> : {hdrLabel(p.transfer)}</div>
-    <div><i>dolby vision</i> : {p.dv ? 'profile ' + p.dv : 'none'}</div>
-    <div><i>audio</i> : {p.audio} track{p.audio === 1 ? '' : 's'}</div>
-    <div><i>duration</i> : {fmtDur(p.dur)}</div>
-    <div><i>size</i> : {fmt(p.size)}</div>
-  </>
-);
+
+/* ---------- Interactive Bot Avatar Stage (Libraries.dev bot-avatars) ---------- */
+function BotStage({ phase, busy }) {
+  const isWorking = phase === 'upload' || phase === 'queued' || phase === 'process';
+  const avatarType =
+    phase === 'done' ? 'star' :
+    phase === 'process' ? 'mech' :
+    phase === 'upload' ? 'droid' :
+    phase === 'paused' ? 'blob' :
+    phase === 'error' ? 'ghost' :
+    'clover';
+
+  const avatarState =
+    phase === 'process' || phase === 'upload' || busy ? 'working' :
+    phase === 'paused' || phase === 'error' ? 'sleeping' :
+    phase === 'done' ? 'working' :
+    'default';
+
+  const avatarFace = phase === 'done' ? 'mouth' : 'eyes';
+
+  return (
+    <div className={`bot-stage state-${phase}`} aria-hidden="true">
+      <div className="bot-ambient-glow" />
+      <div className="bot-pedestal">
+        <BotAvatar
+          type={avatarType}
+          state={avatarState}
+          face={avatarFace}
+          size={70}
+          theme="dark"
+          interactive={true}
+          shading="plastic"
+        />
+        {phase === 'done' && (
+          <div className="bot-verified-badge" title="Optimization verified">
+            <CheckIcon width={14} height={14} strokeWidth={2.8} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Live Optimizing Terminal ---------- */
+function LiveTerminal({ log = [], busy, phase }) {
+  const terminalEndRef = useRef(null);
+
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [log]);
+
+  // ONLY show once video actually starts working (upload, queued, process, done)
+  // NEVER on gallery pick / confirm screen!
+  const isWorking = phase === 'upload' || phase === 'queued' || phase === 'process' || phase === 'done';
+  if (!isWorking) return null;
+
+  return (
+    <div className="live-terminal">
+      <div className="terminal-header">
+        <div className="terminal-title">
+          <span className={`terminal-indicator ${busy || phase === 'process' ? 'pulsing' : 'done'}`} />
+          <span>Live Optimizing Terminal</span>
+        </div>
+        <div className="terminal-meta">
+          <span>{phase === 'done' ? 'Completed' : phase === 'process' ? 'Processing' : phase === 'queued' ? 'Queued' : 'Stream Active'}</span>
+        </div>
+      </div>
+      <div className="terminal-body">
+        {log.length === 0 ? (
+          <div className="terminal-line dim">
+            <span className="term-num">00</span>
+            <span className="term-text">Waiting for container remux stream...</span>
+          </div>
+        ) : (
+          log.map((line, idx) => {
+            const isObito = line.startsWith('[obito]');
+            const isFf = line.startsWith('[ff]');
+            const isErr = line.toLowerCase().includes('error') || line.toLowerCase().includes('fail');
+            return (
+              <div key={idx} className={`terminal-line ${isErr ? 'err' : isObito ? 'obito' : isFf ? 'ff' : ''}`}>
+                <span className="term-num">{String(idx + 1).padStart(2, '0')}</span>
+                <span className="term-text">{line}</span>
+              </div>
+            );
+          })
+        )}
+        <div ref={terminalEndRef} />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Simple, Clean Video Spec Chips ---------- */
+function SpecGrid({ p, realFps, isOutput }) {
+  if (!p) return null;
+  const fpsText = realFps && realFps !== p.fps ? `${realFps} → ${p.fps} fps` : `${p.fps || '—'} fps`;
+  const isDolby = !!p.dv;
+  const isHdr = p.transfer && p.transfer !== 'sdr' && p.transfer !== 'unknown';
+
+  return (
+    <div className="spec-card">
+      <div className="spec-card-head">
+        <b>{isOutput ? 'Optimized file specs' : 'Video specs (detected on-device)'}</b>
+      </div>
+      <div className="spec-chips">
+        <span className="spec-chip highlight">{fpsText}</span>
+        <span className="spec-chip">{p.w && p.h ? `${p.w}×${p.h}` : '—'}</span>
+        <span className={`spec-chip ${isHdr ? 'highlight-amber' : ''}`}>{hdrLabel(p.transfer)}</span>
+        {isDolby && <span className="spec-chip highlight-amber">Dolby Vision Profile {p.dv}</span>}
+        <span className="spec-chip">{(p.codec || '—').toUpperCase()}</span>
+        <span className="spec-chip">{p.audio ? `${p.audio} audio` : 'no audio'}</span>
+        <span className="spec-chip">{fmtDur(p.dur)}</span>
+        <span className="spec-chip">{fmt(p.size)}</span>
+      </div>
+    </div>
+  );
+}
+
 const isStandalone = () =>
   typeof window !== 'undefined' &&
   (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
 const fileKey = (f) => `${f.name}|${f.size}|${f.lastModified}`;
 const readMap = () => { try { return JSON.parse(lsGet('obitoUploads') || '{}'); } catch { return {}; } };
 const writeMap = (m) => lsSet('obitoUploads', JSON.stringify(m));
 
+/* ---------- Sculpted Ultra-Premium Mode Toggle ---------- */
 function ModeSelect({ value, onChange }) {
   return (
-    <div className="modes" role="radiogroup" aria-label="Optimization type">
-      {MODES.map(({ id, label, Icon }) => (
-        <button key={id} type="button" role="radio" aria-checked={value === id}
-          className={'mode' + (value === id ? ' on' : '')} onClick={() => onChange(id)}>
-          <span className="mode-ico"><Icon /></span>
-          <span className="mode-txt">{label}</span>
-          <span className="mode-tick"><CheckIcon width={14} height={14} strokeWidth={2.6} /></span>
-        </button>
-      ))}
+    <div className="mode-toggle-group" role="radiogroup" aria-label="Optimization mode">
+      {MODES.map(({ id, label, badge, Icon }) => {
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`mode-toggle-btn ${active ? 'active' : ''} mode-${id}`}
+            onClick={() => onChange(id)}
+          >
+            <div className="mode-btn-content">
+              <Icon width={16} height={16} className="mode-btn-icon" />
+              <span className="mode-btn-label">{label}</span>
+            </div>
+            <span className="mode-btn-badge">{badge}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function Orb({ state }) {
-  return (
-    <div className="orb" data-state={state}>
-      <span className="halo h1" /><span className="halo h2" />
-      <ThinkingOrb state={state} size={64} theme="dark" color={VANILLA} />
-    </div>
-  );
-}
-
-function Bot({ state }) {
-  return (
-    <div className="bot" data-state={state}>
-      <span className="halo h1" />
-      <BotAvatar type="clover" size={92} state={state} theme="dark" />
-    </div>
-  );
-}
-
-function Progress({ value, paused, smooth }) {
-  return (
-    <div className={'progress' + (paused ? ' paused' : '')} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)}>
-      <i style={{ width: Math.max(2, Math.min(100, value)) + '%', transition: smooth ? 'width 1.4s linear' : 'none' }} />
-    </div>
-  );
-}
-
-/* ---------- app ---------- */
-
+/* ---------- Main Studio Optimizer Component ---------- */
 export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
-  const [phase, setPhase] = useState('idle'); // idle | upload | paused | queued | process | done | error
+  const [phase, setPhase] = useState('idle'); // idle | upload | paused | queued | process | done | error | confirm
   const [mode, setMode] = useState('hdr');
   const [pct, setPct] = useState(0);
   const [file, setFile] = useState(null);
@@ -88,12 +182,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const [log, setLog] = useState([]);
   const [src, setSrc] = useState(null);
   const [out, setOut] = useState(null);
-  const [confirmAt, setConfirmAt] = useState('pre'); // 'pre' = before upload, 'post' = fallback after upload
+  const [confirmAt, setConfirmAt] = useState('pre');
   const srcRef = useRef(null);
   const [error, setError] = useState('');
   const [needKey, setNeedKey] = useState(false);
   const [drag, setDrag] = useState(false);
-  const [kept, setKept] = useState(null); // { id, pct, name } - progress kept after cancel
+  const [kept, setKept] = useState(null);
   const [dl, setDl] = useState({ state: 'idle', pct: 0 });
   const input = useRef(null);
   const xhrRef = useRef(null);
@@ -114,7 +208,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
   const fail = useCallback((msg, askKey = false) => {
     clearInterval(timer.current);
-    setError(msg); setNeedKey(askKey); setPhase('error');
+    setError(msg);
+    setNeedKey(askKey);
+    setPhase('error');
   }, []);
 
   /* ----- job polling ----- */
@@ -123,320 +219,481 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     timer.current = setInterval(async () => {
       try {
         const r = await fetch(withKey('/api/jobs/' + id), { headers: headers() });
-        if (r.status === 401) return fail('Access key needed.', true);
-        if (r.status === 404) return fail('This job expired. Choose the video again.');
+        if (r.status === 401) return fail('Access key required.', true);
+        if (r.status === 404) return fail('Job session expired. Please re-select the video.');
         const job = await r.json();
         if (Array.isArray(job.log)) setLog(job.log);
         if (job.probeIn) setSrc(job.probeIn);
         if (job.probeOut) setOut(job.probeOut);
         if (job.status === 'queued') setPhase('queued');
         else if (job.status === 'processing') { setPhase('process'); setPct(job.progress || 0); }
-        else if (job.status === 'failed') fail(job.error || 'Something went wrong. Try again.');
+        else if (job.status === 'failed') fail(job.error || 'Optimization failed.');
         else if (job.status === 'done') {
           clearInterval(timer.current);
-          setResult({ id, bytes: job.outputBytes || 0, srcFps: job.result?.derived?.sourceFps }); setPct(100); setPhase('done');
+          setResult({ id, bytes: job.outputBytes || 0, srcFps: job.result?.derived?.sourceFps, derived: job.result?.derived });
+          setPct(100);
+          setPhase('done');
         }
-      } catch { fail('Lost connection to the server.'); }
+      } catch { fail('Lost server connection during processing.'); }
     }, 1500);
   }, [fail, headers, withKey]);
 
   const startJob = useCallback(async (uploadId) => {
-    setPhase('queued'); setPct(0);
+    setPhase('queued');
+    setPct(0);
+    setLog((prev) => [...prev, '[obito] Ingestion complete. Initializing timescale remux engine...']);
     try {
       const r = await fetch(withKey('/api/uploads/' + uploadId + '/start'), {
-        method: 'POST', headers: { ...headers(), 'content-type': 'application/json' }, body: JSON.stringify({ mode: modeRef.current })
+        method: 'POST',
+        headers: { ...headers(), 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: modeRef.current })
       });
-      if (r.status === 401) return fail('Access key needed.', true);
-      if (r.status === 404) { setKept(null); return fail('The saved upload expired. Choose the video again.'); }
-      if (!r.ok) return fail('Could not start optimizing.');
+      if (r.status === 401) return fail('Access key required.', true);
+      if (r.status === 404) { setKept(null); return fail('Upload expired. Please re-select video.'); }
+      if (!r.ok) return fail('Failed to start optimization.');
       jobId.current = (await r.json()).id;
+      setLog((prev) => [...prev, `[obito] Pipeline engaged (Job ${jobId.current.slice(0, 8)}). Harmonizing container atoms...`]);
       poll(jobId.current);
-    } catch { fail('Cannot reach the server.'); }
+    } catch { fail('Could not reach the server.'); }
   }, [fail, headers, poll, withKey]);
 
-  /* ----- resumable upload ----- */
-  const ensureUpload = useCallback(async (f) => {
-    const map = readMap(); const k = fileKey(f);
-    const known = map[k];
-    if (known) {
-      const r = await fetch(withKey('/api/uploads/' + known), { headers: headers() });
-      if (r.status === 401) throw Object.assign(new Error('key'), { key: true });
-      if (r.ok) { const j = await r.json(); if (j.size === f.size) return { id: known, received: j.received }; }
-    }
-    const r = await fetch(withKey('/api/uploads'), {
-      method: 'POST', headers: { ...headers(), 'content-type': 'application/json' }, body: JSON.stringify({ name: f.name, size: f.size })
-    });
-    if (r.status === 401) throw Object.assign(new Error('key'), { key: true });
-    if (!r.ok) { let m = 'Upload failed (' + r.status + ').'; try { m = (await r.json()).error || m; } catch { /* default */ } throw new Error(m); }
-    const j = await r.json();
-    map[k] = j.id; writeMap(map);
-    return { id: j.id, received: 0 };
-  }, [headers, withKey]);
-
-  const putChunk = useCallback((id, offset, blob, onLoaded) => new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
-    xhr.open('PUT', withKey('/api/uploads/' + id + '?offset=' + offset));
-    for (const [k, v] of Object.entries(headers())) xhr.setRequestHeader(k, v);
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onLoaded(e.loaded); };
-    xhr.onload = () => {
-      let j = {}; try { j = JSON.parse(xhr.responseText); } catch { /* ignore */ }
-      if (xhr.status === 200) resolve(j.received);
-      else if (xhr.status === 409 && typeof j.received === 'number') resolve(j.received); // resync
-      else if (xhr.status === 401) reject(Object.assign(new Error('key'), { key: true }));
-      else reject(new Error(j.error || 'Upload failed (' + xhr.status + ').'));
-    };
-    xhr.onerror = () => reject(Object.assign(new Error('network'), { network: true }));
-    xhr.onabort = () => reject(Object.assign(new Error('abort'), { aborted: true }));
-    xhr.send(blob);
-  }), [headers, withKey]);
-
+  /* ----- chunk upload loop ----- */
   const runUpload = useCallback(async () => {
-    const f = fileRef.current; if (!f) return;
-    flags.current = { pause: false, cancel: false };
-    setPhase('upload'); setError(''); setNeedKey(false);
+    const f = fileRef.current;
+    if (!f) return;
+    setPhase('upload');
+    setLog((prev) => [...prev, `[client] Uploading master video (${fmt(f.size)})...`]);
+    flags.current.pause = false;
+    flags.current.cancel = false;
+    let id = upId.current;
+
+    if (!id) {
+      try {
+        const r = await fetch(withKey('/api/uploads'), {
+          method: 'POST',
+          headers: { ...headers(), 'content-type': 'application/json' },
+          body: JSON.stringify({ name: f.name, size: f.size })
+        });
+        if (r.status === 401) return fail('Access key required.', true);
+        if (!r.ok) return fail((await r.json().catch(() => ({}))).error || 'Could not initiate upload.');
+        id = (await r.json()).id;
+        upId.current = id;
+        const m = readMap();
+        m[fileKey(f)] = { id, size: f.size, name: f.name, savedAt: Date.now() };
+        writeMap(m);
+      } catch { return fail('Could not connect to server.'); }
+    }
+
+    let offset = 0;
     try {
-      const { id, received: start } = await ensureUpload(f);
-      upId.current = id;
-      let received = start;
-      setPct((received / f.size) * 100);
-      while (received < f.size) {
+      const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
+      if (r.status === 401) return fail('Access key required.', true);
+      if (r.ok) offset = (await r.json()).bytesReceived || 0;
+    } catch { return fail('Could not retrieve upload status.'); }
+
+    while (offset < f.size) {
+      if (flags.current.cancel) return;
+      if (flags.current.pause) { setPhase('paused'); return; }
+
+      const end = Math.min(offset + CHUNK, f.size);
+      const chunk = f.slice(offset, end);
+      const isLast = end === f.size;
+      setPct((offset / f.size) * 100);
+
+      try {
+        const res = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhrRef.current = xhr;
+          xhr.open('PUT', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
+          if (keyRef.current) xhr.setRequestHeader('x-access-token', keyRef.current);
+          xhr.setRequestHeader('content-type', 'application/octet-stream');
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && !flags.current.pause && !flags.current.cancel) {
+              setPct(((offset + e.loaded) / f.size) * 100);
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status === 401) return reject(new Error('KEY_NEEDED'));
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+            } else reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
+          };
+          xhr.onerror = () => reject(new Error('NET_ERR'));
+          xhr.onabort = () => resolve({ aborted: true });
+          xhr.send(chunk);
+        });
+
         if (flags.current.cancel) return;
         if (flags.current.pause) { setPhase('paused'); return; }
-        const end = Math.min(received + CHUNK, f.size);
-        const base = received;
-        received = await putChunk(id, received, f.slice(received, end), (loaded) => setPct(((base + loaded) / f.size) * 100));
-        setPct((received / f.size) * 100);
+        if (res.aborted) return;
+        offset = res.bytesReceived ?? end;
+      } catch (err) {
+        if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
+        return fail('Upload interrupted. Check your connection.');
       }
-      if (srcRef.current) {
-        await startJob(id); // details were confirmed before the upload
-      } else {
-        // fallback: read details from the server after upload, then confirm
-        const pr = await fetch(withKey('/api/uploads/' + id + '/probe'), { headers: headers() });
-        if (pr.ok) { const pj = await pr.json().catch(() => null); if (pj && pj.probe) { srcRef.current = pj.probe; setSrc(pj.probe); } }
-        setConfirmAt('post');
-        setPhase('confirm');
-      }
-    } catch (e) {
-      if (e.aborted) { if (flags.current.pause) setPhase('paused'); return; }
-      if (e.key) return fail('Access key needed.', true);
-      if (e.network) { setError('Connection lost. Tap Resume to continue.'); return setPhase('paused'); }
-      fail(e.message || 'Upload failed.');
     }
-  }, [ensureUpload, fail, putChunk, startJob]);
 
-  const start = useCallback((f) => {
+    setPct(100);
+    const m = readMap();
+    delete m[fileKey(f)];
+    writeMap(m);
+
+    if (confirmAt === 'pre') {
+      startJob(id);
+    } else {
+      try {
+        const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
+        if (r.ok) {
+          const u = await r.json();
+          if (u.probe) {
+            setSrc(u.probe);
+            srcRef.current = u.probe;
+            setPhase('confirm');
+            return;
+          }
+        }
+      } catch { /* proceed */ }
+      startJob(id);
+    }
+  }, [confirmAt, fail, headers, startJob, withKey]);
+
+  /* ----- start user action ----- */
+  const start = async (f) => {
     if (!f) return;
-    if (f.size > MAX_BYTES) { setFile(f); return fail('That file is over 600 MB.'); }
-    if (f.type && !f.type.startsWith('video/')) return fail('Please choose a video file.');
-    fileRef.current = f; setFile(f); setResult(null); setKept(null); setDl({ state: 'idle', pct: 0 }); savedFile.current = null;
-    setConfirmAt('pre');
-    probeLocalFile(f).then((p) => {
-      if (p) { srcRef.current = p; setSrc(p); setPhase('confirm'); } // show details first, nothing uploaded yet
-      else runUpload();
-    });
-  }, [fail, runUpload]);
+    if (!/\.(mp4|mov|m4v)$/i.test(f.name)) return fail('Only MP4, MOV, and M4V video files are supported.');
+    if (f.size > MAX_BYTES) { setFile(f); return fail('That video exceeds the 600 MB size limit.'); }
 
-  const pause = useCallback(() => { flags.current.pause = true; try { xhrRef.current?.abort(); } catch { /* ignore */ } setPhase('paused'); }, []);
-  const resume = useCallback(() => { setError(''); runUpload(); }, [runUpload]);
+    setFile(f);
+    fileRef.current = f;
+    savedFile.current = f;
+    setError('');
+    setResult(null);
+    setLog([]);
+    setOut(null);
+    setDl({ state: 'idle', pct: 0 });
 
-  const cancel = useCallback(async () => {
+    const m = readMap();
+    const hit = m[fileKey(f)];
+    upId.current = hit?.id || null;
+    jobId.current = null;
+
+    try {
+      const p = await probeLocalFile(f);
+      if (p) {
+        setSrc(p);
+        srcRef.current = p;
+        setConfirmAt('pre');
+        setPhase('confirm');
+        setLog([
+          `[client] Selected: ${f.name} (${fmt(f.size)})`,
+          `[obito] On-device probe: ${p.w}×${p.h} · ${p.fps} fps · ${(p.codec || '').toUpperCase()}${p.transfer ? ' · ' + p.transfer : ''}`
+        ]);
+        return;
+      }
+    } catch { /* fallback to post-upload probe */ }
+
+    setConfirmAt('post');
+    runUpload();
+  };
+
+  const pause = () => { flags.current.pause = true; xhrRef.current?.abort(); setPhase('paused'); };
+  const resume = () => { flags.current.pause = false; runUpload(); };
+  const cancel = () => {
     flags.current.cancel = true;
-    try { xhrRef.current?.abort(); } catch { /* ignore */ }
+    flags.current.pause = false;
+    xhrRef.current?.abort();
     clearInterval(timer.current);
-    const wasJob = jobId.current && (phase === 'queued' || phase === 'process');
-    if (wasJob) {
-      try { await fetch(withKey('/api/jobs/' + jobId.current), { method: 'DELETE', headers: headers() }); } catch { /* ignore */ }
-      jobId.current = null;
+    if (upId.current && file && pct > 0) {
+      setKept({ id: upId.current, pct, name: file.name, file });
     }
-    // keep the uploaded part so the same video continues instead of starting again
-    const f = fileRef.current;
-    setKept(upId.current && f ? { id: upId.current, pct: wasJob ? 100 : pct, name: f.name } : null);
-    setPhase('idle'); setPct(0); setError('');
-  }, [headers, pct, phase, withKey]);
+    setPhase('idle');
+    setPct(0);
+  };
+  const reset = () => {
+    flags.current.cancel = true;
+    flags.current.pause = false;
+    xhrRef.current?.abort();
+    clearInterval(timer.current);
+    setPhase('idle');
+    setFile(null);
+    setResult(null);
+    setLog([]);
+    setSrc(null);
+    setOut(null);
+    setPct(0);
+    setError('');
+    upId.current = null;
+    jobId.current = null;
+    fileRef.current = null;
+  };
 
-  const continueKept = useCallback(() => {
-    const f = fileRef.current;
-    if (!f) return input.current?.click(); // page was reloaded: pick the same video, it resumes automatically
+  const continueKept = () => {
+    if (!kept) return;
+    fileRef.current = kept.file;
+    setFile(kept.file);
+    upId.current = kept.id;
     setKept(null);
     runUpload();
-  }, [runUpload]);
+  };
 
-  const discardKept = useCallback(async () => {
-    if (kept?.id) { try { await fetch(withKey('/api/uploads/' + kept.id), { method: 'DELETE', headers: headers() }); } catch { /* ignore */ } }
-    const f = fileRef.current;
-    if (f) { const m = readMap(); delete m[fileKey(f)]; writeMap(m); }
-    fileRef.current = null; upId.current = null; setFile(null); setKept(null);
-  }, [headers, kept, withKey]);
+  const discardKept = () => {
+    if (kept?.file) {
+      const m = readMap();
+      delete m[fileKey(kept.file)];
+      writeMap(m);
+    }
+    setKept(null);
+  };
 
-  const reset = useCallback(() => {
-    clearInterval(timer.current);
-    jobId.current = null; upId.current = null; fileRef.current = null; savedFile.current = null;
-    setPhase('idle'); setFile(null); setResult(null); setError(''); setNeedKey(false); setPct(0); setKept(null); setLog([]); setSrc(null); setOut(null); setConfirmAt('pre');
-    srcRef.current = null;
-    setDl({ state: 'idle', pct: 0 });
-    if (input.current) input.current.value = '';
-  }, []);
-
-  /* ----- home-screen app download (fetch, then share sheet) ----- */
-  const prepareFile = useCallback(async () => {
-    if (!result) return;
+  const prepareFile = async () => {
+    if (!result?.id || dl.state === 'loading') return;
     setDl({ state: 'loading', pct: 0 });
     try {
       const r = await fetch(withKey('/api/jobs/' + result.id + '/download'), { headers: headers() });
-      if (!r.ok) throw new Error('status ' + r.status);
-      const total = Number(r.headers.get('content-length')) || result.bytes || 0;
-      const reader = r.body.getReader(); const chunks = []; let got = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); got += value.length;
-        if (total) setDl({ state: 'loading', pct: Math.min(99, (got / total) * 100) });
+      if (!r.ok) throw new Error('Download failed');
+      const reader = r.body?.getReader();
+      const len = Number(r.headers.get('content-length') || 0);
+      let rcv = 0;
+      const chunks = [];
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          rcv += value.length;
+          if (len) setDl({ state: 'loading', pct: (rcv / len) * 100 });
+        }
+      } else {
+        chunks.push(await r.arrayBuffer());
       }
-      const base = (file?.name || 'video').replace(/\.[^.]+$/, '');
-      savedFile.current = new File(chunks, base + '-optimized.mp4', { type: 'video/mp4' });
-      setDl({ state: 'ready', pct: 100 });
-    } catch { setDl({ state: 'error', pct: 0 }); }
-  }, [file, headers, result, withKey]);
+      const blob = new Blob(chunks, { type: 'video/mp4' });
+      setDl({ state: 'ready', blob, pct: 100 });
+    } catch {
+      setDl({ state: 'error', pct: 0 });
+    }
+  };
 
-  const saveFile = useCallback(async () => {
-    const f = savedFile.current; if (!f) return;
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: f.name }); return; }
-    } catch (e) { if (e && e.name === 'AbortError') return; }
-    const url = URL.createObjectURL(f); const a = document.createElement('a');
-    a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  const saveFile = async () => {
+    if (!dl.blob) return;
+    const name = (file?.name ? file.name.replace(/\.[^.]+$/, '') : 'tiktok-optimized') + '-lossless.mp4';
+    const f = new File([dl.blob], name, { type: 'video/mp4' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      try {
+        await navigator.share({ files: [f], title: name });
+        return;
+      } catch { /* fallback to anchor download */ }
+    }
+    const url = URL.createObjectURL(dl.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }, []);
+  };
 
-  const onDrop = (e) => { e.preventDefault(); setDrag(false); if (phase === 'idle') start(e.dataTransfer.files?.[0]); };
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDrag(false);
+    if (phase === 'idle') start(e.dataTransfer.files?.[0]);
+  };
 
   const busy = phase === 'upload' || phase === 'queued' || phase === 'process';
   useEffect(() => { onBusy && onBusy(busy); }, [busy, onBusy]);
-  const title = { idle: 'Upload your video', upload: 'Uploading', paused: 'Paused', confirm: 'Check your video', queued: 'Getting ready', process: 'Optimizing', done: 'Your video is ready', error: 'Something went wrong' }[phase];
-  const upTerm = phase === 'upload' && file
-    ? [`[up] sending ${file.name} (${(file.size / 1048576).toFixed(1)} MB)`, `[up] ${Math.round(pct)}% received by server`]
-    : [];
-  const termLines = [...upTerm, ...log.slice(-12)];
-  const termOn = termLines.length > 0 && phase !== 'idle' && phase !== 'paused';
-  const sub = {
-    idle: 'MP4 or MOV · up to 600 MB',
-    upload: file ? file.name : '', confirm: file ? file.name : '', queued: file ? file.name : '', process: file ? file.name : '',
-    paused: error || (Math.round(pct) + '% uploaded · tap Resume to continue'),
-    done: result?.bytes ? fmt(result.bytes) : file?.name || '',
-    error
-  }[phase];
-
-  const stage =
-    phase === 'done' ? <Bot state="default" /> :
-    phase === 'process' ? <Bot state="working" /> :
-    phase === 'paused' ? <Bot state="sleeping" /> :
-    phase === 'error' ? <div className="err-badge"><CloseIcon width={26} height={26} strokeWidth={2.4} /></div> :
-    <Orb state={phase === 'upload' || phase === 'queued' ? 'connecting' : 'breathing'} />;
 
   return (
-    <div className="optimizer">
-      <div className={'drop' + (drag ? ' hot' : '')}
-          onDragOver={(e) => { e.preventDefault(); if (phase === 'idle') setDrag(true); }}
-              onDragLeave={() => setDrag(false)} onDrop={onDrop}>
-              {stage}
-              <h2 className="title" aria-live="polite">{title}</h2>
-              <p className={'sub' + (phase === 'error' ? ' sub-err' : '')}>{sub}</p>
+    <div className="studio-optimizer">
+      {/* ---------- Main Clean Dropzone Box ---------- */}
+      <div
+        className={`clean-dropzone ${drag ? 'drag-over' : ''} phase-${phase}`}
+        onDragOver={(e) => { e.preventDefault(); if (phase === 'idle') setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={onDrop}
+      >
+        {/* Bot Avatar Centerpiece (Libraries.dev bot-avatars) */}
+        <BotStage phase={phase} busy={busy} />
 
-              {(busy || phase === 'paused') && (
-                <div className="run">
-                  <Progress value={phase === 'queued' ? 4 : pct} paused={phase === 'paused'} smooth={phase === 'process'} />
-                  <div className="run-row">
-                    <span>{phase === 'queued' ? 'Waiting' : Math.round(pct) + '%'}</span>
-                    <button type="button" className="link" onClick={cancel}>Cancel</button>
-                  </div>
-                </div>
-              )}
+        <div className="dropzone-text">
+          <h2 className="dropzone-title">
+            {phase === 'idle' && (drag ? 'Drop your video now' : 'Choose a video to optimize')}
+            {phase === 'confirm' && 'Check video details'}
+            {phase === 'upload' && 'Uploading video...'}
+            {phase === 'paused' && 'Upload paused'}
+            {phase === 'queued' && 'Queued for optimization...'}
+            {phase === 'process' && 'Optimizing video for TikTok...'}
+            {phase === 'done' && 'Your video is ready!'}
+            {phase === 'error' && 'Notice'}
+          </h2>
+          <p className="dropzone-sub">
+            {phase === 'idle' && 'MP4 or MOV · up to 600 MB'}
+            {phase === 'confirm' && `${file?.name} · zero re-encoding loss`}
+            {phase === 'upload' && `${file?.name} (${fmt(file?.size || 0)})`}
+            {phase === 'paused' && `${Math.round(pct)}% uploaded · Tap Resume to continue`}
+            {phase === 'queued' && 'Preparing container remux...'}
+            {phase === 'process' && 'Repackaging container with zero quality loss...'}
+            {phase === 'done' && `Output size: ${fmt(result?.bytes || 0)}`}
+            {phase === 'error' && error}
+          </p>
+        </div>
 
-              {src && phase !== 'idle' && phase !== 'upload' && (
-                <div className="src-details" aria-label="Source video details">
-                  <div className="jt-bar"><i /><i /><i /><b>your video — details</b></div>
-                  <div className="sd-body"><ProbeRows p={src} /></div>
-                  <p className="sd-note">{confirmAt === 'pre' ? 'read on this device — nothing uploaded yet' : 'read from your upload'}</p>
+        {/* Mode Selector and Choose Button when Idle */}
+        {phase === 'idle' && (
+          <div className="idle-actions">
+            {kept && (
+              <div className="resumable-chip">
+                <div className="chip-info">
+                  <b>{kept.name}</b>
+                  <span>{Math.round(kept.pct)}% already uploaded</span>
                 </div>
-              )}
+                <button type="button" className="btn-chip" onClick={continueKept}>
+                  <PlayIcon width={14} height={14} /> Resume
+                </button>
+                <button type="button" className="btn-chip-ghost" onClick={discardKept} aria-label="Discard">
+                  <CloseIcon width={14} height={14} />
+                </button>
+              </div>
+            )}
 
-              {termOn && (
-                <div className="job-term" aria-hidden="true">
-                  <div className="jt-bar"><i /><i /><i /><b>obito studio server — live</b></div>
-                  <div className="jt-body">
-                    {termLines.map((l, i) => (
-                      <div key={i} className={l.startsWith('[ff]') ? 'dim' : ''}>{l}</div>
-                    ))}
-                    {(phase === 'queued' || phase === 'process' || phase === 'upload') && <div className="jt-cur">▍</div>}
-                  </div>
-                </div>
-              )}
+            <ModeSelect value={mode} onChange={setMode} />
+
+            <button type="button" className="btn-choose" onClick={() => input.current?.click()}>
+              <UploadIcon width={20} height={20} />
+              <span>Choose video file</span>
+            </button>
+
+            <div className="engine-trust-row">
+              <div className="trust-item">
+                <span className="trust-val">60 / 120fps</span>
+                <span className="trust-lbl">Native Fluidity</span>
+              </div>
+              <div className="trust-divider" />
+              <div className="trust-item">
+                <span className="trust-val">100% Lossless</span>
+                <span className="trust-lbl">Stream Copy</span>
+              </div>
+              <div className="trust-divider" />
+              <div className="trust-item">
+                <span className="trust-val">HDR &amp; Dolby</span>
+                <span className="trust-lbl">Original Gamut</span>
+              </div>
             </div>
+          </div>
+        )}
 
-            {phase === 'upload' && (
-              <button type="button" className="btn glass" onClick={pause}><PauseIcon /> Pause</button>
-            )}
-            {phase === 'paused' && (
-              <button type="button" className="btn glass primary" onClick={resume}><PlayIcon /> Resume</button>
-            )}
+        {/* Progress bar when Busy */}
+        {(busy || phase === 'paused') && (
+          <div className="simple-progress">
+            <div className="progress-track-bar">
+              <div
+                className="progress-fill-bar"
+                style={{ width: `${Math.max(3, Math.min(100, phase === 'queued' ? 5 : pct))}%` }}
+              />
+            </div>
+            <div className="progress-meta">
+              <span className="pct-text">{phase === 'queued' ? 'Queued' : `${Math.round(pct)}%`}</span>
+              <button type="button" className="btn-abort" onClick={cancel}>Cancel</button>
+            </div>
+          </div>
+        )}
 
-            {phase === 'confirm' && (
-              <>
-                <button type="button" className="btn glass primary" onClick={() => (confirmAt === 'pre' ? runUpload() : startJob(upId.current))}>
-                  <PlayIcon /> {confirmAt === 'pre' ? 'Looks right — upload & optimize' : 'Looks right — optimize'}
+        {/* Pre-Upload Details (confirm phase only) */}
+        {src && phase === 'confirm' && (
+          <SpecGrid p={src} />
+        )}
+
+        {/* Output Specs when Done */}
+        {phase === 'done' && out && (
+          <SpecGrid p={out} realFps={result?.srcFps} isOutput />
+        )}
+
+        {/* Live Optimizing Terminal */}
+        <LiveTerminal log={log} busy={busy} phase={phase} />
+
+        {/* Action Buttons for Non-Idle States */}
+        <div className="dropzone-controls">
+          {phase === 'upload' && (
+            <button type="button" className="btn-secondary" onClick={pause}>
+              <PauseIcon width={18} height={18} /> Pause upload
+            </button>
+          )}
+
+          {phase === 'paused' && (
+            <button type="button" className="btn-primary" onClick={resume}>
+              <PlayIcon width={18} height={18} /> Resume upload
+            </button>
+          )}
+
+          {phase === 'confirm' && (
+            <div className="confirm-buttons">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => (confirmAt === 'pre' ? runUpload() : startJob(upId.current))}
+              >
+                <span>Looks good — optimize video</span>
+              </button>
+              <button type="button" className="btn-secondary" onClick={reset}>
+                <RefreshIcon width={16} height={16} /> Choose another
+              </button>
+            </div>
+          )}
+
+          {phase === 'done' && result && (
+            <div className="done-buttons">
+              {!isStandalone() ? (
+                <a className="btn-primary large" href={withKey('/api/jobs/' + result.id + '/download')}>
+                  <DownloadIcon width={20} height={20} /> Download optimized video
+                </a>
+              ) : dl.state === 'ready' ? (
+                <button type="button" className="btn-primary large" onClick={saveFile}>
+                  <ShareIcon width={20} height={20} /> Save video / Share
                 </button>
-                <button type="button" className="btn glass soft" onClick={reset}>Choose another</button>
-              </>
-            )}
-
-            {phase === 'idle' && (
-              <>
-                {kept && (
-                  <div className="kept">
-                    <div><b>{kept.name}</b><span>{Math.round(kept.pct)}% already uploaded</span></div>
-                    <button type="button" className="chip" onClick={continueKept}>Continue</button>
-                    <button type="button" className="chip ghost" onClick={discardKept} aria-label="Discard"><CloseIcon width={14} height={14} /></button>
-                  </div>
-                )}
-                <ModeSelect value={mode} onChange={setMode} />
-                <button type="button" className="btn glass primary" onClick={() => input.current?.click()}>
-                  <UploadIcon /> Choose video
+              ) : (
+                <button type="button" className="btn-primary large" onClick={prepareFile} disabled={dl.state === 'loading'}>
+                  <DownloadIcon width={20} height={20} />
+                  {dl.state === 'loading'
+                    ? `Preparing (${Math.round(dl.pct)}%)`
+                    : dl.state === 'error'
+                    ? 'Retry download'
+                    : 'Download optimized video'}
                 </button>
-              </>
-            )}
+              )}
+              <button type="button" className="btn-secondary" onClick={reset}>
+                <RefreshIcon width={16} height={16} /> Optimize another
+              </button>
+            </div>
+          )}
 
-            {phase === 'done' && result && (
-              <>
-                {out && (
-                  <div className="src-details" aria-label="Optimized video details">
-                    <div className="jt-bar"><i /><i /><i /><b>optimized — details</b></div>
-                    <div className="sd-body"><ProbeRows p={out} realFps={result.srcFps} /></div>
-                    <p className="sd-note">repackaged on your server — pixels untouched</p>
-                  </div>
-                )}
-                {!isStandalone() ? (
-                  <a className="btn glass primary" href={withKey('/api/jobs/' + result.id + '/download')}><DownloadIcon /> Download</a>
-                ) : dl.state === 'ready' ? (
-                  <button type="button" className="btn glass primary" onClick={saveFile}><DownloadIcon /> Save to Files</button>
-                ) : (
-                  <button type="button" className="btn glass primary" onClick={prepareFile} disabled={dl.state === 'loading'}>
-                    <DownloadIcon />{dl.state === 'loading' ? 'Preparing ' + Math.round(dl.pct) + '%' : dl.state === 'error' ? 'Try again' : 'Download'}
-                  </button>
-                )}
-                <button type="button" className="btn glass soft" onClick={reset}>Optimize another</button>
-              </>
-            )}
+          {phase === 'error' && (
+            <button type="button" className="btn-secondary" onClick={reset}>
+              <RefreshIcon width={16} height={16} /> Try again
+            </button>
+          )}
 
-            {phase === 'error' && <button type="button" className="btn glass soft" onClick={reset}>Try again</button>}
+          {needKey && (
+            <label className="access-key-field required">
+              <KeyIcon width={15} height={15} />
+              <input
+                type="password"
+                placeholder="Access key (if required)"
+                value={apiKey}
+                autoComplete="current-password"
+                onChange={(e) => onKeyChange(e.target.value)}
+              />
+            </label>
+          )}
 
-            {(needKey || phase === 'idle') && (
-              <label className={'keyrow' + (needKey ? ' need' : '')}>
-                <KeyIcon width={16} height={16} />
-                <input type="password" placeholder="Access key" value={apiKey} autoComplete="current-password" onChange={(e) => onKeyChange(e.target.value)} />
-              </label>
-            )}
-            <input ref={input} type="file" hidden accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" onChange={(e) => { start(e.target.files?.[0]); e.target.value = ''; }} />
+          <input
+            ref={input}
+            type="file"
+            hidden
+            accept="video/mp4,video/quicktime,.mp4,.mov,.m4v"
+            onChange={(e) => {
+              start(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,20 +1,31 @@
-# One image, everything included: ffmpeg (with libx265), dovi_tool, node.
+# Universal production Dockerfile for Obito Studio (Hugging Face Spaces, Koyeb, Render, VPS)
 FROM node:20-slim
 
-# ffmpeg from apt (Debian's build includes libx265)
+# Install system dependencies (ffmpeg and ca-certificates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg curl build-essential ca-certificates \
+    ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Rust + dovi_tool (compiled once, at image build time — not on every deploy)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install dovi_tool
-
 WORKDIR /app
-COPY package.json .
-RUN npm install --omit=dev
-COPY server-transcode.js .
 
-EXPOSE 3001
-CMD ["node", "server-transcode.js"]
+# Create required writable directories for jobs and uploads
+RUN mkdir -p /app/jobs /app/uploads && chmod -R 777 /app/jobs /app/uploads
+
+# Install server backend dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+
+# Copy backend engine, libraries, and built frontend
+COPY lib ./lib
+COPY tools ./tools
+COPY public ./public
+COPY server-rtx-online.js ./
+
+# Default port 7860 for Hugging Face Spaces (dynamically overridden by $PORT on other platforms)
+ENV PORT=7860
+EXPOSE 7860
+
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "server-rtx-online.js"]

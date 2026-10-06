@@ -73,3 +73,32 @@ export const SpeakerIcon = (p) => (
 export const TailnetIcon = (p) => (
   <svg {...base} {...p}><circle cx="12" cy="12" r="3.2" /><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" /></svg>
 );
+
+export const LightningIcon = (p) => (
+  <svg {...base} {...p}><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+);
+export const FilmIcon = (p) => (
+  <svg {...base} {...p}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M7 4v16M17 4v16M2 8h5M2 12h5M2 16h5M17 8h5M17 12h5M17 16h5" /></svg>
+);
+export const TrashIcon = (p) => (
+  <svg {...base} {...p}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" /></svg>
+);
+export const CopyIcon = (p) => (
+  <svg {...base} {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+);
+export const SearchIcon = (p) => (
+  <svg {...base} {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+);
+export const ShareIcon = (p) => (
+  <svg {...base} {...p}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
+);
+export const RefreshIcon = (p) => (
+  <svg {...base} {...p}><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8M22 12.5a10 10 0 0 1-18.8 4.2L2.5 16" /></svg>
+);
+export const AlertTriangleIcon = (p) => (
+  <svg {...base} {...p}><path d="m10.3 3.6-8.3 14.4A2 2 0 0 0 3.7 21h16.6a2 2 0 0 0 1.7-3l-8.3-14.4a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01" /></svg>
+);
+export const TerminalIcon = (p) => (
+  <svg {...base} {...p}><path d="m4 17 6-6-6-6M12 19h8" /></svg>
+);
+

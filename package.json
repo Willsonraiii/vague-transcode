@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "server-transcode.js",
+  "main": "server-rtx-online.js",
   "scripts": {
-    "start": "node server-transcode.js",
-    "start:online": "node server-rtx-online.js"
+    "start": "node server-rtx-online.js",
+    "build": "npm --prefix web run build"
   },
   "dependencies": {
     "express": "^4.19.2",

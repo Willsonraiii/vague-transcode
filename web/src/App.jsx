@@ -1,434 +1,406 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BorderBeam } from 'border-beam';
 import Logo from './Logo.jsx';
 import Optimizer from './Optimizer.jsx';
-import {
-  CheckIcon, ChevronIcon, ControlIcon, FpsIcon, HdrIcon, HelpIcon, InspectIcon, LayersIcon, ListIcon,
-  ShieldIcon, SparkIcon, SpeakerIcon, SunIcon, TailnetIcon, WifiIcon, WifiOffIcon
-} from './icons.jsx';
 import Inspector from './Inspector.jsx';
 import Library from './Library.jsx';
+import {
+  ChevronIcon, FpsIcon, HdrIcon, HelpIcon,
+  InspectIcon, LayersIcon, LightningIcon, ShieldIcon, SparkIcon, FilmIcon
+} from './icons.jsx';
 
-const BAR_H = 34;
-const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } }
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } }
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
 
-/* ---------- content ---------- */
-
-const FEATURES = [
-  { Icon: FpsIcon, t: 'Built for 60 & 120 fps', d: 'Frame-rate timing is adjusted so TikTok is less likely to flatten fast footage to 30 fps.' },
-  { Icon: LayersIcon, t: 'No re-encoding', d: 'Your video is repackaged, not recompressed. Pixels are copied as they are, so nothing gets softer.' },
-  { Icon: HdrIcon, t: 'HDR clips stay HDR', d: 'The HDR button prepares iPhone HDR videos so their colour information survives the upload.' },
-  { Icon: ShieldIcon, t: 'Private by design', d: 'It runs on your own server. Files are deleted after you download, or after one hour.' }
-];
-const STEPS = [
-  { n: '1', t: 'Pick a type & choose your video', d: 'MP4 or MOV, up to 600 MB. Choose HDR for iPhone HDR clips.' },
-  { n: '2', t: 'We optimize it', d: 'Upload at your pace: pause, resume or cancel and carry on later without starting over.' },
-  { n: '3', t: 'Download and post', d: 'Save the file, then upload it through TikTok Studio.' }
-];
-const FAQ = [
-  ['Does it re-encode my video?', 'No. Video and audio are copied as they are and only the container and timing are rewritten, so quality stays identical and it finishes quickly.'],
-  ['What is the difference between the two buttons?', 'FPS + Quality fixes the frame-rate timing and keeps your quality. FPS + Quality + HDR does the same and also prepares HDR clips for TikTok. If your video is not HDR, either works.'],
-  ['What if I pause or cancel an upload?', 'Nothing is thrown away. The part already uploaded stays on the server for an hour, so choosing the same video again, or tapping Continue, picks up where it stopped.'],
-  ['Why does my gallery show no duration?', 'The optimized file is made for TikTok, and some players show no duration for it. Upload it through TikTok Studio to see how it posts.'],
-  ['How big can my video be?', 'Up to 600 MB, MP4, MOV or M4V.'],
-  ['Where do my files go?', 'They stay on your own server and are deleted after you download the result, or after one hour.']
+const TABS = [
+  { id: 'optimizer', label: 'Optimizer', Icon: LightningIcon },
+  { id: 'inspect', label: 'Inspector', Icon: InspectIcon },
+  { id: 'library', label: 'Library', Icon: FilmIcon },
+  { id: 'architecture', label: 'Specs', Icon: LayersIcon },
+  { id: 'faq', label: 'FAQ', Icon: HelpIcon },
 ];
 
-const SECTIONS = [
-  { id: 'optimizer', title: 'OBITO STUDIO — Optimizer' },
-  { id: 'how', title: 'How it works' },
-  { id: 'features', title: 'What you get' },
-  { id: 'faq', title: 'FAQ' }
+/* ---------- Technical Architecture Content ---------- */
+const ARCH_PILLARS = [
+  {
+    Icon: FpsIcon,
+    title: '19200 Timescale Harmonization',
+    subtitle: '60fps & 120fps TikTok Ingestion',
+    desc: 'TikTok\'s transcode engine aggressively enforces specific timescale multiples (19200, 15360). When footage arrives with non-standard timescales (e.g. 60000/1001 or 1000/1), TikTok\'s ingestion pipeline flattens playback to 30fps. Obito Studio remuxes container atoms to exact 19200 fractions without touching video frames.'
+  },
+  {
+    Icon: LayersIcon,
+    title: 'Zero Generational Loss',
+    subtitle: '-c copy Pure Stream Copy',
+    desc: 'Standard transcoders decompress every frame and re-compress with lossy encoders (libx264/libx265), degrading high-frequency textures and edge sharpness. Obito Studio never touches compressed video or audio packets. Only moov/trak headers are modified, preserving 100% of master bitrate.'
+  },
+  {
+    Icon: HdrIcon,
+    title: 'Apple Dolby Vision Profile 8 Demuxing',
+    subtitle: 'Dynamic RPU → Native HLG Rec.2020',
+    desc: 'iPhone HDR videos embed Dolby Vision Profile 8.4 dynamic metadata (RPU). TikTok strips unhandled Dolby Vision atoms, causing washed-out, blown-out SDR playback. Obito Studio extracts and translates container color primaries to native HLG (arib-std-b67) so peak nits survive.'
+  },
+  {
+    Icon: ShieldIcon,
+    title: 'Self-Hosted Sovereign Security',
+    subtitle: 'Zero Cloud Storage · Immediate Purge',
+    desc: 'Your creative masters never leave your private machine or network. Temporary container remuxing operates in-memory or on local NVMe, and files are automatically purged immediately after download or within one hour of inactivity.'
+  }
 ];
 
-/* ---------- hooks ---------- */
-
-function useOnOutside(ref, fn) {
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) fn(); };
-    document.addEventListener('pointerdown', h);
-    return () => document.removeEventListener('pointerdown', h);
-  }, [ref, fn]);
-}
-
-function useReveal(threshold = 0.16) {
-  const ref = useRef(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) { setShown(true); io.disconnect(); }
-    }, { threshold });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [threshold]);
-  return { ref, shown };
-}
-
-/* ---------- terminal hero (typewriter) ---------- */
-
-const TERM = [
-  { cmd: true, t: 'obito --prepare your-clip.mp4' },
-  { t: 'upload once.' },
-  { t: '60 and 120 fps videos keep their smoothness.' },
-  { t: 'quality stays untouched — no re-encoding.' },
-  { t: 'HDR clips stay HDR.' },
-  { cmd: true, t: 'ready for tiktok studio' }
-];
-const TERM_TOTAL = TERM.reduce((n, l) => n + l.t.length, 0);
-
-function Terminal() {
-  const { ref, shown: started } = useReveal(0.3);
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!started || count >= TERM_TOTAL) return;
-    const t = setTimeout(() => setCount((c) => Math.min(TERM_TOTAL, c + 1)), 26);
-    return () => clearTimeout(t);
-  }, [started, count]);
-  let left = count;
-  return (
-    <div className={'term reveal' + (started ? ' in' : '')} ref={ref} role="img" aria-label="Your clips, TikTok-ready. Upload once. 60 and 120 fps videos keep their smoothness, quality stays untouched and HDR clips stay HDR. No re-encoding.">
-      <header className="term-bar">
-        <span className="lights"><i className="l-r" /><i className="l-y" /><i className="l-g" /></span>
-        <b>Your clips, TikTok‑ready.</b>
-        <span className="lights-pad" />
-      </header>
-      <div className="term-body">
-        {TERM.map((l, i) => {
-          const take = Math.max(0, Math.min(l.t.length, left));
-          left -= take;
-          if (take === 0 && left <= 0 && count < TERM_TOTAL) return null;
-          const current = take < l.t.length;
-          return (
-            <div className={'term-line' + (l.cmd ? ' cmd' : '')} key={i}>
-              <span className="term-ps">{l.cmd ? 'obito@studio ~ %' : '➜'}</span>
-              <span>{l.t.slice(0, take)}</span>
-              {current && <i className="caret" />}
-            </div>
-          );
-        })}
-        {count >= TERM_TOTAL && <div className="term-line cmd"><span className="term-ps">obito@studio ~ %</span><span> </span><i className="caret blink" /></div>}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- menu bar + control centre ---------- */
-
-function ControlCenter({ apiKey }) {
-  const [open, setOpen] = useState(false);
-  const [ssid, setSsid] = useState(null);
-  const [wired, setWired] = useState(false);
-  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  const [bright, setBright] = useState(() => Number(lsGet('obitoBright') || 100));
-  const [vol, setVol] = useState(() => Number(lsGet('obitoVol') || 65));
-  const ref = useRef(null);
-  useOnOutside(ref, useCallback(() => setOpen(false), []));
-
-  useEffect(() => {
-    const on = () => setOnline(true); const off = () => setOnline(false);
-    window.addEventListener('online', on); window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
-  useEffect(() => {
-    if (!open) return;
-    fetch('/api/network' + (apiKey ? '?token=' + encodeURIComponent(apiKey) : ''), { headers: apiKey ? { 'x-access-token': apiKey } : {} })
-      .then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { setSsid(j.ssid); setWired(j.wired); } }).catch(() => { /* offline */ });
-  }, [open, apiKey]);
-  useEffect(() => {
-    document.documentElement.style.setProperty('--dim', String((100 - bright) / 100 * 0.72));
-    lsSet('obitoBright', String(bright));
-  }, [bright]);
-  useEffect(() => { lsSet('obitoVol', String(vol)); }, [vol]);
-
-  return (
-    <div className="mb-menu" ref={ref}>
-      <button type="button" className={'mb-btn icon' + (open ? ' on' : '')} onClick={() => setOpen(!open)} aria-label="Control Centre" aria-expanded={open}>
-        <ControlIcon width={15} height={15} />
-      </button>
-      {open && (
-        <div className="cc" role="dialog" aria-label="Control Centre">
-          <div className="cc-top">
-            <div className="cc-col">
-              <div className={'cc-tile' + (online ? ' hi' : '')}>
-                <span className="cc-ico"><WifiIcon width={18} height={18} /></span>
-                <div><b>Wi‑Fi</b><span>{online ? 'On' : 'Off'}</span></div>
-              </div>
-              <div className="cc-tile">
-                <span className="cc-ico"><TailnetIcon width={18} height={18} /></span>
-                <div><b>Tailnet</b><span>Private</span></div>
-              </div>
-            </div>
-            <div className="cc-card">
-              <span className="cc-title">Server network</span>
-              <b className="cc-big">{ssid || (wired ? 'Wired' : online ? 'Studio server' : 'Offline')}</b>
-              <span className="cc-sub">{online ? 'reachable on this tailnet' : 'no connection'}</span>
-            </div>
-          </div>
-          <label className="cc-mod slider">
-            <span className="cc-ico"><SunIcon width={16} height={16} /></span>
-            <input type="range" min="40" max="100" value={bright} onChange={(e) => setBright(Number(e.target.value))} aria-label="Brightness" />
-          </label>
-          <label className="cc-mod slider">
-            <span className="cc-ico"><SpeakerIcon width={16} height={16} /></span>
-            <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(Number(e.target.value))} aria-label="Volume" />
-          </label>
-          <div className="cc-nav">
-            {[['optimizer', 'Optimizer'], ['inspect', 'Inspector'], ['library', 'Library'], ['how', 'How it works'], ['faq', 'FAQ']].map(([id, t]) => (
-              <button type="button" key={id} className="cc-navtile" onClick={() => { setOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id === 'optimizer' ? 'center' : 'start' }); }}>{t}</button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function WifiMenu({ apiKey }) {
-  const [open, setOpen] = useState(false);
-  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  const [info, setInfo] = useState(null);
-  const [conn, setConn] = useState(null);
-  const ref = useRef(null);
-  useOnOutside(ref, useCallback(() => setOpen(false), []));
-
-  useEffect(() => {
-    const on = () => setOnline(true); const off = () => setOnline(false);
-    window.addEventListener('online', on); window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
-
-  const refresh = useCallback(async () => {
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    setConn(c ? { type: c.type, eff: c.effectiveType, down: c.downlink, rtt: c.rtt } : null);
-    const t0 = performance.now();
-    try {
-      const r = await fetch('/api/network' + (apiKey ? '?token=' + encodeURIComponent(apiKey) : ''), { headers: apiKey ? { 'x-access-token': apiKey } : {} });
-      const latency = Math.round(performance.now() - t0);
-      if (r.status === 401) return setInfo({ error: 'Enter your access key to see the server network.', latency });
-      if (!r.ok) return setInfo({ error: 'Server network unavailable.', latency });
-      const j = await r.json();
-      setInfo({ ssid: j.ssid, wired: j.wired, latency });
-    } catch { setInfo({ error: 'Server unreachable.' }); }
-  }, [apiKey]);
-
-  const toggle = () => { const n = !open; setOpen(n); if (n) refresh(); };
-  const Icon = online ? WifiIcon : WifiOffIcon;
-  const typeLabel = conn?.type && conn.type !== 'unknown' ? ({ wifi: 'Wi-Fi', cellular: 'Cellular', ethernet: 'Ethernet' }[conn.type] || conn.type) : null;
-
-  return (
-    <div className="mb-menu" ref={ref}>
-      <button type="button" className={'mb-btn icon' + (open ? ' on' : '')} onClick={toggle} aria-label="Wi-Fi status" aria-expanded={open}>
-        <Icon width={16} height={16} />
-      </button>
-      {open && (
-        <div className="drop-menu wifi" role="dialog" aria-label="Wi-Fi">
-          <div className="dm-head"><b>Wi‑Fi</b><span className={'dm-pill' + (online ? ' ok' : '')}>{online ? 'Online' : 'Offline'}</span></div>
-          <div className="dm-sec">Server network</div>
-          {info?.ssid ? (
-            <div className="dm-row net"><CheckIcon width={15} height={15} strokeWidth={2.6} /><b>{info.ssid}</b>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
-          ) : info?.wired ? (
-            <div className="dm-row"><span className="dim">Connected by cable (no Wi-Fi name)</span>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
-          ) : info?.error ? (
-            <div className="dm-row"><span className="dim">{info.error}</span></div>
-          ) : info ? (
-            <div className="dm-row"><span className="dim">Network name not available</span>{typeof info.latency === 'number' && <span>{info.latency} ms</span>}</div>
-          ) : (
-            <div className="dm-row"><span className="dim">Checking…</span></div>
-          )}
-          <div className="dm-sec">This device</div>
-          <div className="dm-row"><span>{online ? 'Connected' : 'No connection'}{typeLabel ? ' · ' + typeLabel : ''}</span>{conn?.down ? <span>{conn.down} Mbps</span> : null}</div>
-          {conn?.eff && <div className="dm-row"><span className="dim">Quality</span><span>{conn.eff.toUpperCase()}{conn.rtt ? ' · ' + conn.rtt + ' ms' : ''}</span></div>}
-          <p className="dm-note">Websites cannot read your device&apos;s Wi-Fi name, so this shows the network of the computer running OBITO STUDIO.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MenuBar({ apiKey }) {
-  const [now, setNow] = useState(() => new Date());
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(t); }, []);
-  const onMove = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const dx = (e.clientX - (r.left + r.width / 2)) / r.width;
-    const dy = (e.clientY - (r.top + r.height / 2)) / r.height;
-    setTilt({ x: Math.max(-1, Math.min(1, dx * 2)), y: Math.max(-1, Math.min(1, dy * 2)) });
-  };
-  const day = now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return (
-    <nav className="menubar" aria-label="Menu bar" onPointerMove={onMove} onPointerLeave={() => setTilt({ x: 0, y: 0 })}>
-      <div className="mb-left">
-        <b className="mb-app">OBITO STUDIO</b>
-      </div>
-      <div className="mb-logo-wrap">
-        <button type="button" className="mb-logo" style={{ transform: `perspective(300px) rotateY(${tilt.x * 10}deg) rotateX(${-tilt.y * 8}deg)` }}
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="OBITO STUDIO — back to top">
-          <Logo size={30} />
-        </button>
-      </div>
-      <div className="mb-right">
-        <ControlCenter apiKey={apiKey} />
-        <WifiMenu apiKey={apiKey} />
-        <span className="mb-clock"><span className="cd">{day} </span>{time}</span>
-      </div>
-    </nav>
-  );
-}
-
-/* ---------- dock: hidden, proximity + touch awake, macOS magnification ---------- */
-
-const DOCK_APPS = [
-  { id: 'optimizer', title: 'Optimizer', dock: <Logo size={34} /> },
-  { id: 'inspect', title: 'TikTok Inspector', dock: <InspectIcon width={24} height={24} /> },
-  { id: 'library', title: 'Library', dock: <LayersIcon width={24} height={24} /> },
-  { id: 'how', title: 'How it works', dock: <ListIcon width={24} height={24} /> },
-  { id: 'features', title: 'What you get', dock: <SparkIcon width={24} height={24} /> },
-  { id: 'faq', title: 'FAQ', dock: <HelpIcon width={24} height={24} /> }
+const WORKFLOW_STEPS = [
+  {
+    step: '01',
+    name: 'Master Video Selection',
+    detail: 'Import any MP4, MOV, or M4V up to 600 MB. Instant on-device container probing verifies resolution, frame-rate, color transfer, and Dolby Vision metadata before uploading.'
+  },
+  {
+    step: '02',
+    name: 'Hardware-Accelerated Stream Remux',
+    detail: 'Resumable chunked ingestion streams to your server. The lossless pipeline restructures MP4 box atom layouts, interleaves audio streams, and normalizes duration timescale.'
+  },
+  {
+    step: '03',
+    name: 'Publish via TikTok Studio',
+    detail: 'Download the verified master MP4 and publish directly through TikTok Studio (Desktop or Web). TikTok acknowledges the 19200 timescale and serves high-bitrate 60fps & HDR.'
+  }
 ];
 
-function Dock() {
-  const [shown, setShown] = useState(false);
-  const [hover, setHover] = useState(null);
-  const hideT = useRef(null);
-  const dockRef = useRef(null);
-
-  const poke = useCallback((near) => {
-    clearTimeout(hideT.current);
-    if (near) setShown(true);
-    else hideT.current = setTimeout(() => setShown(false), 650);
-  }, []);
-
-  useEffect(() => {
-    const mm = (e) => poke(e.clientY > window.innerHeight - 130);
-    const tm = (e) => { const y = e.touches?.[0]?.clientY ?? 0; poke(y > window.innerHeight - 120); };
-    window.addEventListener('pointermove', mm, { passive: true });
-    window.addEventListener('touchmove', tm, { passive: true });
-    return () => { window.removeEventListener('pointermove', mm); window.removeEventListener('touchmove', tm); };
-  }, [poke]);
-
-  const magnify = (e) => {
-    const items = dockRef.current?.querySelectorAll('.dock-item');
-    if (!items) return;
-    items.forEach((el) => {
-      const r = el.getBoundingClientRect();
-      const d = Math.abs(e.clientX - (r.left + r.width / 2));
-      const s = 1 + 0.5 * Math.exp(-Math.pow(d / 105, 2));
-      el.style.transform = `translateY(${(1 - s) * 26}px) scale(${s})`;
-    });
-  };
-  const calm = () => {
-    dockRef.current?.querySelectorAll('.dock-item').forEach((el) => { el.style.transform = ''; });
-    setHover(null);
-  };
-
-  const tap = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id === 'optimizer' ? 'center' : 'start' });
-
-  return (
-    <div className={'dock-zone' + (shown ? ' up' : '')}>
-      <div className="dock" ref={dockRef} onPointerMove={magnify} onPointerLeave={calm} onPointerEnter={() => { clearTimeout(hideT.current); setShown(true); }}>
-        {DOCK_APPS.map((a) => (
-          <button type="button" key={a.id} className={'dock-item' + (a.id === 'optimizer' ? ' brand' : '')}
-            onPointerEnter={() => setHover(a.id)} onClick={() => tap(a.id)} aria-label={a.title}>
-            <span className="dock-ico">{a.dock}</span>
-            {hover === a.id && <span className="dock-tip">{a.title}</span>}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- info sections ---------- */
-
-function Features() {
-  return (
-    <div className="features">
-      {FEATURES.map(({ Icon, t, d }) => (
-        <article className="feat" key={t}>
-          <span className="feat-ico"><Icon width={20} height={20} /></span>
-          <div><h3>{t}</h3><p>{d}</p></div>
-        </article>
-      ))}
-    </div>
-  );
-}
-function Steps() {
-  return (
-    <ol className="steps">
-      {STEPS.map(({ n, t, d }) => (
-        <li key={n}><span className="step-n">{n}</span><div><h3>{t}</h3><p>{d}</p></div></li>
-      ))}
-    </ol>
-  );
-}
-function Faq() {
-  return (
-    <div className="faq">
-      {FAQ.map(([q, a]) => (
-        <details key={q}><summary>{q}<ChevronIcon width={18} height={18} /></summary><p>{a}</p></details>
-      ))}
-    </div>
-  );
-}
-
-function Section({ id, title, children, beam, beamActive }) {
-  const { ref, shown } = useReveal();
-  const section = (
-    <section className={'win reveal' + (shown ? ' in' : '')} id={id} aria-label={title} ref={ref}>
-      <header className="win-bar">
-        <span className="lights"><i className="l-r" /><i className="l-y" /><i className="l-g" /></span>
-        <b>{title}</b>
-        <span className="lights-pad" />
-      </header>
-      <div className="win-body">{children}</div>
-    </section>
-  );
-  return beam
-    ? <BorderBeam size="md" colorVariant="ocean" theme="dark" strength={1} borderRadius={14} active={beamActive} className="beam">{section}</BorderBeam>
-    : section;
-}
-
-/* ---------- app ---------- */
+const FAQ_ITEMS = [
+  [
+    'Does Obito Studio re-encode or compress my footage?',
+    'Never. Obito Studio strictly executes stream-copy remuxing (`-c copy`). Video packets and audio streams remain bit-for-bit identical to your export master. Zero generational degradation occurs.'
+  ],
+  [
+    'Which preset should I select?',
+    'Select "Apple HDR & Dolby Vision" for any iPhone HDR, 10-bit Log, or Dolby Vision clips to prevent TikTok from stripping wide color gamut information. Select "Standard Lossless" for SDR, gaming captures, and standard screen recordings.'
+  ],
+  [
+    'What happens if my connection drops during upload?',
+    'Uploads are chunked and completely resumable. Received data chunks remain safely cached on your server for up to one hour. Re-selecting the file or tapping Resume continues instantly without restarting.'
+  ],
+  [
+    'Why do some local video players display 00:00 duration?',
+    'The remuxed MP4 contains a specialized dual-audio timescale structure engineered specifically for TikTok\'s ingestion pipeline. Some legacy desktop video players show 00:00, but TikTok\'s mobile app and TikTok Studio parse the duration with 100% precision.'
+  ],
+  [
+    'What are the supported file sizes and formats?',
+    'MP4, MOV, and M4V containers up to 600 MB. 30 fps, 60 fps, and 120 fps portrait (9:16) and landscape masters are fully supported.'
+  ],
+  [
+    'Are my video files stored on remote servers?',
+    'No. Obito Studio operates on your self-hosted instance. Files are never sent to third-party cloud services and are deleted automatically as soon as you download the result.'
+  ]
+];
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('optimizer'); // optimizer | inspect | library | architecture | faq
   const [apiKey, setApiKey] = useState(() => lsGet('obitoKey') || '');
   const [busy, setBusy] = useState(false);
-  const onKeyChange = useCallback((v) => { setApiKey(v); lsSet('obitoKey', v); }, []);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const onKeyChange = useCallback((v) => {
+    setApiKey(v);
+    lsSet('obitoKey', v);
+  }, []);
+
+  // 3D perspective mouse tracking over topbar
+  const onTopbarMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    const dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    setTilt({
+      x: Math.max(-1, Math.min(1, dx)),
+      y: Math.max(-1, Math.min(1, dy))
+    });
+  };
+
+  const onTopbarLeave = () => {
+    setTilt({ x: 0, y: 0 });
+  };
+
+  // Touch / Finger swipe navigation across tabs
+  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
+
+  const onTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        time: Date.now()
+      };
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (!e.changedTouches || e.changedTouches.length === 0) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const dt = Date.now() - touchStartRef.current.time;
+
+    // Minimum 45px swipe, mostly horizontal, fast enough (<600ms)
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 600) {
+      const tabIds = TABS.map((t) => t.id);
+      const currIdx = tabIds.indexOf(activeTab);
+      if (currIdx !== -1) {
+        if (dx < 0 && currIdx < tabIds.length - 1) {
+          // Swipe Left -> Next Tab
+          setActiveTab(tabIds[currIdx + 1]);
+        } else if (dx > 0 && currIdx > 0) {
+          // Swipe Right -> Previous Tab
+          setActiveTab(tabIds[currIdx - 1]);
+        }
+      }
+    }
+  };
+
+  const dayStr = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div className="app">
-      <div className="cosmos" aria-hidden="true">
-        <span className="planet p1" /><span className="planet p2" /><span className="planet p3" />
-        <span className="stars s1" /><span className="stars s2" />
-      </div>
-      <div className="dimmer" aria-hidden="true" />
+    <div className="studio-app">
+      {/* ---------- Ultra-Premium Studio Top Bar with Frameless Living Logo ---------- */}
+      <header
+        className="studio-topbar"
+        onPointerMove={onTopbarMove}
+        onPointerLeave={onTopbarLeave}
+      >
+        {/* Left Segment: Brand */}
+        <div className="topbar-left">
+          <div className="studio-brand" onClick={() => setActiveTab('optimizer')}>
+            <span className="brand-name">OBITO STUDIO</span>
+          </div>
+        </div>
 
-      <MenuBar apiKey={apiKey} />
-      <div className="top-fade" aria-hidden="true" />
+        {/* Center Segment: Frameless 3D Living Monogram (At Mid) */}
+        <div className="topbar-center">
+          <button
+            type="button"
+            className="topbar-logo-btn"
+            style={{
+              transform: `perspective(360px) rotateY(${tilt.x * 14}deg) rotateX(${-tilt.y * 12}deg)`
+            }}
+            onClick={() => {
+              setActiveTab('optimizer');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            aria-label="OBITO STUDIO"
+          >
+            <Logo size={42} />
+          </button>
+        </div>
 
-      <main className="page">
-        <Terminal />
-        <Section id="optimizer" title="OBITO STUDIO — Optimizer" beam beamActive={busy}>
-          <Optimizer apiKey={apiKey} onKeyChange={onKeyChange} onBusy={setBusy} />
-        </Section>
-        <Section id="inspect" title="TikTok Inspector">
-          <Inspector apiKey={apiKey} />
-        </Section>
-        <Section id="library" title="Library — your videos">
-          <Library apiKey={apiKey} />
-        </Section>
-        <Section id="how" title="How it works"><Steps /></Section>
-        <Section id="features" title="What you get"><Features /></Section>
-        <Section id="faq" title="FAQ"><Faq /></Section>
-        <footer className="foot">OBITO STUDIO · your own server · no cloud, no card</footer>
+        {/* Right Segment: Access Key & Clock */}
+        <div className="topbar-right">
+          <button
+            type="button"
+            className={`key-badge-btn ${apiKey ? 'configured' : ''}`}
+            onClick={() => setShowKeyModal((v) => !v)}
+            title="Configure Server Access Key"
+          >
+            <span className="key-dot" />
+            <span>{apiKey ? 'Key Set' : 'Key'}</span>
+          </button>
+
+          <div className="studio-clock" aria-label="Local Time">
+            <span className="clock-day">{dayStr}</span>
+            <span className="clock-time">{timeStr}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Access Key Popover Modal */}
+      {showKeyModal && (
+        <div className="modal-backdrop" onClick={() => setShowKeyModal(false)}>
+          <div className="studio-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Server Access Token</span>
+              <button type="button" className="modal-close" onClick={() => setShowKeyModal(false)}>×</button>
+            </div>
+            <p className="modal-desc">
+              If your self-hosted Obito Studio instance requires authentication, enter your access token here.
+            </p>
+            <input
+              type="password"
+              className="studio-input"
+              placeholder="Enter server access token"
+              value={apiKey}
+              onChange={(e) => onKeyChange(e.target.value)}
+              autoFocus
+            />
+            <div className="modal-actions">
+              <button type="button" className="btn-studio primary" onClick={() => setShowKeyModal(false)}>
+                Save Token
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Main Workspace Viewport (with finger swipe support) ---------- */}
+      <main
+        className="studio-workspace"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {activeTab === 'optimizer' && (
+          <section className="workspace-view active optimizer-view">
+            <div className={`hero-banner ${busy ? 'busy-hidden-mobile' : ''}`}>
+              <h1 className="hero-headline">TikTok Lossless Video Master</h1>
+              <p className="hero-subline">Preserve native high FPS (60fps, 120fps+) &amp; HDR with zero TikTok compression.</p>
+            </div>
+
+            <Optimizer apiKey={apiKey} onKeyChange={onKeyChange} onBusy={setBusy} />
+          </section>
+        )}
+
+        {activeTab === 'inspect' && (
+          <section className="workspace-view active">
+            <div className="section-head">
+              <div className="head-badge">
+                <InspectIcon width={14} height={14} />
+                <span>TIKTOK INGESTION DIAGNOSTICS</span>
+              </div>
+              <h2 className="head-title">TikTok Video &amp; Codec Inspector</h2>
+              <p className="head-sub">
+                Audit any live TikTok video URL or local master clip against TikTok\'s high-FPS (60fps / 120fps) and HDR ingestion criteria.
+              </p>
+            </div>
+            <Inspector apiKey={apiKey} />
+          </section>
+        )}
+
+        {activeTab === 'library' && (
+          <section className="workspace-view active">
+            <div className="section-head">
+              <div className="head-badge">
+                <FilmIcon width={14} height={14} />
+                <span>SERVER STORAGE AUDIT</span>
+              </div>
+              <h2 className="head-title">Lossless Export Master Library</h2>
+              <p className="head-sub">
+                Review recently repackaged masters and cached uploads currently staged in local server memory.
+              </p>
+            </div>
+            <Library apiKey={apiKey} />
+          </section>
+        )}
+
+        {activeTab === 'architecture' && (
+          <section className="workspace-view active">
+            <div className="section-head">
+              <div className="head-badge">
+                <LayersIcon width={14} height={14} />
+                <span>TECHNICAL SPECIFICATIONS</span>
+              </div>
+              <h2 className="head-title">Engine Architecture &amp; Methodology</h2>
+              <p className="head-sub">
+                How Obito Studio preserves full 60/120fps motion fluidity and wide dynamic range without transcoding.
+              </p>
+            </div>
+
+            <div className="pillars-grid">
+              {ARCH_PILLARS.map(({ Icon, title, subtitle, desc }) => (
+                <div className="pillar-card" key={title}>
+                  <div className="pillar-header">
+                    <div className="pillar-icon">
+                      <Icon width={22} height={22} />
+                    </div>
+                    <div>
+                      <h3 className="pillar-title">{title}</h3>
+                      <span className="pillar-sub">{subtitle}</span>
+                    </div>
+                  </div>
+                  <p className="pillar-desc">{desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="workflow-section">
+              <h3 className="sub-title">Three-Phase Mastering Pipeline</h3>
+              <div className="workflow-grid">
+                {WORKFLOW_STEPS.map(({ step, name, detail }) => (
+                  <div className="workflow-card" key={step}>
+                    <span className="wf-step">{step}</span>
+                    <h4 className="wf-name">{name}</h4>
+                    <p className="wf-detail">{detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'faq' && (
+          <section className="workspace-view active">
+            <div className="section-head">
+              <div className="head-badge">
+                <HelpIcon width={14} height={14} />
+                <span>OPERATIONAL FAQ</span>
+              </div>
+              <h2 className="head-title">Frequently Asked Questions</h2>
+              <p className="head-sub">
+                Everything you need to know about timescale remuxing, bitrates, and privacy.
+              </p>
+            </div>
+
+            <div className="faq-container">
+              {FAQ_ITEMS.map(([q, a]) => (
+                <details className="faq-item" key={q}>
+                  <summary className="faq-question">
+                    <span>{q}</span>
+                    <ChevronIcon width={18} height={18} />
+                  </summary>
+                  <p className="faq-answer">{a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
-      <Dock />
+      {/* ---------- Studio Footer ---------- */}
+      <footer className="studio-footer">
+        <div className="footer-left">
+          <Logo size={20} />
+          <span>OBITO STUDIO · High-Performance Lossless Video Mastering Suite</span>
+        </div>
+        <div className="footer-right">
+          <span>Bit-for-Bit Stream Copy · 19200 Timescale · DOVI Profile 8.4</span>
+        </div>
+      </footer>
+
+      {/* ---------- iOS Style Glassmorphic Bottom Navigation Row ---------- */}
+      <nav className="ios-dock-wrap" aria-label="Studio Tools Menu">
+        <div className="ios-dock-bar">
+          {TABS.map(({ id, label, Icon }) => {
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`ios-dock-item ${active ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab(id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                aria-label={label}
+              >
+                <Icon width={16} height={16} />
+                <span className="dock-label">{label}</span>
+                {id === 'optimizer' && busy && <span className="dock-pulse" />}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
