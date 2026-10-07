@@ -7,7 +7,12 @@ import {
 import { probeLocalFile } from './localProbe.js';
 
 const MAX_BYTES = 600 * 1024 * 1024;
-const CHUNK = 8 * 1024 * 1024;
+// 1 MB chunks: small enough that no single PUT lives long enough for a relay
+// (Tailscale Funnel) or a flaky mobile link to cut it mid-body. 8 MB stalled at
+// chunk 4 on the Funnel path (phone test, 2026-10-07).
+const CHUNK = 1 * 1024 * 1024;
+const CHUNK_TIMEOUT_MS = 45 * 1000;   // a hung PUT aborts instead of hanging forever
+const CHUNK_RETRIES = 4;              // per chunk, with a fresh offset read between tries
 
 const MODES = [
   { id: 'hdr', label: 'FPS + Quality + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
@@ -295,42 +300,65 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       if (flags.current.cancel) return;
       if (flags.current.pause) { setPhase('paused'); return; }
 
-      const end = Math.min(offset + CHUNK, f.size);
-      const chunk = f.slice(offset, end);
-      const isLast = end === f.size;
       setPct((offset / f.size) * 100);
 
-      try {
-        const res = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhrRef.current = xhr;
-          xhr.open('PUT', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
-          if (keyRef.current) xhr.setRequestHeader('x-access-token', keyRef.current);
-          xhr.setRequestHeader('content-type', 'application/octet-stream');
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable && !flags.current.pause && !flags.current.cancel) {
-              setPct(((offset + e.loaded) / f.size) * 100);
+      let res = null;
+      for (let attempt = 0; attempt < CHUNK_RETRIES; attempt++) {
+        if (flags.current.cancel || flags.current.pause) break;
+        // Recomputed every attempt: a failed chunk can leave the server holding
+        // part of the body, and the refreshed offset decides the next slice.
+        const end = Math.min(offset + CHUNK, f.size);
+        const chunk = f.slice(offset, end);
+        const isLast = end === f.size;
+        try {
+          res = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhrRef.current = xhr;
+            xhr.open('PUT', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
+            if (keyRef.current) xhr.setRequestHeader('x-access-token', keyRef.current);
+            xhr.setRequestHeader('content-type', 'application/octet-stream');
+            xhr.timeout = CHUNK_TIMEOUT_MS;
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable && !flags.current.pause && !flags.current.cancel) {
+                setPct(((offset + e.loaded) / f.size) * 100);
+              }
+            };
+            xhr.onload = () => {
+              if (xhr.status === 401) return reject(new Error('KEY_NEEDED'));
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+              } else reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
+            };
+            xhr.onerror = () => reject(new Error('NET_ERR'));
+            xhr.ontimeout = () => reject(new Error('NET_TIMEOUT'));
+            xhr.onabort = () => resolve({ aborted: true });
+            xhr.send(chunk);
+          });
+          break;                       // chunk accepted
+        } catch (err) {
+          if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
+          if (attempt === CHUNK_RETRIES - 1) {
+            return fail('Upload interrupted. Check your connection.');
+          }
+          // The server may already hold part of it: re-read the offset and
+          // continue from wherever it really is (nothing is re-sent).
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          try {
+            const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
+            if (r.ok) {
+              const j = await r.json();
+              if (typeof j.bytesReceived === 'number') offset = j.bytesReceived;
             }
-          };
-          xhr.onload = () => {
-            if (xhr.status === 401) return reject(new Error('KEY_NEEDED'));
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
-            } else reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
-          };
-          xhr.onerror = () => reject(new Error('NET_ERR'));
-          xhr.onabort = () => resolve({ aborted: true });
-          xhr.send(chunk);
-        });
-
-        if (flags.current.cancel) return;
-        if (flags.current.pause) { setPhase('paused'); return; }
-        if (res.aborted) return;
-        offset = res.bytesReceived ?? end;
-      } catch (err) {
-        if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
-        return fail('Upload interrupted. Check your connection.');
+          } catch { /* keep the old offset and retry as-is */ }
+          if (flags.current.cancel || flags.current.pause) break;
+        }
       }
+
+      if (flags.current.cancel) return;
+      if (flags.current.pause) { setPhase('paused'); return; }
+      if (!res) continue;              // paused/refreshed — re-enter the loop
+      if (res.aborted) return;
+      offset = res.bytesReceived ?? Math.min(offset + CHUNK, f.size);
     }
 
     setPct(100);
