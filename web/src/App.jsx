@@ -125,37 +125,141 @@ export default function App() {
     setTilt({ x: 0, y: 0 });
   };
 
-  // Touch / Finger swipe navigation across tabs
-  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
+  // Ref to the dock container and active pill slider
+  const dockBarRef = useRef(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0, ready: false });
+  const [dragOffset, setDragOffset] = useState(0);
 
-  const onTouchStart = (e) => {
+  // Measure and align sliding glass pill indicator
+  const updatePill = useCallback(() => {
+    if (!dockBarRef.current) return;
+    const activeBtn = dockBarRef.current.querySelector(`.ios-dock-item[data-tab-id="${activeTab}"]`);
+    if (activeBtn) {
+      setIndicatorStyle({
+        left: activeBtn.offsetLeft,
+        width: activeBtn.offsetWidth,
+        ready: true
+      });
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    updatePill();
+    window.addEventListener('resize', updatePill);
+    return () => window.removeEventListener('resize', updatePill);
+  }, [updatePill]);
+
+  // Touch / Finger swipe navigation ONLY on the bottom dock / menu panel
+  // STRICT RULE: Exactly ONE step per swipe!
+  const dockTouchRef = useRef({
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    hasSwiped: false,
+    initialTab: 'optimizer'
+  });
+  const suppressClickRef = useRef(false);
+
+  const switchTabWithHaptic = useCallback((tabId) => {
+    setActiveTab((prev) => {
+      if (prev !== tabId) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(12); } catch { /* ignore */ }
+        }
+        return tabId;
+      }
+      return prev;
+    });
+  }, []);
+
+  const onDockTouchStart = (e) => {
     if (e.touches && e.touches.length === 1) {
-      touchStartRef.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-        time: Date.now()
+      const t = e.touches[0];
+      dockTouchRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startTime: Date.now(),
+        hasSwiped: false,
+        initialTab: activeTab
       };
     }
   };
 
-  const onTouchEnd = (e) => {
-    if (!e.changedTouches || e.changedTouches.length === 0) return;
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - touchStartRef.current.x;
-    const dy = touch.clientY - touchStartRef.current.y;
-    const dt = Date.now() - touchStartRef.current.time;
+  const onDockTouchMove = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    const dx = t.clientX - dockTouchRef.current.startX;
+    const dy = t.clientY - dockTouchRef.current.startY;
 
-    // Minimum 45px swipe, mostly horizontal, fast enough (<600ms)
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 600) {
-      const tabIds = TABS.map((t) => t.id);
-      const currIdx = tabIds.indexOf(activeTab);
-      if (currIdx !== -1) {
-        if (dx < 0 && currIdx < tabIds.length - 1) {
-          // Swipe Left -> Next Tab
-          setActiveTab(tabIds[currIdx + 1]);
-        } else if (dx > 0 && currIdx > 0) {
-          // Swipe Right -> Previous Tab
-          setActiveTab(tabIds[currIdx - 1]);
+    // Primarily horizontal swipe
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      // Natural physical spring elasticity on the dock bar
+      const elasticity = Math.sign(dx) * Math.min(18, Math.pow(Math.abs(dx), 0.72));
+      setDragOffset(elasticity);
+
+      // Trigger EXACTLY ONE STEP per swipe as soon as the threshold (26px) is reached
+      if (!dockTouchRef.current.hasSwiped && Math.abs(dx) >= 26) {
+        dockTouchRef.current.hasSwiped = true;
+        suppressClickRef.current = true;
+
+        const tabIds = TABS.map((tab) => tab.id);
+        const currIdx = tabIds.indexOf(dockTouchRef.current.initialTab);
+        if (currIdx !== -1) {
+          if (dx > 0 && currIdx < tabIds.length - 1) {
+            // Swipe Right -> Step 1 forward to the RIGHT
+            switchTabWithHaptic(tabIds[currIdx + 1]);
+          } else if (dx < 0 && currIdx > 0) {
+            // Swipe Left -> Step 1 backward to the LEFT
+            switchTabWithHaptic(tabIds[currIdx - 1]);
+          } else {
+            // Boundary reached -> gentle haptic buzz
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              try { navigator.vibrate(8); } catch {}
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const onDockTouchEnd = (e) => {
+    setDragOffset(0); // Snap dock bar back to center smoothly
+
+    if (dockTouchRef.current.hasSwiped) {
+      suppressClickRef.current = true;
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 300);
+      return;
+    }
+
+    // Quick flick check for fast releases under 300ms
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - dockTouchRef.current.startX;
+      const dy = t.clientY - dockTouchRef.current.startY;
+      const dt = Date.now() - dockTouchRef.current.startTime;
+
+      if (Math.abs(dx) >= 22 && Math.abs(dx) > Math.abs(dy) && dt < 300) {
+        suppressClickRef.current = true;
+        setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 300);
+
+        const tabIds = TABS.map((tab) => tab.id);
+        const currIdx = tabIds.indexOf(dockTouchRef.current.initialTab);
+        if (currIdx !== -1) {
+          if (dx > 0 && currIdx < tabIds.length - 1) {
+            // Swipe Right -> Step 1 to the RIGHT
+            switchTabWithHaptic(tabIds[currIdx + 1]);
+          } else if (dx < 0 && currIdx > 0) {
+            // Swipe Left -> Step 1 to the LEFT
+            switchTabWithHaptic(tabIds[currIdx - 1]);
+          }
         }
       }
     }
@@ -244,14 +348,10 @@ export default function App() {
         </div>
       )}
 
-      {/* ---------- Main Workspace Viewport (with finger swipe support) ---------- */}
-      <main
-        className="studio-workspace"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
+      {/* ---------- Main Workspace Viewport ---------- */}
+      <main className="studio-workspace">
         {activeTab === 'optimizer' && (
-          <section className="workspace-view active optimizer-view">
+          <section className="workspace-view active optimizer-view" key="optimizer">
             <div className={`hero-banner ${busy ? 'busy-hidden-mobile' : ''}`}>
               <h1 className="hero-headline">TikTok Lossless Video Master</h1>
               <p className="hero-subline">Preserve native high FPS (60fps, 120fps+) &amp; HDR with zero TikTok compression.</p>
@@ -262,7 +362,7 @@ export default function App() {
         )}
 
         {activeTab === 'inspect' && (
-          <section className="workspace-view active">
+          <section className="workspace-view active" key="inspect">
             <div className="section-head">
               <div className="head-badge">
                 <InspectIcon width={14} height={14} />
@@ -278,7 +378,7 @@ export default function App() {
         )}
 
         {activeTab === 'library' && (
-          <section className="workspace-view active">
+          <section className="workspace-view active" key="library">
             <div className="section-head">
               <div className="head-badge">
                 <FilmIcon width={14} height={14} />
@@ -294,7 +394,7 @@ export default function App() {
         )}
 
         {activeTab === 'architecture' && (
-          <section className="workspace-view active">
+          <section className="workspace-view active" key="architecture">
             <div className="section-head">
               <div className="head-badge">
                 <LayersIcon width={14} height={14} />
@@ -339,7 +439,7 @@ export default function App() {
         )}
 
         {activeTab === 'faq' && (
-          <section className="workspace-view active">
+          <section className="workspace-view active" key="faq">
             <div className="section-head">
               <div className="head-badge">
                 <HelpIcon width={14} height={14} />
@@ -377,25 +477,56 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ---------- iOS Style Glassmorphic Bottom Navigation Row ---------- */}
-      <nav className="ios-dock-wrap" aria-label="Studio Tools Menu">
-        <div className="ios-dock-bar">
+      {/* ---------- iOS Vision Clear Glass Bottom Dock ---------- */}
+      <nav
+        className="ios-dock-wrap"
+        aria-label="Studio Tools Menu"
+        onTouchStart={onDockTouchStart}
+        onTouchMove={onDockTouchMove}
+        onTouchEnd={onDockTouchEnd}
+        onTouchCancel={() => setDragOffset(0)}
+      >
+        <div
+          className="ios-dock-bar"
+          ref={dockBarRef}
+          style={{
+            transform: `translateX(${dragOffset}px)`
+          }}
+        >
+          {/* Animated Clear Glass Sliding Pill Lens (Uniform size across all tabs) */}
+          {indicatorStyle.ready && (
+            <div
+              className="ios-dock-pill-slider"
+              style={{
+                transform: `translateX(${indicatorStyle.left}px)`,
+                width: `${indicatorStyle.width}px`
+              }}
+            />
+          )}
+
           {TABS.map(({ id, label, Icon }) => {
             const active = activeTab === id;
             return (
               <button
                 key={id}
                 type="button"
+                data-tab-id={id}
                 className={`ios-dock-item ${active ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab(id);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                onClick={(e) => {
+                  if (suppressClickRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
+                  switchTabWithHaptic(id);
                 }}
                 aria-label={label}
               >
-                <Icon width={16} height={16} />
+                <div className="dock-icon-wrap">
+                  <Icon width={21} height={21} />
+                  {id === 'optimizer' && busy && <span className="dock-pulse" />}
+                </div>
                 <span className="dock-label">{label}</span>
-                {id === 'optimizer' && busy && <span className="dock-pulse" />}
               </button>
             );
           })}

@@ -152,18 +152,143 @@ const writeMap = (m) => lsSet('obitoUploads', JSON.stringify(m));
 
 /* ---------- Sculpted Ultra-Premium Mode Toggle ---------- */
 function ModeSelect({ value, onChange }) {
+  const modeGroupRef = useRef(null);
+  const [modePill, setModePill] = useState({ left: 0, width: 0, ready: false });
+
+  const updateModePill = useCallback(() => {
+    if (!modeGroupRef.current) return;
+    const activeBtn = modeGroupRef.current.querySelector(`.mode-toggle-btn[data-mode-id="${value}"]`);
+    if (activeBtn) {
+      setModePill({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth, ready: true });
+    }
+  }, [value]);
+
+  useEffect(() => {
+    updateModePill();
+    window.addEventListener('resize', updateModePill);
+    return () => window.removeEventListener('resize', updateModePill);
+  }, [updateModePill]);
+
+  const touchRef = useRef({ startX: 0, startY: 0, startTime: 0, hasSwiped: false, initialMode: 'hdr' });
+  const suppressClickRef = useRef(false);
+
+  const switchModeWithHaptic = useCallback((newMode) => {
+    if (newMode !== value) {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(10); } catch {}
+      onChange(newMode);
+    }
+  }, [value, onChange]);
+
+  const onModeTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      const t = e.touches[0];
+      touchRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startTime: Date.now(),
+        hasSwiped: false,
+        initialMode: value
+      };
+    }
+  };
+
+  const onModeTouchMove = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchRef.current.startX;
+    const dy = t.clientY - touchRef.current.startY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (!touchRef.current.hasSwiped && Math.abs(dx) >= 28) {
+        touchRef.current.hasSwiped = true;
+        suppressClickRef.current = true;
+
+        const modeIds = MODES.map((m) => m.id);
+        const currIdx = modeIds.indexOf(touchRef.current.initialMode);
+        if (currIdx !== -1) {
+          if (dx > 0 && currIdx < modeIds.length - 1) {
+            // Swipe Right -> Step forward to the right
+            switchModeWithHaptic(modeIds[currIdx + 1]);
+          } else if (dx < 0 && currIdx > 0) {
+            // Swipe Left -> Step backward to the left
+            switchModeWithHaptic(modeIds[currIdx - 1]);
+          } else {
+            if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(6); } catch {}
+          }
+        }
+      }
+    }
+  };
+
+  const onModeTouchEnd = (e) => {
+    if (touchRef.current.hasSwiped) {
+      suppressClickRef.current = true;
+      setTimeout(() => { suppressClickRef.current = false; }, 350);
+      return;
+    }
+
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchRef.current.startX;
+      const dy = t.clientY - touchRef.current.startY;
+      const dt = Date.now() - touchRef.current.startTime;
+
+      if (Math.abs(dx) >= 22 && Math.abs(dx) > Math.abs(dy) * 1.1 && dt < 320) {
+        suppressClickRef.current = true;
+        setTimeout(() => { suppressClickRef.current = false; }, 350);
+
+        const modeIds = MODES.map((m) => m.id);
+        const currIdx = modeIds.indexOf(touchRef.current.initialMode);
+        if (currIdx !== -1) {
+          if (dx > 0 && currIdx < modeIds.length - 1) {
+            switchModeWithHaptic(modeIds[currIdx + 1]);
+          } else if (dx < 0 && currIdx > 0) {
+            switchModeWithHaptic(modeIds[currIdx - 1]);
+          }
+        }
+      }
+    }
+  };
+
   return (
-    <div className="mode-toggle-group" role="radiogroup" aria-label="Optimization mode">
+    <div
+      className="mode-toggle-group"
+      ref={modeGroupRef}
+      role="radiogroup"
+      aria-label="Optimization mode"
+      onTouchStart={onModeTouchStart}
+      onTouchMove={onModeTouchMove}
+      onTouchEnd={onModeTouchEnd}
+    >
+      {/* Animated Clear Glass Sliding Pill */}
+      {modePill.ready && (
+        <div
+          className="mode-toggle-pill-slider"
+          style={{
+            transform: `translateX(${modePill.left}px)`,
+            width: `${modePill.width}px`
+          }}
+        />
+      )}
+
       {MODES.map(({ id, label, badge, Icon }) => {
         const active = value === id;
         return (
           <button
             key={id}
             type="button"
+            data-mode-id={id}
             role="radio"
             aria-checked={active}
             className={`mode-toggle-btn ${active ? 'active' : ''} mode-${id}`}
-            onClick={() => onChange(id)}
+            onClick={(e) => {
+              if (suppressClickRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
+              switchModeWithHaptic(id);
+            }}
           >
             <div className="mode-btn-content">
               <Icon width={16} height={16} className="mode-btn-icon" />

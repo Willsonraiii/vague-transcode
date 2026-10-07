@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckIcon, CloseIcon, InspectIcon, UploadIcon, FilmIcon,
   SearchIcon, SparkIcon, AlertTriangleIcon, LightningIcon
@@ -188,24 +188,156 @@ export default function Inspector({ apiKey }) {
 
   const busy = phase === 'linking' || phase === 'sending';
 
+  const inspTabsRef = useRef(null);
+  const [inspPill, setInspPill] = useState({ left: 0, width: 0, ready: false });
+
+  const updateInspPill = useCallback(() => {
+    if (!inspTabsRef.current) return;
+    const activeBtn = inspTabsRef.current.querySelector(`.insp-tab[data-insp-tab="${tab}"]`);
+    if (activeBtn) {
+      setInspPill({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth, ready: true });
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    updateInspPill();
+    window.addEventListener('resize', updateInspPill);
+    return () => window.removeEventListener('resize', updateInspPill);
+  }, [updateInspPill]);
+
+  // Strict 1-step per swipe for Inspector tabs
+  const inspTouchRef = useRef({ startX: 0, startY: 0, startTime: 0, hasSwiped: false, initialTab: 'link' });
+  const suppressInspClickRef = useRef(false);
+
+  const switchInspTabWithHaptic = useCallback((newTab) => {
+    setTab((prev) => {
+      if (prev !== newTab) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(10); } catch {}
+        }
+        return newTab;
+      }
+      return prev;
+    });
+  }, []);
+
+  const onInspTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      const t = e.touches[0];
+      inspTouchRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startTime: Date.now(),
+        hasSwiped: false,
+        initialTab: tab
+      };
+    }
+  };
+
+  const onInspTouchMove = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    const dx = t.clientX - inspTouchRef.current.startX;
+    const dy = t.clientY - inspTouchRef.current.startY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Trigger exactly 1 step when threshold (28px) reached
+      if (!inspTouchRef.current.hasSwiped && Math.abs(dx) >= 28) {
+        inspTouchRef.current.hasSwiped = true;
+        suppressInspClickRef.current = true;
+
+        if (dx > 0 && inspTouchRef.current.initialTab === 'link') {
+          // Swipe Right -> switch to file (to the right)
+          switchInspTabWithHaptic('file');
+        } else if (dx < 0 && inspTouchRef.current.initialTab === 'file') {
+          // Swipe Left -> switch to link (to the left)
+          switchInspTabWithHaptic('link');
+        } else {
+          if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(6); } catch {}
+        }
+      }
+    }
+  };
+
+  const onInspTouchEnd = (e) => {
+    if (inspTouchRef.current.hasSwiped) {
+      suppressInspClickRef.current = true;
+      setTimeout(() => { suppressInspClickRef.current = false; }, 350);
+      return;
+    }
+
+    // Quick flick check
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - inspTouchRef.current.startX;
+      const dy = t.clientY - inspTouchRef.current.startY;
+      const dt = Date.now() - inspTouchRef.current.startTime;
+
+      if (Math.abs(dx) >= 22 && Math.abs(dx) > Math.abs(dy) * 1.1 && dt < 320) {
+        suppressInspClickRef.current = true;
+        setTimeout(() => { suppressInspClickRef.current = false; }, 350);
+
+        if (dx > 0 && inspTouchRef.current.initialTab === 'link') {
+          switchInspTabWithHaptic('file');
+        } else if (dx < 0 && inspTouchRef.current.initialTab === 'file') {
+          switchInspTabWithHaptic('link');
+        }
+      }
+    }
+  };
+
   return (
     <div className="insp">
-      <div className="insp-tabs" role="tablist">
+      <div
+        className="insp-tabs"
+        ref={inspTabsRef}
+        role="tablist"
+        onTouchStart={onInspTouchStart}
+        onTouchMove={onInspTouchMove}
+        onTouchEnd={onInspTouchEnd}
+      >
+        {/* Animated Clear Glass Sliding Pill */}
+        {inspPill.ready && (
+          <div
+            className="insp-tab-pill-slider"
+            style={{
+              transform: `translateX(${inspPill.left}px)`,
+              width: `${inspPill.width}px`
+            }}
+          />
+        )}
+
         <button
           type="button"
           role="tab"
+          data-insp-tab="link"
           aria-selected={tab === 'link'}
           className={'insp-tab' + (tab === 'link' ? ' active' : '')}
-          onClick={() => setTab('link')}
+          onClick={(e) => {
+            if (suppressInspClickRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            switchInspTabWithHaptic('link');
+          }}
         >
           <SearchIcon width={16} height={16} /> Inspect TikTok Link
         </button>
         <button
           type="button"
           role="tab"
+          data-insp-tab="file"
           aria-selected={tab === 'file'}
           className={'insp-tab' + (tab === 'file' ? ' active' : '')}
-          onClick={() => setTab('file')}
+          onClick={(e) => {
+            if (suppressInspClickRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            switchInspTabWithHaptic('file');
+          }}
         >
           <FilmIcon width={16} height={16} /> Inspect Video File
         </button>
@@ -235,8 +367,9 @@ export default function Inspector({ apiKey }) {
               inputMode="url"
               autoComplete="off"
             />
-            <button type="button" className="btn glass primary" disabled={busy} onClick={runLink}>
-              <InspectIcon width={18} height={18} /> Inspect Link
+            <button type="button" className="btn-insp-run" disabled={busy} onClick={runLink}>
+              <InspectIcon width={16} height={16} />
+              <span>{busy ? 'Inspecting…' : 'Inspect Link'}</span>
             </button>
           </div>
         </>
@@ -252,18 +385,26 @@ export default function Inspector({ apiKey }) {
           }}
         >
           {phase === 'sending' ? (
-            <>
-              <b>Analyzing {fileName}…</b>
-              <div className="progress"><i style={{ width: Math.max(3, pct) + '%' }} /></div>
-              <span className="insp-sub">Video is analyzed in memory and immediately discarded.</span>
-            </>
+            <div className="insp-analyzing">
+              <div className="insp-analyzing-head">
+                <span className="terminal-indicator pulsing" />
+                <b>Analyzing {fileName}…</b>
+              </div>
+              <div className="progress-track-bar">
+                <div className="progress-fill-bar" style={{ width: `${Math.max(4, pct)}%` }} />
+              </div>
+              <span className="insp-sub">Video container &amp; bitstreams probed in-memory.</span>
+            </div>
           ) : (
             <>
-              <span className="insp-ico"><InspectIcon width={28} height={28} /></span>
-              <b>Drop a video file here to inspect</b>
-              <span className="insp-sub">Inspect camera roll clips or videos re-downloaded from TikTok</span>
-              <button type="button" className="btn glass soft" onClick={() => input.current?.click()}>
-                <UploadIcon width={18} height={18} /> Choose Video File
+              <div className="insp-drop-icon">
+                <InspectIcon width={28} height={28} />
+              </div>
+              <b className="insp-drop-title">Drop a video file to inspect</b>
+              <span className="insp-sub">Audit master camera clips or videos downloaded from TikTok</span>
+              <button type="button" className="btn-insp-choose" onClick={() => input.current?.click()}>
+                <UploadIcon width={16} height={16} />
+                <span>Choose video file</span>
               </button>
             </>
           )}
