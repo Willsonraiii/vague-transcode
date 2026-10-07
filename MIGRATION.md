@@ -1,6 +1,6 @@
 # OBITO STUDIO — The Project Book
 
-Last updated: 2026-10-06. **Read this file first. Then read COMMANDS.md.** That is enough to work safely.
+Last updated: 2026-10-07. **Read this file first. Then read COMMANDS.md.** That is enough to work safely.
 Older docs in the repo (`HANDOFF.md`, `NEXT-AGENT-PROMPT.md`, `ONLINE-SERVICE-PLAN.md`) are history logs. Read them only if you need old background. If they disagree with this book, **this book wins**.
 
 Repo: https://github.com/Willsonraiii/vague-transcode — branch `online-rtx-service`.
@@ -16,11 +16,11 @@ It runs on the user's own computers. The phone reaches it through Tailscale (fre
 
 | Machine | Role | Repo folder | Node / FFmpeg | Tailscale IP | https address |
 |---|---|---|---|---|---|
-| Windows desktop `desktop-kndp51g` | current server | `%USERPROFILE%\Desktop\vague-transcode-4k-test` | 24.19 / 9.0.2 | 100.96.112.67 | https://desktop-kndp51g.tail5e494c.ts.net |
-| Linux laptop `willson-inspiron-15-3552` | **future main server** | `~/Desktop/vague-transcode` | 24.21 / 6.1.1 | 100.91.23.41 | https://willson-inspiron-15-3552.tail5e494c.ts.net |
+| Windows desktop `desktop-kndp51g` | **localhost only** (fast disk-to-disk runs) | `%USERPROFILE%\Desktop\vague-transcode-4k-test` | 24.19 / 9.0.2 | 100.96.112.67 | funnel OFF |
+| Linux laptop `willson-inspiron-15-3552` | **the phone's server (main)** | `~/Desktop/vague-transcode` | 24.21 / 6.1.1 | 100.91.23.41 | https://willson-inspiron-15-3552.tail5e494c.ts.net (funnel ON) |
 | iPhone 12 | client only | — | — | 100.83.123.40 | — |
 
-Both PCs may run the server at the same time — the phone simply opens the URL of the machine that is awake.
+**Only ONE machine runs a public funnel at a time.** Two funnels (both PCs public) broke phone uploads on 7 Oct: every attempt died with "Upload interrupted". Linux funnel ON, Windows funnel OFF. Windows is reached by `http://localhost:3005` on that PC only.
 Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 
 ## 3. The parts (simple map)
@@ -48,7 +48,7 @@ Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 4. Never claim TikTok success until the user confirms it in TikTok Studio.
 5. Mode buttons show only "FPS + Quality + HDR" and "FPS + Quality" — no descriptions, no Dolby text.
 6. Flat colors everywhere; gradients only on buttons. Logo = flat planet-ring "O".
-7. Free only, no credit card. Tailscale **serve** yes, Tailscale **funnel** no.
+7. Free only, no credit card. Tailscale **funnel** yes, but **on one machine only** (Linux) and with a long access key — funnel is public internet.
 
 ## 5. Status — what is done (2026-10-06)
 
@@ -57,15 +57,17 @@ Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 - The startup crash was fixed and pushed (`ff095ca`): removed two imports of files that never existed, removed two duplicate Wi-Fi routes, kept one working inline route. Server boots clean now.
 - Windows firewall rule added (TCP 3005 inbound) — phone can now reach `http://100.96.112.67:3005`.
 - `tailscale serve --bg 3005` running on Windows — phone can use the https address.
-- Check-before-upload details windows, Library, live pipeline terminal and the access-key lockout are pushed (`59e3649`, 5 Oct). **Windows, Linux and GitHub are all on `59e3649`.**
+- Check-before-upload details windows, Library, live pipeline terminal and the access-key lockout are pushed (`59e3649`, 5 Oct).
+- Phone uploads fixed (`5ab1ab2`, 7 Oct): chunks 8 MB -> **1 MB**, 45 s timeout per chunk, up to 4 retries with a re-read offset — a hung chunk is continued, not restarted. **Restart the server and hard-reload the phone page after any bundle change.**
+- Windows funnel turned off (7 Oct) — Linux is the single public door for the phone.
 - Two standalone tools live on the **Windows Desktop** (deliberately NOT in the repo):
   - `check-optimized.mjs` — read-only output checker. Names the variant (RTX x2 timing / timescale method / container-only) and PASS/FAILs the invariants (frame count kept, stts regular, declared fps, timescale 19200, movie 1000, 2 audio tracks). Pure Node, no ffmpeg. Copy to `~/Desktop` on Linux.
   - `optimize-keep-fps.mjs` — lossless remux that leaves the **declared fps alone** (the RTX pipeline halves it on purpose: 60 → 30). `--fps-patch auto` restores the half-fps method when wanted; `--keep-dv` keeps DV. Best run from the repo root (it imports `lib/remux.js`).
 
 ## 6. To-do (in order)
 
-1. **Check the fps update actually reached GitHub**: on Linux `git fetch origin` then `git log origin/online-rtx-service..HEAD --oneline` — anything listed is committed but never pushed.
-2. **Linux laptop becomes the main server**: pull the repo, `npm install`, start server, `tailscale serve --bg 3005`, create the Linux launcher (COMMANDS.md section L4).
+1. **Pull on Linux**: `cd ~/Desktop/vague-transcode && git pull --ff-only origin online-rtx-service` (it is behind — GitHub has `5ab1ab2`).
+2. **Linux launcher**: COMMANDS.md section L4 paste-block, so the laptop server starts with one double-click.
 3. **A/B the keep-fps output**: same clip through the normal (half-fps) path and through `optimize-keep-fps.mjs`, post both the same way, compare in "Did it survive?".
 4. **Real video test in the new UI** (from the phone: pick from Files app, not Photos), download, post, confirm HDR in TikTok Studio.
 5. Optional: remove the Cloudflare analytics script from the unused old root `index.html`.
@@ -84,6 +86,10 @@ Windows terminal = PowerShell 5 (no `&&`). Linux terminal = bash.
 - **A bundle merge is not a sync.** After `git fetch <bundle>` + merge on any machine, run `git push origin online-rtx-service` immediately and keep the `.b64` bundle until the push is confirmed on GitHub. What happened once (5 Oct): the Linux merge was never pushed, so Windows could not see it; fixing it needed a force-push on Linux and a `git reset --hard origin/online-rtx-service` on Windows.
 - Before assuming work is lost on Windows: `git log -1 --format="%h %s"` and compare with `git ls-remote origin online-rtx-service`. GitHub is the meeting point — a commit that exists only locally on one machine is invisible to the other.
 - Windows was moved to GitHub's tip with `git reset --hard` on 2026-10-06 and the working tree was clean before it. Only do that with a clean tree.
+- **One public funnel only** (Linux). A second funnel on Windows made the phone hit whichever server answered first; uploads then failed with "Upload interrupted" while upload data piled up in `uploads/` on both PCs. `tailscale funnel --https=443 off` on the machine that should not be public.
+- **Big videos (100 MB+): optimize from the PC browser on `http://localhost:3005`**, not from the phone. Localhost is disk-to-disk and takes seconds; phone -> funnel uploads of that size have repeatedly stalled. Phone is for small clips / when away from the machines.
+- **`EADDRINUSE`** means a second server was started while one was already listening. One server at a time: `netstat -ano | findstr ":3005 "`, kill extras, then start once.
+- **The server does not log upload chunks.** To watch an upload, watch the folder: `Get-ChildItem "...\uploads" -Recurse -File | Measure-Object Length -Sum` (run twice, compare).
 
 ## 8. Switching to a new agent (never lose the project)
 
