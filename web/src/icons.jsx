@@ -15,6 +15,31 @@ export const FpsIcon = (p) => (
 export const KeyIcon = (p) => (
   <svg {...base} {...p}><circle cx="8" cy="15" r="3.5" /><path d="m10.5 12.5 8-8M15.5 7.5l2.5 2.5" /></svg>
 );
+export const PremiumKeyIcon = (p) => (
+  <svg
+    width={16}
+    height={16}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    className="premium-key-svg"
+    {...p}
+  >
+    <defs>
+      <linearGradient id="premKeyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#fef08a" />
+        <stop offset="50%" stopColor="#eab308" />
+        <stop offset="100%" stopColor="#ca8a04" />
+      </linearGradient>
+    </defs>
+    <circle cx="7.5" cy="15.5" r="4.8" stroke="url(#premKeyGrad)" strokeWidth="2.2" />
+    <circle cx="7.5" cy="15.5" r="2" stroke="url(#premKeyGrad)" strokeWidth="1.2" opacity="0.7" />
+    <path d="M11 12L20 3" stroke="url(#premKeyGrad)" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M16.5 6.5L19.5 9.5" stroke="url(#premKeyGrad)" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M7 4L7.8 5.8L9.6 6.6L7.8 7.4L7 9.2L6.2 7.4L4.4 6.6L6.2 5.8Z" fill="#fde047" opacity="0.95" />
+  </svg>
+);
 export const CheckIcon = (p) => (
   <svg {...base} {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
 );

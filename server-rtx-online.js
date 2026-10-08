@@ -582,7 +582,7 @@ app.get('/api/uploads/:id', async (req, res) => {
   if (!validJobId(req.params.id)) return res.status(400).json({ error: 'Bad upload id.' });
   const up = await readUpload(req.params.id);
   if (!up) return res.status(404).json({ error: 'Unknown upload.' });
-  res.json({ id: up.id, name: up.name, size: up.size, received: up.received });
+  res.json({ id: up.id, name: up.name, size: up.size, received: up.received, bytesReceived: up.received });
 });
 
 app.put('/api/uploads/:id', async (req, res) => {
@@ -594,24 +594,29 @@ app.put('/api/uploads/:id', async (req, res) => {
   if (!Number.isInteger(offset) || offset !== up.received) {
     return res.status(409).json({ error: 'Offset mismatch.', received: up.received });
   }
-  const len = Number(req.headers['content-length']);
-  if (!Number.isFinite(len) || len < 1 || len > MAX_CHUNK || offset + len > up.size) {
+  const rawLen = req.headers['content-length'];
+  const expectedLen = rawLen !== undefined ? Number(rawLen) : null;
+  if (expectedLen !== null && (!Number.isFinite(expectedLen) || expectedLen < 1 || expectedLen > MAX_CHUNK || offset + expectedLen > up.size)) {
     return res.status(400).json({ error: 'Bad chunk size.' });
   }
-  if (uploadsBusy.has(id)) return res.status(409).json({ error: 'Chunk already in progress.', received: up.received });
+  if (uploadsBusy.has(id)) return res.status(409).json({ error: 'Chunk already in progress.', received: up.received, bytesReceived: up.received });
   uploadsBusy.add(id);
   const p = uploadPaths(id);
   try {
     await pipeline(req, createWriteStream(p.part));
     const st = await stat(p.part);
-    if (st.size !== len) throw new Error('short chunk');
+    const actualLen = st.size;
+    if (actualLen < 1 || actualLen > MAX_CHUNK || offset + actualLen > up.size) {
+      throw new Error('invalid chunk size');
+    }
+    if (expectedLen !== null && actualLen !== expectedLen) throw new Error('short chunk');
     await pipeline(createReadStream(p.part), createWriteStream(p.data, { flags: 'a' }));
     const now = new Date();
     await import('node:fs/promises').then(({ utimes }) => utimes(p.meta, now, now)).catch(() => {});
-    if (!res.headersSent) res.json({ received: offset + len });
+    if (!res.headersSent) res.json({ received: offset + actualLen, bytesReceived: offset + actualLen });
   } catch {
     const cur = await readUpload(id);
-    if (!res.headersSent && !res.destroyed) res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0 });
+    if (!res.headersSent && !res.destroyed) res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0, bytesReceived: cur ? cur.received : 0 });
   } finally {
     uploadsBusy.delete(id);
     await rm(p.part, { force: true }).catch(() => {});

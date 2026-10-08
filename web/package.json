@@ -8,14 +8,26 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.4.0",
     "border-beam": "^1.4.1",
     "bot-avatars": "^0.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^14.0.0",
+    "lucide-react": "^1.53.0",
+    "metal-fx": "^2.0.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "thinking-orbs": "^0.3.2"
+    "tailwind-merge": "^3.7.0",
+    "thinking-orbs": "^0.3.2",
+    "three": "^0.186.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.29",
+    "tailwindcss": "^4.3.3",
     "vite": "^5.4.11"
   }
 }

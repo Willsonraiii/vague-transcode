@@ -3,10 +3,14 @@ import Logo from './Logo.jsx';
 import Optimizer from './Optimizer.jsx';
 import Inspector from './Inspector.jsx';
 import Library from './Library.jsx';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 import {
   ChevronIcon, FpsIcon, HdrIcon, HelpIcon,
-  InspectIcon, LayersIcon, LightningIcon, ShieldIcon, SparkIcon, FilmIcon
+  InspectIcon, LayersIcon, LightningIcon, ShieldIcon, SparkIcon, FilmIcon,
+  PremiumKeyIcon
 } from './icons.jsx';
+import { ShutterText } from '@/components/ui/hero-shutter-text.jsx';
+import { AnimatedText } from '@/components/ui/animated-text.jsx';
 
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
@@ -92,6 +96,29 @@ const FAQ_ITEMS = [
   ]
 ];
 
+const HERO_MESSAGES = [
+  {
+    title: 'TIKTOK LOSSLESS MASTER',
+    sub: 'Preserve native high FPS (60fps, 120fps+) & HDR with zero TikTok compression.'
+  },
+  {
+    title: '60FPS NATIVE FLUIDITY',
+    sub: 'Never let TikTok downgrade your high frame-rate mobile edits to 30fps.'
+  },
+  {
+    title: '100% BIT-FOR-BIT LOSSLESS',
+    sub: 'Pure stream-copy remuxing — video packets and audio streams stay untouched.'
+  },
+  {
+    title: 'APPLE HDR & DOLBY VISION',
+    sub: 'Original 10-bit color gamut intact for crystal-clear smartphone playback.'
+  },
+  {
+    title: '19200 TIMESCALE REMUX',
+    sub: 'Timescale container structure engineered specifically for TikTok ingestion.'
+  }
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('optimizer'); // optimizer | inspect | library | architecture | faq
   const [apiKey, setApiKey] = useState(() => lsGet('obitoKey') || '');
@@ -99,6 +126,15 @@ export default function App() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [now, setNow] = useState(() => new Date());
+  const [heroMsgIndex, setHeroMsgIndex] = useState(0);
+  const [brandKey, setBrandKey] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroMsgIndex((prev) => (prev + 1) % HERO_MESSAGES.length);
+    }, 4800);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -131,17 +167,22 @@ export default function App() {
   const [dragOffset, setDragOffset] = useState(0);
 
   // Measure and align sliding glass pill indicator
+  const [hoveredTab, setHoveredTab] = useState(null);
+
+  // Measure and align sliding glass pill indicator
   const updatePill = useCallback(() => {
     if (!dockBarRef.current) return;
-    const activeBtn = dockBarRef.current.querySelector(`.ios-dock-item[data-tab-id="${activeTab}"]`);
+    const targetTab = hoveredTab || activeTab;
+    const activeBtn = dockBarRef.current.querySelector(`.ios-dock-item[data-tab-id="${targetTab}"]`);
     if (activeBtn) {
       setIndicatorStyle({
         left: activeBtn.offsetLeft,
         width: activeBtn.offsetWidth,
-        ready: true
+        ready: true,
+        dragging: !!hoveredTab
       });
     }
-  }, [activeTab]);
+  }, [activeTab, hoveredTab]);
 
   useEffect(() => {
     updatePill();
@@ -149,23 +190,12 @@ export default function App() {
     return () => window.removeEventListener('resize', updatePill);
   }, [updatePill]);
 
-  // Touch / Finger swipe navigation ONLY on the bottom dock / menu panel
-  // STRICT RULE: Exactly ONE step per swipe!
-  const dockTouchRef = useRef({
-    startX: 0,
-    startY: 0,
-    startTime: 0,
-    hasSwiped: false,
-    initialTab: 'optimizer'
-  });
   const suppressClickRef = useRef(false);
 
   const switchTabWithHaptic = useCallback((tabId) => {
     setActiveTab((prev) => {
       if (prev !== tabId) {
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          try { navigator.vibrate(12); } catch { /* ignore */ }
-        }
+        if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(12); } catch {}
         return tabId;
       }
       return prev;
@@ -175,101 +205,53 @@ export default function App() {
   const onDockTouchStart = (e) => {
     if (e.touches && e.touches.length === 1) {
       const t = e.touches[0];
-      dockTouchRef.current = {
-        startX: t.clientX,
-        startY: t.clientY,
-        startTime: Date.now(),
-        hasSwiped: false,
-        initialTab: activeTab
-      };
+      if (dockBarRef.current) {
+        const rect = dockBarRef.current.getBoundingClientRect();
+        setDragOffset(Math.max(0, Math.min(t.clientX - rect.left, rect.width)));
+      }
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const tabBtn = el?.closest('.ios-dock-item');
+      if (tabBtn) setHoveredTab(tabBtn.getAttribute('data-tab-id'));
     }
   };
 
   const onDockTouchMove = (e) => {
     if (!e.touches || e.touches.length === 0) return;
+    if (e.cancelable) e.preventDefault();
     const t = e.touches[0];
-    const dx = t.clientX - dockTouchRef.current.startX;
-    const dy = t.clientY - dockTouchRef.current.startY;
-
-    // Primarily horizontal swipe
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (e.cancelable) {
-        e.preventDefault();
+    if (dockBarRef.current) {
+      const rect = dockBarRef.current.getBoundingClientRect();
+      setDragOffset(Math.max(0, Math.min(t.clientX - rect.left, rect.width)));
+    }
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const tabBtn = el?.closest('.ios-dock-item');
+    if (tabBtn) {
+      const tabId = tabBtn.getAttribute('data-tab-id');
+      if (tabId !== hoveredTab) {
+        setHoveredTab(tabId);
+        if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(6); } catch {}
       }
-
-      // Natural physical spring elasticity on the dock bar
-      const elasticity = Math.sign(dx) * Math.min(18, Math.pow(Math.abs(dx), 0.72));
-      setDragOffset(elasticity);
-
-      // Trigger EXACTLY ONE STEP per swipe as soon as the threshold (26px) is reached
-      if (!dockTouchRef.current.hasSwiped && Math.abs(dx) >= 26) {
-        dockTouchRef.current.hasSwiped = true;
-        suppressClickRef.current = true;
-
-        const tabIds = TABS.map((tab) => tab.id);
-        const currIdx = tabIds.indexOf(dockTouchRef.current.initialTab);
-        if (currIdx !== -1) {
-          if (dx > 0 && currIdx < tabIds.length - 1) {
-            // Swipe Right -> Step 1 forward to the RIGHT
-            switchTabWithHaptic(tabIds[currIdx + 1]);
-          } else if (dx < 0 && currIdx > 0) {
-            // Swipe Left -> Step 1 backward to the LEFT
-            switchTabWithHaptic(tabIds[currIdx - 1]);
-          } else {
-            // Boundary reached -> gentle haptic buzz
-            if (typeof navigator !== 'undefined' && navigator.vibrate) {
-              try { navigator.vibrate(8); } catch {}
-            }
-          }
-        }
-      }
+    } else {
+      setHoveredTab(null);
     }
   };
 
   const onDockTouchEnd = (e) => {
-    setDragOffset(0); // Snap dock bar back to center smoothly
-
-    if (dockTouchRef.current.hasSwiped) {
+    if (hoveredTab) {
+      switchTabWithHaptic(hoveredTab);
       suppressClickRef.current = true;
-      setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 300);
-      return;
+      setTimeout(() => suppressClickRef.current = false, 300);
     }
-
-    // Quick flick check for fast releases under 300ms
-    if (e.changedTouches && e.changedTouches.length > 0) {
-      const t = e.changedTouches[0];
-      const dx = t.clientX - dockTouchRef.current.startX;
-      const dy = t.clientY - dockTouchRef.current.startY;
-      const dt = Date.now() - dockTouchRef.current.startTime;
-
-      if (Math.abs(dx) >= 22 && Math.abs(dx) > Math.abs(dy) && dt < 300) {
-        suppressClickRef.current = true;
-        setTimeout(() => {
-          suppressClickRef.current = false;
-        }, 300);
-
-        const tabIds = TABS.map((tab) => tab.id);
-        const currIdx = tabIds.indexOf(dockTouchRef.current.initialTab);
-        if (currIdx !== -1) {
-          if (dx > 0 && currIdx < tabIds.length - 1) {
-            // Swipe Right -> Step 1 to the RIGHT
-            switchTabWithHaptic(tabIds[currIdx + 1]);
-          } else if (dx < 0 && currIdx > 0) {
-            // Swipe Left -> Step 1 to the LEFT
-            switchTabWithHaptic(tabIds[currIdx - 1]);
-          }
-        }
-      }
-    }
+    setHoveredTab(null);
+    setDragOffset(0);
   };
 
   const dayStr = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div className="studio-app">
+    <div className="studio-app relative">
+      <ShaderAnimation />
       {/* ---------- Ultra-Premium Studio Top Bar with Frameless Living Logo ---------- */}
       <header
         className="studio-topbar"
@@ -278,8 +260,43 @@ export default function App() {
       >
         {/* Left Segment: Brand */}
         <div className="topbar-left">
-          <div className="studio-brand" onClick={() => setActiveTab('optimizer')}>
-            <span className="brand-name">OBITO STUDIO</span>
+          <div
+            className="studio-brand brand-stacked"
+            onClick={() => {
+              setActiveTab('optimizer');
+            }}
+            title="OBITO STUDIO"
+          >
+            <div className="brand-obito">
+              <AnimatedText
+                text="OBITO"
+                fontSize={14}
+                minWeight={120}
+                maxWeight={850}
+                animationDuration={1.8}
+                delayMultiplier={0.16}
+                phaseOffset={0}
+                reverse={false}
+                justify={false}
+                color="#ffffff"
+                letterSpacing="0.08em"
+              />
+            </div>
+            <div className="brand-studio">
+              <AnimatedText
+                text="STUDIO"
+                fontSize={10.5}
+                minWeight={200}
+                maxWeight={820}
+                animationDuration={1.8}
+                delayMultiplier={0.16}
+                phaseOffset={-0.9}
+                reverse={true}
+                justify={false}
+                color="rgba(255, 255, 255, 0.78)"
+                letterSpacing="0.22em"
+              />
+            </div>
           </div>
         </div>
 
@@ -308,9 +325,10 @@ export default function App() {
             className={`key-badge-btn ${apiKey ? 'configured' : ''}`}
             onClick={() => setShowKeyModal((v) => !v)}
             title="Configure Server Access Key"
+            aria-label="Server Access Key"
           >
-            <span className="key-dot" />
-            <span>{apiKey ? 'Key Set' : 'Key'}</span>
+            <PremiumKeyIcon width={15} height={15} />
+            <span className="key-btn-text">{apiKey ? 'Key Set' : 'Key'}</span>
           </button>
 
           <div className="studio-clock" aria-label="Local Time">
@@ -351,10 +369,34 @@ export default function App() {
       {/* ---------- Main Workspace Viewport ---------- */}
       <main className="studio-workspace">
         {activeTab === 'optimizer' && (
-          <section className="workspace-view active optimizer-view" key="optimizer">
-            <div className={`hero-banner ${busy ? 'busy-hidden-mobile' : ''}`}>
-              <h1 className="hero-headline">TikTok Lossless Video Master</h1>
-              <p className="hero-subline">Preserve native high FPS (60fps, 120fps+) &amp; HDR with zero TikTok compression.</p>
+          <section className={`workspace-view active optimizer-view ${busy ? 'is-busy' : ''}`} key="optimizer">
+            <div className="hero-banner text-center mb-6">
+              <h1
+                className="hero-headline text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tighter text-white mb-2 cursor-pointer select-none"
+                style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}
+                onClick={() => setHeroMsgIndex((prev) => (prev + 1) % HERO_MESSAGES.length)}
+                title="Click to cycle message"
+              >
+                <ShutterText
+                  text={HERO_MESSAGES[heroMsgIndex].title}
+                  triggerKey={heroMsgIndex}
+                  textClassName="text-[clamp(1.4rem,3.8vw,3.25rem)] font-extrabold tracking-tight"
+                  textColor="#ffffff"
+                  topSliceColor="#38bdf8"
+                  midSliceColor="#cbd5e1"
+                  botSliceColor="#818cf8"
+                />
+              </h1>
+              <p className="hero-subline text-white/70 text-xs sm:text-sm md:text-base max-w-xl mx-auto mb-3 transition-opacity duration-300">
+                {HERO_MESSAGES[heroMsgIndex].sub}
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+                </span>
+                <p className="text-xs text-green-400 font-medium tracking-wide">TikTok Ingestion Engine Ready · 19200 Timescale</p>
+              </div>
             </div>
 
             <Optimizer apiKey={apiKey} onKeyChange={onKeyChange} onBusy={setBusy} />
@@ -484,21 +526,18 @@ export default function App() {
         onTouchStart={onDockTouchStart}
         onTouchMove={onDockTouchMove}
         onTouchEnd={onDockTouchEnd}
-        onTouchCancel={() => setDragOffset(0)}
+        onTouchCancel={() => { setDragOffset(0); setHoveredTab(null); }}
       >
         <div
           className="ios-dock-bar"
           ref={dockBarRef}
-          style={{
-            transform: `translateX(${dragOffset}px)`
-          }}
         >
           {/* Animated Clear Glass Sliding Pill Lens (Uniform size across all tabs) */}
           {indicatorStyle.ready && (
             <div
-              className="ios-dock-pill-slider"
+              className={`ios-dock-pill-slider ${dragOffset > 0 ? 'dragging' : ''}`}
               style={{
-                transform: `translateX(${indicatorStyle.left}px)`,
+                transform: `translateX(${dragOffset > 0 ? dragOffset - (indicatorStyle.width / 2) : indicatorStyle.left}px)`,
                 width: `${indicatorStyle.width}px`
               }}
             />
@@ -511,7 +550,7 @@ export default function App() {
                 key={id}
                 type="button"
                 data-tab-id={id}
-                className={`ios-dock-item ${active ? 'active' : ''}`}
+                className={`ios-dock-item ${active ? 'active' : ''} ${hoveredTab === id ? 'hovered' : ''}`}
                 onClick={(e) => {
                   if (suppressClickRef.current) {
                     e.preventDefault();

@@ -1,10 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Component, useCallback, useEffect, useRef, useState } from 'react';
 import { BotAvatar } from 'bot-avatars';
+import { BorderBeam } from 'border-beam';
+import { MetalFx } from 'metal-fx';
 import {
   CheckIcon, CloseIcon, DownloadIcon, FpsIcon, HdrIcon, KeyIcon,
   PauseIcon, PlayIcon, UploadIcon, RefreshIcon, ShareIcon, SparkIcon
 } from './icons.jsx';
 import { probeLocalFile } from './localProbe.js';
+import { LiquidButton } from '@/components/ui/liquid-glass-button';
+
+class MetalErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err) {
+    console.warn('MetalFx shader bypassed:', err);
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+function SafeMetalFx({ children, ...props }) {
+  return (
+    <MetalErrorBoundary fallback={children}>
+      <MetalFx {...props}>
+        {children}
+      </MetalFx>
+    </MetalErrorBoundary>
+  );
+}
 
 const MAX_BYTES = 600 * 1024 * 1024;
 // 1 MB chunks: small enough that no single PUT lives long enough for a relay
@@ -15,8 +45,8 @@ const CHUNK_TIMEOUT_MS = 45 * 1000;   // a hung PUT aborts instead of hanging fo
 const CHUNK_RETRIES = 4;              // per chunk, with a fresh offset read between tries
 
 const MODES = [
-  { id: 'hdr', label: 'FPS + Quality + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
-  { id: 'standard', label: 'FPS + Quality', badge: 'Standard', Icon: FpsIcon }
+  { id: 'hdr', label: 'FPS + Quality + HDR', shortLabel: 'FPS + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
+  { id: 'standard', label: 'FPS + Quality', shortLabel: 'FPS + Quality', badge: 'Standard', Icon: FpsIcon }
 ];
 
 const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
@@ -117,23 +147,23 @@ function LiveTerminal({ log = [], busy, phase }) {
 /* ---------- Simple, Clean Video Spec Chips ---------- */
 function SpecGrid({ p, realFps, isOutput }) {
   if (!p) return null;
-  const fpsText = realFps && realFps !== p.fps ? `${realFps} → ${p.fps} fps` : `${p.fps || '—'} fps`;
+  const fpsText = realFps && realFps !== p.fps ? `${realFps} → ${p.fps} fps` : (p.fps ? `${p.fps} fps` : null);
   const isDolby = !!p.dv;
   const isHdr = p.transfer && p.transfer !== 'sdr' && p.transfer !== 'unknown';
 
   return (
     <div className="spec-card">
       <div className="spec-card-head">
-        <b>{isOutput ? 'Optimized file specs' : 'Video specs (detected on-device)'}</b>
+        <b>{isOutput ? 'Optimized file specs' : (p.fps || p.w ? 'Video specs (detected on-device)' : 'Selected video file')}</b>
       </div>
       <div className="spec-chips">
-        <span className="spec-chip highlight">{fpsText}</span>
-        <span className="spec-chip">{p.w && p.h ? `${p.w}×${p.h}` : '—'}</span>
-        <span className={`spec-chip ${isHdr ? 'highlight-amber' : ''}`}>{hdrLabel(p.transfer)}</span>
+        {fpsText && <span className="spec-chip highlight">{fpsText}</span>}
+        {p.w && p.h && <span className="spec-chip">{p.w}×{p.h}</span>}
+        {isHdr && <span className="spec-chip highlight-amber">{hdrLabel(p.transfer)}</span>}
         {isDolby && <span className="spec-chip highlight-amber">Dolby Vision Profile {p.dv}</span>}
         <span className="spec-chip">{(p.codec || '—').toUpperCase()}</span>
-        <span className="spec-chip">{p.audio ? `${p.audio} audio` : 'no audio'}</span>
-        <span className="spec-chip">{fmtDur(p.dur)}</span>
+        {p.audio ? <span className="spec-chip">{p.audio} audio</span> : null}
+        {p.dur ? <span className="spec-chip">{fmtDur(p.dur)}</span> : null}
         <span className="spec-chip">{fmt(p.size)}</span>
       </div>
     </div>
@@ -251,53 +281,65 @@ function ModeSelect({ value, onChange }) {
   };
 
   return (
-    <div
-      className="mode-toggle-group"
-      ref={modeGroupRef}
-      role="radiogroup"
-      aria-label="Optimization mode"
-      onTouchStart={onModeTouchStart}
-      onTouchMove={onModeTouchMove}
-      onTouchEnd={onModeTouchEnd}
-    >
-      {/* Animated Clear Glass Sliding Pill */}
-      {modePill.ready && (
+    <div className="mode-toggle-wrap">
+      <BorderBeam
+        size="md"
+        colorVariant="colorful"
+        strength={0.7}
+        theme="dark"
+        borderRadius={999}
+        className="w-full relative rounded-full"
+      >
         <div
-          className="mode-toggle-pill-slider"
-          style={{
-            transform: `translateX(${modePill.left}px)`,
-            width: `${modePill.width}px`
-          }}
-        />
-      )}
+          className="mode-toggle-group"
+          ref={modeGroupRef}
+          role="radiogroup"
+          aria-label="Optimization mode"
+          onTouchStart={onModeTouchStart}
+          onTouchMove={onModeTouchMove}
+          onTouchEnd={onModeTouchEnd}
+        >
+          {/* Animated Clear Glass Sliding Pill */}
+          {modePill.ready && (
+            <div
+              className="mode-toggle-pill-slider"
+              style={{
+                transform: `translateX(${modePill.left}px)`,
+                width: `${modePill.width}px`
+              }}
+            />
+          )}
 
-      {MODES.map(({ id, label, badge, Icon }) => {
-        const active = value === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            data-mode-id={id}
-            role="radio"
-            aria-checked={active}
-            className={`mode-toggle-btn ${active ? 'active' : ''} mode-${id}`}
-            onClick={(e) => {
-              if (suppressClickRef.current) {
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-              }
-              switchModeWithHaptic(id);
-            }}
-          >
-            <div className="mode-btn-content">
-              <Icon width={16} height={16} className="mode-btn-icon" />
-              <span className="mode-btn-label">{label}</span>
-            </div>
-            <span className="mode-btn-badge">{badge}</span>
-          </button>
-        );
-      })}
+          {MODES.map(({ id, label, shortLabel, badge, Icon }) => {
+            const active = value === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                data-mode-id={id}
+                role="radio"
+                aria-checked={active}
+                className={`mode-toggle-btn ${active ? 'active' : ''} mode-${id}`}
+                onClick={(e) => {
+                  if (suppressClickRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
+                  switchModeWithHaptic(id);
+                }}
+              >
+                <div className="mode-btn-content">
+                  <Icon width={15} height={15} className="mode-btn-icon" />
+                  <span className="mode-btn-label mode-btn-label-full">{label}</span>
+                  <span className="mode-btn-label mode-btn-label-short">{shortLabel}</span>
+                </div>
+                <span className="mode-btn-badge">{badge}</span>
+              </button>
+            );
+          })}
+        </div>
+      </BorderBeam>
     </div>
   );
 }
@@ -418,7 +460,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     try {
       const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
       if (r.status === 401) return fail('Access key required.', true);
-      if (r.ok) offset = (await r.json()).bytesReceived || 0;
+      if (r.ok) {
+        const u = await r.json();
+        offset = u.received ?? u.bytesReceived ?? 0;
+      }
     } catch { return fail('Could not retrieve upload status.'); }
 
     while (offset < f.size) {
@@ -472,7 +517,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
             if (r.ok) {
               const j = await r.json();
-              if (typeof j.bytesReceived === 'number') offset = j.bytesReceived;
+              const rec = j.received ?? j.bytesReceived;
+              if (typeof rec === 'number') offset = rec;
             }
           } catch { /* keep the old offset and retry as-is */ }
           if (flags.current.cancel || flags.current.pause) break;
@@ -483,7 +529,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       if (flags.current.pause) { setPhase('paused'); return; }
       if (!res) continue;              // paused/refreshed — re-enter the loop
       if (res.aborted) return;
-      offset = res.bytesReceived ?? Math.min(offset + CHUNK, f.size);
+      offset = res.received ?? res.bytesReceived ?? Math.min(offset + CHUNK, f.size);
     }
 
     setPct(100);
@@ -530,23 +576,33 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     upId.current = hit?.id || null;
     jobId.current = null;
 
+    let p = null;
     try {
-      const p = await probeLocalFile(f);
-      if (p) {
-        setSrc(p);
-        srcRef.current = p;
-        setConfirmAt('pre');
-        setPhase('confirm');
-        setLog([
-          `[client] Selected: ${f.name} (${fmt(f.size)})`,
-          `[obito] On-device probe: ${p.w}×${p.h} · ${p.fps} fps · ${(p.codec || '').toUpperCase()}${p.transfer ? ' · ' + p.transfer : ''}`
-        ]);
-        return;
-      }
-    } catch { /* fallback to post-upload probe */ }
+      p = await probeLocalFile(f);
+    } catch (err) {
+      console.warn('Local probe error, using fallback:', err);
+    }
 
-    setConfirmAt('post');
-    runUpload();
+    const detected = p || {
+      size: f.size,
+      dur: null,
+      w: null,
+      h: null,
+      fps: null,
+      codec: (f.name.split('.').pop() || 'MP4').toUpperCase(),
+      transfer: 'sdr'
+    };
+
+    setSrc(detected);
+    srcRef.current = detected;
+    setConfirmAt('pre');
+    setPhase('confirm');
+    setLog([
+      `[client] Selected: ${f.name} (${fmt(f.size)})`,
+      p
+        ? `[obito] On-device probe: ${p.w}×${p.h} · ${p.fps} fps · ${(p.codec || '').toUpperCase()}${p.transfer ? ' · ' + p.transfer : ''}`
+        : `[obito] Ready for lossless remuxing: ${f.name} (${fmt(f.size)})`
+    ]);
   };
 
   const pause = () => { flags.current.pause = true; xhrRef.current?.abort(); setPhase('paused'); };
@@ -651,10 +707,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   };
 
   const busy = phase === 'upload' || phase === 'queued' || phase === 'process';
-  useEffect(() => { onBusy && onBusy(busy); }, [busy, onBusy]);
+  const isBusyOrConfirm = busy || phase === 'confirm';
+  useEffect(() => { onBusy && onBusy(isBusyOrConfirm); }, [isBusyOrConfirm, onBusy]);
 
   return (
-    <div className="studio-optimizer">
+    <div className="studio-optimizer w-full max-w-3xl mx-auto">
       {/* ---------- Main Clean Dropzone Box ---------- */}
       <div
         className={`clean-dropzone ${drag ? 'drag-over' : ''} phase-${phase}`}
@@ -708,10 +765,21 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
             <ModeSelect value={mode} onChange={setMode} />
 
-            <button type="button" className="btn-choose" onClick={() => input.current?.click()}>
-              <UploadIcon width={20} height={20} />
-              <span>Choose video file</span>
-            </button>
+            <div className="choose-btn-wrap my-3">
+              <SafeMetalFx preset="chromatic" strength={1} theme="dark" innerShadow>
+                <button
+                  type="button"
+                  className="btn-primary-hero"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(10); } catch {}
+                    input.current?.click();
+                  }}
+                >
+                  <UploadIcon width={18} height={18} />
+                  <span>Choose Video File</span>
+                </button>
+              </SafeMetalFx>
+            </div>
 
             <div className="engine-trust-row">
               <div className="trust-item">
@@ -777,38 +845,70 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
           {phase === 'confirm' && (
             <div className="confirm-buttons">
+              <SafeMetalFx preset="chromatic" strength={1} theme="dark" innerShadow>
+                <button
+                  type="button"
+                  className="btn-start-optimize"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(12); } catch {}
+                    confirmAt === 'pre' ? runUpload() : startJob(upId.current);
+                  }}
+                >
+                  <SparkIcon width={20} height={20} />
+                  <span>Start Optimize Video</span>
+                </button>
+              </SafeMetalFx>
               <button
                 type="button"
-                className="btn-primary"
-                onClick={() => (confirmAt === 'pre' ? runUpload() : startJob(upId.current))}
+                className="btn-secondary btn-choose-another"
+                onClick={reset}
               >
-                <span>Looks good — optimize video</span>
-              </button>
-              <button type="button" className="btn-secondary" onClick={reset}>
-                <RefreshIcon width={16} height={16} /> Choose another
+                <RefreshIcon width={16} height={16} />
+                <span>Choose another</span>
               </button>
             </div>
           )}
 
           {phase === 'done' && result && (
-            <div className="done-buttons">
+            <div className="done-buttons flex flex-wrap items-center justify-center gap-3">
               {!isStandalone() ? (
-                <a className="btn-primary large" href={withKey('/api/jobs/' + result.id + '/download')}>
-                  <DownloadIcon width={20} height={20} /> Download optimized video
+                <a href={withKey('/api/jobs/' + result.id + '/download')}>
+                  <LiquidButton
+                    type="button"
+                    className="text-white border border-white/20 rounded-full font-semibold shadow-xl"
+                    size="xl"
+                  >
+                    <DownloadIcon width={20} height={20} />
+                    <span>Download Master Video</span>
+                  </LiquidButton>
                 </a>
               ) : dl.state === 'ready' ? (
-                <button type="button" className="btn-primary large" onClick={saveFile}>
-                  <ShareIcon width={20} height={20} /> Save video / Share
-                </button>
+                <LiquidButton
+                  type="button"
+                  className="text-white border border-white/20 rounded-full font-semibold shadow-xl"
+                  size="xl"
+                  onClick={saveFile}
+                >
+                  <ShareIcon width={20} height={20} />
+                  <span>Save Video / Share</span>
+                </LiquidButton>
               ) : (
-                <button type="button" className="btn-primary large" onClick={prepareFile} disabled={dl.state === 'loading'}>
+                <LiquidButton
+                  type="button"
+                  className="text-white border border-white/20 rounded-full font-semibold shadow-xl"
+                  size="xl"
+                  onClick={prepareFile}
+                  disabled={dl.state === 'loading'}
+                >
                   <DownloadIcon width={20} height={20} />
-                  {dl.state === 'loading'
-                    ? `Preparing (${Math.round(dl.pct)}%)`
-                    : dl.state === 'error'
-                    ? 'Retry download'
-                    : 'Download optimized video'}
-                </button>
+                  <span>
+                    {dl.state === 'loading'
+                      ? `Preparing (${Math.round(dl.pct)}%)`
+                      : dl.state === 'error'
+                      ? 'Retry Download'
+                      : 'Download Master Video'}
+                  </span>
+                </LiquidButton>
               )}
               <button type="button" className="btn-secondary" onClick={reset}>
                 <RefreshIcon width={16} height={16} /> Optimize another
