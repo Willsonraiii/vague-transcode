@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 
 function typeOf(b, o) {
   return b.toString('ascii', o + 4, o + 8);
@@ -209,17 +210,18 @@ if (delta !== 8) {
 
 patchChunkOffsets(newMoov, delta);
 
-const output = concat([
-  input.subarray(0, moov.start),
-  newMoov,
-  input.subarray(moov.end),
-]);
-
-await writeFile(outputPath, output);
+await new Promise((resolve, reject) => {
+  const ws = createWriteStream(outputPath);
+  ws.on('error', reject);
+  ws.on('finish', resolve);
+  ws.write(input.subarray(0, moov.start));
+  ws.write(newMoov);
+  ws.end(input.subarray(moov.end));
+});
 
 console.log(JSON.stringify({
   inputBytes: input.length,
-  outputBytes: output.length,
+  outputBytes: input.length + delta,
   moovDelta: delta,
   outputPath,
 }, null, 2));

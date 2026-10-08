@@ -48,6 +48,7 @@
  *     [--speed-factor 2] [--filler-layout eof|mdat]
  */
 import { readFile, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 
 function typeOf(b, o) {
   return b.toString('ascii', o + 4, o + 8);
@@ -856,18 +857,22 @@ if (newMoov.length !== moov.size + moovDelta) {
 // Assemble the output file
 // ---------------------------------------------------------------------------
 
-let output;
+const finalOutputBytes = input.length + moovDelta + fillerBytes.length;
 if (fillerLayout === 'eof') {
   // Reference behaviour: filler bytes appended past the declared mdat, mdat
   // size field untouched. Demuxers reach them through the chunk offsets.
-  output = concat([
-    input.subarray(0, moov.start),
-    newMoov,
-    input.subarray(moov.end),
-    fillerBytes,
-  ]);
+  // Stream directly to disk to avoid allocating a full duplicate video buffer in RAM:
+  await new Promise((resolve, reject) => {
+    const ws = createWriteStream(outputPath);
+    ws.on('error', reject);
+    ws.on('finish', resolve);
+    ws.write(input.subarray(0, moov.start));
+    ws.write(newMoov);
+    ws.write(input.subarray(moov.end));
+    ws.end(fillerBytes);
+  });
 } else {
-  output = concat([
+  const output = concat([
     input.subarray(0, moov.start),
     newMoov,
     input.subarray(moov.end),
@@ -879,16 +884,15 @@ if (fillerLayout === 'eof') {
   } else {
     output.writeBigUInt64BE(BigInt(lastBox.size + fillerBytes.length), sizeFieldAt + 8);
   }
+  await writeFile(outputPath, output);
 }
-
-await writeFile(outputPath, output);
 
 const fmtEntries = (entries) => entries.map((e) => `${e.count}x${e.duration}`).join(', ');
 
 console.log(JSON.stringify({
   inputBytes: input.length,
-  outputBytes: output.length,
-  sizeGrowth: output.length - input.length,
+  outputBytes: finalOutputBytes,
+  sizeGrowth: finalOutputBytes - input.length,
   speedFactor,
   audioTimescale: mdhd.timescale,
   movieTimescale,
