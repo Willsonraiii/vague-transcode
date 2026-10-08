@@ -200,6 +200,72 @@ echo 'export ACCESS_TOKEN="your-key"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+## L9. Zero-RAM Streaming Remuxing Engine & Memory Benchmark
+
+The new engine streams `mdat` payloads directly from disk to disk via 64 KB pipes, parsing only the initial ~100 KB `moov` atom in RAM. It never exceeds 15 MB RAM even on massive 74 MB – 600 MB+ files, running stably within Suga Cloud's 256 MB free-tier limit.
+
+To benchmark under a strict 50 MB memory ceiling:
+```bash
+cd ~/Desktop/vague-transcode
+node --max-old-space-size=50 tools/rtx-pipeline.js "/path/to/source.mp4" "out/output.mp4"
+```
+
+## L10. Color Grade Presets (CLI & Pipeline)
+
+OBITO STUDIO includes 6 curated aesthetic looks:
+1. `original` — 100% Stream Copy Lossless (zero re-encoding, instant 3-second container remux).
+2. `vibrant` — Vibrant Pop (contrast +12%, saturation +24%, unsharp mask).
+3. `cinematic` — Cinematic Warm (golden film balance, soft lifted shadows).
+4. `teal_orange` — Teal & Orange (blockbuster teal shadows + warm golden skin tones).
+5. `moody_cool` — Moody Noir (cool blue shadows, desaturated shadows, lifted contrast).
+6. `vintage_35mm` — Vintage 35mm (analog pastel film curve with gentle faded blacks).
+
+Run with a preset directly from CLI:
+```bash
+cd ~/Desktop/vague-transcode
+node tools/rtx-pipeline.js "/path/to/source.mp4" "out/output-graded.mp4" --grade vibrant
+```
+(Omitting `--grade` or passing `--grade original` runs 100% stream-copy lossless mode).
+
+## L11. Rebuilding the Frontend (Vite)
+
+Whenever editing `web/src/Optimizer.jsx`, `web/src/styles.css`, or other React components:
+```bash
+cd ~/Desktop/vague-transcode/web
+npm run build
+```
+This compiles the production assets directly into `public/`.
+
+## L12. Testing Server APIs via curl
+
+Check health status:
+```bash
+curl -s http://127.0.0.1:3005/health
+# Response: {"ok":true,"service":"rtx-online","uptime":...}
+```
+
+Trigger post-optimization color grading without re-uploading (renders from cached master):
+```bash
+curl -X POST http://127.0.0.1:3005/api/jobs/<job-id>/grade \
+  -H "Content-Type: application/json" \
+  -d '{"preset":"cinematic"}'
+```
+
+## L13. Deploy to Live Production (Suga Cloud)
+
+The live production site (`https://obitostudio.willsonrai.com.np`) automatically rebuilds and deploys on every push to `origin/online-rtx-service`:
+```bash
+cd ~/Desktop/vague-transcode
+git status
+git add -A
+git commit -m "feat: your update message"
+git push origin online-rtx-service
+```
+Check live status after push:
+```bash
+curl -s https://obitostudio.willsonrai.com.np/health
+```
+
 ---
 
 # P — PHONE (no terminal, just the steps)

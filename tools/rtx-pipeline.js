@@ -23,12 +23,13 @@
  *   node tools/rtx-pipeline.js INPUT.mp4 OUTPUT.mp4 \
  *     [--audio-elst-ms N] [--filler-count N] [--keep-temp]
  */
-import { readFile, writeFile, mkdtemp, rm, stat, open } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm, stat, open, copyFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { streamFaststartRemux } from '../lib/stream-remux.js';
+import { getPresetById } from '../lib/color-presets.js';
 
 const SECOND_AAC_TOOL = new URL('./build-rtx-second-aac.js', import.meta.url);
 const SPLIT_LAST_STTS_TOOL = new URL('./split-last-stts.js', import.meta.url);
@@ -202,6 +203,7 @@ let audioElstMsOverride = null;
 let fillerCountOverride = null;
 let keepTemp = false;
 let keepDv = false;
+let colorPreset = 'original';
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -209,6 +211,7 @@ for (let i = 0; i < args.length; i++) {
   else if (arg === '--filler-count') fillerCountOverride = Number(args[++i]);
   else if (arg === '--keep-temp') keepTemp = true;
   else if (arg === '--keep-dv') keepDv = true; // mode "standard": leave Dolby Vision signalling untouched
+  else if (arg === '--grade') colorPreset = String(args[++i] || 'original');
   else positional.push(arg);
 }
 
@@ -487,8 +490,11 @@ if (splitRun.status !== 0) {
 
 // Audio trim + second AAC track (validated tool).
 reportProgress(70, 'split-done');
+const isGraded = Boolean(colorPreset && colorPreset !== 'original');
+const stage3Path = isGraded ? path.join(workDir, 'stage3.mp4') : outputPath;
+
 const toolArgs = [
-  fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
+  fileURLToPath(SECOND_AAC_TOOL), stage2Path, stage3Path,
   '--filler-count', String(fillerCount),
   '--mvhd-v1-unknown',
   '--drop-udta',
@@ -500,11 +506,38 @@ if (run.status !== 0) {
   throw new Error(`tools/build-rtx-second-aac.js failed with status ${run.status}.`);
 }
 
+if (isGraded) {
+  reportProgress(75, 'color-grading');
+  const presetObj = getPresetById(colorPreset);
+  if (presetObj && presetObj.ffmpegFilter) {
+    const ffArgs = [
+      '-y',
+      '-i', stage3Path,
+      '-vf', presetObj.ffmpegFilter,
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '17',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'copy',
+      '-threads', '2',
+      '-movflags', '+faststart',
+      outputPath,
+    ];
+    const ff = spawnSync('ffmpeg', ffArgs, { encoding: 'utf8' });
+    if (ff.status !== 0) {
+      process.stderr.write(ff.stderr || '');
+      throw new Error(`ffmpeg color grade failed with status ${ff.status}.`);
+    }
+  } else {
+    await copyFile(stage3Path, outputPath);
+  }
+}
+
 if (!keepTemp) {
   await rm(workDir, { recursive: true, force: true });
 }
 
-reportProgress(95, 'audio-done');
+reportProgress(95, isGraded ? 'grading-done' : 'audio-done');
 
 // ---------------------------------------------------------------------------
 // 6. Report
@@ -514,6 +547,7 @@ const outputStat = await stat(outputPath);
 const outputBytes = outputStat.size;
 const summary = {
   mode: keepDv ? 'standard' : 'hdr',
+  colorPreset,
   inputBytes,
   outputBytes,
   sizeGrowth: outputBytes - inputBytes,
