@@ -6,7 +6,7 @@ import {
 
 const MAX_BYTES = 600 * 1024 * 1024;
 const frac = (s) => { if (!s) return 0; const [a, b] = String(s).split('/').map(Number); return b ? a / b : a; };
-const fmtBytes = (b) => (b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+const fmtBytes = (b) => (b >= 1000000000 ? (b / 1000000000).toFixed(2) + ' GB' : b >= 1000000 ? (b / 1000000).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1000)) + ' KB');
 const fmtRate = (b) => (b ? Math.round(Number(b) / 1000) + ' kbps' : '—');
 const fmtDur = (s) => { const n = Number(s) || 0; const m = Math.floor(n / 60); return m + ':' + String(Math.round(n % 60)).padStart(2, '0'); };
 const fmtCount = (n) => (n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n));

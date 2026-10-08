@@ -1,5 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
+import { open, stat } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
 
 function typeOf(b, o) {
   return b.toString('ascii', o + 4, o + 8);
@@ -173,6 +173,7 @@ function patchChunkOffsets(moov, delta) {
   scan(0, moov.length);
 }
 
+
 const inputPath = process.argv[2];
 const outputPath = process.argv[3];
 
@@ -183,22 +184,48 @@ if (!inputPath || !outputPath) {
   process.exit(1);
 }
 
-const input = await readFile(inputPath);
+const fh = await open(inputPath, 'r');
+const inputStat = await fh.stat();
+let o = 0;
+const hBuf = Buffer.alloc(16);
 let moov = null;
+while (o < inputStat.size) {
+  const { bytesRead } = await fh.read(hBuf, 0, 8, o);
+  if (bytesRead < 8) break;
+  let size = hBuf.readUInt32BE(0);
+  const type = hBuf.toString('ascii', 4, 8);
+  let header = 8;
+  if (size === 1) {
+    await fh.read(hBuf, 8, 8, o + 8);
+    size = Number(hBuf.readBigUInt64BE(8));
+    header = 16;
+  } else if (size === 0) {
+    size = inputStat.size - o;
+  }
+  if (type === 'moov') {
+    moov = { type, start: o, end: o + size, size, header, content: o + header };
+    break;
+  }
+  o += size;
+}
 
-readBoxes(input, 0, input.length, (box) => {
-  if (box.type === 'moov') moov = box;
-});
-
-if (!moov) throw new Error('No moov box found.');
+if (!moov) {
+  await fh.close();
+  throw new Error('No moov box found.');
+}
 if (moov.start > 1024) {
+  await fh.close();
   throw new Error('Expected faststart MP4 with moov near the front.');
 }
 
-const target = findVideoStts(input, moov);
+const headBuf = Buffer.alloc(moov.end);
+await fh.read(headBuf, 0, moov.end, 0);
+await fh.close();
+
+const target = findVideoStts(headBuf, moov);
 if (!target) throw new Error('Video stts box not found.');
 
-const newMoov = rebuildRange(input, moov.start, moov.end, target);
+const newMoov = rebuildRange(headBuf, moov.start, moov.end, target);
 const delta = newMoov.length - (moov.end - moov.start);
 
 if (delta !== 8) {
@@ -211,14 +238,17 @@ await new Promise((resolve, reject) => {
   const ws = createWriteStream(outputPath);
   ws.on('error', reject);
   ws.on('finish', resolve);
-  ws.write(input.subarray(0, moov.start));
+  ws.write(headBuf.subarray(0, moov.start));
   ws.write(newMoov);
-  ws.end(input.subarray(moov.end));
+  const rs = createReadStream(inputPath, { start: moov.end });
+  rs.on('error', reject);
+  rs.pipe(ws);
 });
 
 console.log(JSON.stringify({
-  inputBytes: input.length,
-  outputBytes: input.length + delta,
+  inputBytes: inputStat.size,
+  outputBytes: inputStat.size + delta,
   moovDelta: delta,
   outputPath,
 }, null, 2));
+

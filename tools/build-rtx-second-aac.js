@@ -47,8 +47,8 @@
  *     [--filler-duration 1] [--filler-hex 0000000400000000] \
  *     [--speed-factor 2] [--filler-layout eof|mdat]
  */
-import { readFile, writeFile } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
+import { readFile, writeFile, open, stat } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
 
 function typeOf(b, o) {
   return b.toString('ascii', o + 4, o + 8);
@@ -559,19 +559,46 @@ if (!filler.length || filler.length % 2 === 1) {
   throw new Error(`Invalid filler hex payload: ${fillerHex}`);
 }
 
-const input = await readFile(inputPath);
-
-// ---------------------------------------------------------------------------
-// Parse the movie
-// ---------------------------------------------------------------------------
-
+const fh = await open(inputPath, 'r');
+const inputStat = await fh.stat();
+let o = 0;
+const hBuf = Buffer.alloc(16);
 let moov = null;
 const topBoxes = [];
-readBoxes(input, 0, input.length, (box) => {
+while (o < inputStat.size) {
+  const { bytesRead } = await fh.read(hBuf, 0, 8, o);
+  if (bytesRead < 8) break;
+  let size = hBuf.readUInt32BE(0);
+  const type = hBuf.toString('ascii', 4, 8);
+  let header = 8;
+  if (size === 1) {
+    await fh.read(hBuf, 8, 8, o + 8);
+    size = Number(hBuf.readBigUInt64BE(8));
+    header = 16;
+  } else if (size === 0) {
+    size = inputStat.size - o;
+  }
+  const box = { type, start: o, end: o + size, size, header, content: o + header };
   topBoxes.push(box);
-  if (box.type === 'moov') moov = box;
-});
-if (!moov) throw new Error('No moov box found.');
+  if (type === 'moov') {
+    moov = box;
+    break;
+  }
+  o += size;
+}
+
+if (!moov) {
+  await fh.close();
+  throw new Error('No moov box found.');
+}
+if (moov.start > 1024) {
+  await fh.close();
+  throw new Error('Expected faststart MP4 with moov near the front.');
+}
+
+const input = Buffer.alloc(moov.end);
+await fh.read(input, 0, moov.end, 0);
+await fh.close();
 const lastBox = topBoxes[topBoxes.length - 1];
 
 let mvhdBox = null;
@@ -858,7 +885,7 @@ if (newMoov.length !== moov.size + moovDelta) {
 // Assemble the output file
 // ---------------------------------------------------------------------------
 
-const finalOutputBytes = input.length + moovDelta + fillerBytes.length;
+const finalOutputBytes = inputStat.size + moovDelta + fillerBytes.length;
 if (fillerLayout === 'eof') {
   // Reference behaviour: filler bytes appended past the declared mdat, mdat
   // size field untouched. Demuxers reach them through the chunk offsets.
@@ -869,8 +896,12 @@ if (fillerLayout === 'eof') {
     ws.on('finish', resolve);
     ws.write(input.subarray(0, moov.start));
     ws.write(newMoov);
-    ws.write(input.subarray(moov.end));
-    ws.end(fillerBytes);
+    const rs = createReadStream(inputPath, { start: moov.end });
+    rs.on('error', reject);
+    rs.pipe(ws, { end: false });
+    rs.on('end', () => {
+      ws.end(fillerBytes);
+    });
   });
 } else {
   const output = concat([
@@ -891,9 +922,9 @@ if (fillerLayout === 'eof') {
 const fmtEntries = (entries) => entries.map((e) => `${e.count}x${e.duration}`).join(', ');
 
 console.log(JSON.stringify({
-  inputBytes: input.length,
+  inputBytes: inputStat.size,
   outputBytes: finalOutputBytes,
-  sizeGrowth: finalOutputBytes - input.length,
+  sizeGrowth: finalOutputBytes - inputStat.size,
   speedFactor,
   audioTimescale: mdhd.timescale,
   movieTimescale,

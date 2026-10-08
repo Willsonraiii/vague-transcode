@@ -23,12 +23,12 @@
  *   node tools/rtx-pipeline.js INPUT.mp4 OUTPUT.mp4 \
  *     [--audio-elst-ms N] [--filler-count N] [--keep-temp]
  */
-import { readFile, writeFile, mkdtemp, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm, stat, open } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { faststartRemux } from '../lib/remux.js';
+import { streamFaststartRemux } from '../lib/stream-remux.js';
 
 const SECOND_AAC_TOOL = new URL('./build-rtx-second-aac.js', import.meta.url);
 const SPLIT_LAST_STTS_TOOL = new URL('./split-last-stts.js', import.meta.url);
@@ -228,63 +228,73 @@ function reportProgress(percent, stage) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Pre-check the source: video timescale must map to 19200 exactly
+// 1. streamFaststartRemux with the iso signature directly to disk
 // ---------------------------------------------------------------------------
 
 const inputStat = await stat(inputPath);
 const inputBytes = inputStat.size;
-let source = await readFile(inputPath);
-let sourceMoov = findMoov(source);
-if (!sourceMoov) throw new Error('No moov box found in source.');
-const sourceTraks = traksOf(source, sourceMoov);
-const sourceVideo = sourceTraks.find((t) => t.info.handler === 'vide');
-if (!sourceVideo) throw new Error('No video track found in source.');
-
-const sourceVideoMdhd = mdhdInfo(source, sourceVideo.info.mdhd);
-if (!Number.isInteger(TARGET_VIDEO_TIMESCALE / sourceVideoMdhd.timescale)) {
-  throw new Error(
-    `Source video timescale ${sourceVideoMdhd.timescale} cannot be mapped losslessly to 19200 ` +
-    `(19200/${sourceVideoMdhd.timescale} is not an integer). This source needs a full remux path ` +
-    `that is not implemented yet.`,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 2. faststartRemux with the iso signature
-// ---------------------------------------------------------------------------
 
 reportProgress(5, 'reading');
-const inputBlob = new Blob([source], { type: 'video/mp4' });
-// stripDV: the RTXFury output does NOT carry the Dolby Vision config record —
-// it presents as plain HLG HDR, and that is what makes TikTok deliver an HDR
-// (HLG) result. Our first TikTok test kept the DV record and TikTok did NOT
-// deliver HDR. rebrand: the reference major brand is isom.
-const remuxed = await faststartRemux(inputBlob, () => {}, {
-  stripEdits: false,
+const workDir = await mkdtemp(path.join(tmpdir(), 'vague-rtx-pipeline-'));
+const stage1Path = path.join(workDir, 'stage1.mp4');
+const stage2Path = path.join(workDir, 'stage2.mp4');
+
+const remuxed = await streamFaststartRemux(inputPath, stage1Path, {
   stripDV: !keepDv,
-  zeroDuration: false,
   rebrand: true,
   isoSignature: true,
 });
+
 const dvStripped = remuxed.dvStripped;
 const rebranded = remuxed.rebranded;
-let b = Buffer.from(await remuxed.blob.arrayBuffer());
-source = null;
-if (global.gc) global.gc();
 reportProgress(35, 'remuxed');
 
 // ---------------------------------------------------------------------------
-// 3. Parse and derive everything
+// 2. Read only the header of stage1.mp4 to derive and apply timing transforms
 // ---------------------------------------------------------------------------
 
-const moov = findMoov(b);
-if (!moov) throw new Error('No moov box after remux (unexpected).');
+const fh1 = await open(stage1Path, 'r+');
+const stage1Stat = await fh1.stat();
+
+let o = 0;
+const hBuf = Buffer.alloc(16);
+let moov = null;
+while (o < stage1Stat.size) {
+  const { bytesRead } = await fh1.read(hBuf, 0, 8, o);
+  if (bytesRead < 8) break;
+  let size = hBuf.readUInt32BE(0);
+  const type = hBuf.toString('ascii', 4, 8);
+  let header = 8;
+  if (size === 1) {
+    await fh1.read(hBuf, 8, 8, o + 8);
+    size = Number(hBuf.readBigUInt64BE(8));
+    header = 16;
+  } else if (size === 0) {
+    size = stage1Stat.size - o;
+  }
+  if (type === 'moov') {
+    moov = { type, start: o, end: o + size, size, header, content: o + header };
+    break;
+  }
+  o += size;
+}
+
+if (!moov) {
+  await fh1.close();
+  throw new Error('No moov box after remux (unexpected).');
+}
+
+const b = Buffer.alloc(moov.end);
+await fh1.read(b, 0, moov.end, 0);
 
 let mvhdBox = null;
 readBoxes(b, moov.content, moov.end, (box) => {
   if (box.type === 'mvhd') mvhdBox = box;
 });
-if (!mvhdBox) throw new Error('No mvhd box found.');
+if (!mvhdBox) {
+  await fh1.close();
+  throw new Error('No mvhd box found.');
+}
 
 const mvhdVersion = b[mvhdBox.content];
 const mvhdTimescaleOffset = mvhdBox.content + (mvhdVersion === 1 ? 20 : 12);
@@ -295,21 +305,30 @@ const mvhdDurationMeta = mvhdVersion === 1
 const traks = traksOf(b, moov);
 const video = traks.find((t) => t.info.handler === 'vide');
 const audios = traks.filter((t) => t.info.handler === 'soun');
-if (!video) throw new Error('No video track after remux.');
-if (audios.length !== 1) throw new Error(`Expected exactly one audio track, found ${audios.length}.`);
+if (!video) {
+  await fh1.close();
+  throw new Error('No video track after remux.');
+}
+if (audios.length !== 1) {
+  await fh1.close();
+  throw new Error(`Expected exactly one audio track, found ${audios.length}.`);
+}
 const audio = audios[0];
 
 const vInfo = video.info;
 const aInfo = audio.info;
 if (!vInfo.mdhd || !vInfo.stts || !vInfo.elst || !vInfo.tkhd) {
+  await fh1.close();
   throw new Error('Video track is missing mdhd/stts/elst/tkhd.');
 }
 if (!aInfo.mdhd || !aInfo.stts || !aInfo.elst || !aInfo.tkhd || !aInfo.stbl) {
+  await fh1.close();
   throw new Error('Audio track is missing mdhd/stts/elst/tkhd/stbl.');
 }
 
 const videoMdhd = mdhdInfo(b, vInfo.mdhd);
 if (videoMdhd.timescale !== TARGET_VIDEO_TIMESCALE) {
+  await fh1.close();
   throw new Error(
     `Video timescale is ${videoMdhd.timescale} after remux, expected 19200. ` +
     `The iso signature scaling was skipped for this source.`,
@@ -319,20 +338,24 @@ if (videoMdhd.timescale !== TARGET_VIDEO_TIMESCALE) {
 const videoStts = readStts(b, vInfo.stts);
 const uniformDuration = videoStts[0].duration;
 if (!videoStts.every((e) => e.duration === uniformDuration)) {
+  await fh1.close();
   throw new Error('Video stts is not uniform (variable frame duration). Not supported yet.');
 }
 if (uniformDuration % TARGET_FPS !== 0 && (TARGET_VIDEO_TIMESCALE / uniformDuration) % 1 !== 0) {
+  await fh1.close();
   throw new Error(`Cannot derive integer fps from stts duration ${uniformDuration}.`);
 }
 const sourceFps = TARGET_VIDEO_TIMESCALE / uniformDuration;
 const speed = sourceFps / TARGET_FPS;
 if (!Number.isInteger(speed) || speed < 1) {
+  await fh1.close();
   throw new Error(`Source fps ${sourceFps} does not map to an integer speed factor (fps/30).`);
 }
 
 const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
 const lastEntry = videoStts[videoStts.length - 1];
 if (lastEntry.duration % 2 !== 0) {
+  await fh1.close();
   throw new Error(`Last video sample duration ${lastEntry.duration} is odd; cannot split in half.`);
 }
 
@@ -351,7 +374,10 @@ if (vInfo.ctts) {
   }
 }
 const videoMediaTime = firstCttsOffset * speed;
-if (videoMediaTime < 0) throw new Error('Video elst media_time is negative after scaling.');
+if (videoMediaTime < 0) {
+  await fh1.close();
+  throw new Error('Video elst media_time is negative after scaling.');
+}
 
 // Scaled media duration and the final-sample split.
 const scaledMediaTicks = videoFrameCount * uniformDuration * speed;
@@ -363,7 +389,10 @@ const videoElstMs = Math.ceil((videoMediaTicks / TARGET_VIDEO_TIMESCALE) * TARGE
 const audioElst = elstInfo(b, aInfo.elst);
 const audioMdhd = mdhdInfo(b, aInfo.mdhd);
 const audioPrimedMediaTime = audioElst.mediaTime * speed;
-if (audioPrimedMediaTime < 0) throw new Error('Audio elst media_time is negative after scaling.');
+if (audioPrimedMediaTime < 0) {
+  await fh1.close();
+  throw new Error('Audio elst media_time is negative after scaling.');
+}
 
 let audioElstMs;
 if (audioElstMsOverride !== null) {
@@ -380,7 +409,10 @@ if (audioElstMsOverride !== null) {
 const audioEditTicks = Math.round((audioElstMs * audioMdhd.timescale) / TARGET_MOVIE_TIMESCALE);
 
 const audioSamples = stszCount(b, aInfo.stbl);
-if (!audioSamples || audioSamples < 2) throw new Error('Audio track has fewer than two samples.');
+if (!audioSamples || audioSamples < 2) {
+  await fh1.close();
+  throw new Error('Audio track has fewer than two samples.');
+}
 const fillerCount = fillerCountOverride !== null ? fillerCountOverride : 9 * audioSamples;
 if (fillerCountOverride === null) {
   warnings.push(
@@ -390,12 +422,10 @@ if (fillerCountOverride === null) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Apply the timing transforms in place
+// 3. Apply the timing transforms in place
 // ---------------------------------------------------------------------------
 
-// Video stts: scale every duration by speed (entry count unchanged; the
-// final-sample split is done by tools/split-last-stts.js in a later step,
-// because splitting grows the stts box and requires a moov rebuild).
+// Video stts: scale every duration by speed
 {
   let at = vInfo.stts.content + 8;
   for (let i = 0; i < videoStts.length; i++) {
@@ -404,7 +434,7 @@ if (fillerCountOverride === null) {
   }
 }
 
-// Video ctts: scale offsets by speed (same as lib/rtx-duration.js).
+// Video ctts: scale offsets by speed
 if (vInfo.ctts) {
   const entries = b.readUInt32BE(vInfo.ctts.content + 4);
   const version = b[vInfo.ctts.content];
@@ -426,24 +456,22 @@ writeElst(b, videoElst, videoElstMs, videoMediaTime);
 const videoTkhd = tkhdInfo(b, vInfo.tkhd);
 writeDuration(b, videoTkhd.durationOffset, videoTkhd.durationBytes, videoElstMs);
 
-// Audio elst (the second-AAC tool trusts these values).
+// Audio elst
 writeElst(b, audioElst, audioElstMs, audioPrimedMediaTime);
 
 // Movie header: timescale 1000, duration = video edit duration.
 b.writeUInt32BE(TARGET_MOVIE_TIMESCALE, mvhdTimescaleOffset);
 writeDuration(b, mvhdDurationMeta.offset, mvhdDurationMeta.bytes, videoElstMs);
 
+// Write modified header back into stage1Path
+await fh1.write(b, 0, b.length, 0);
+await fh1.close();
+
 // ---------------------------------------------------------------------------
-// 5. Hand off to the validated second-AAC tool
+// 4. Hand off to the validated second-AAC tool
 // ---------------------------------------------------------------------------
 
 reportProgress(55, 'timing');
-const workDir = await mkdtemp(path.join(tmpdir(), 'vague-rtx-pipeline-'));
-const stage1Path = path.join(workDir, 'stage1.mp4');
-const stage2Path = path.join(workDir, 'stage2.mp4');
-await writeFile(stage1Path, b);
-b = null;
-if (global.gc) global.gc();
 
 // Final-sample split (validated tool; rebuilds moov and shifts offsets).
 const splitRun = spawnSync(
@@ -495,7 +523,9 @@ const summary = {
   dvStripped,
   rebranded,
   derived: {
-    sourceVideoTimescale: sourceVideoMdhd.timescale,
+    sourceVideoTimescale: remuxed.isoSigned?.factor
+      ? TARGET_VIDEO_TIMESCALE / remuxed.isoSigned.factor
+      : TARGET_VIDEO_TIMESCALE,
     sourceFps,
     speed,
     videoFrameCount,

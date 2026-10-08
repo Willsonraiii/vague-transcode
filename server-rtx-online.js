@@ -33,7 +33,7 @@ import express from 'express';
 import multer from 'multer';
 import { spawn, spawnSync, execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdir, rm, stat, rename, copyFile, unlink, link, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, rm, stat, rename, copyFile, unlink, link, readFile, writeFile, readdir, utimes, truncate } from 'node:fs/promises';
 import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
@@ -147,7 +147,7 @@ async function removeJob(job) {
 // later continue from the byte where it stopped (nothing is re-uploaded).
 // ---------------------------------------------------------------------------
 
-const uploadsBusy = new Set();
+const uploadsActive = new Map();
 
 function uploadPaths(id) {
   return {
@@ -294,7 +294,7 @@ setInterval(() => {
       const m = /^([0-9a-f]{32})\.json$/.exec(name);
       if (!m) continue;
       const st = await stat(path.join(UPLOADS_DIR, name)).catch(() => null);
-      if (st && now - st.mtimeMs > JOB_TTL_MS && !uploadsBusy.has(m[1])) {
+      if (st && now - st.mtimeMs > JOB_TTL_MS && !uploadsActive.has(m[1])) {
         console.log(`[upload ${m[1]}] expired — deleting`);
         removeUpload(m[1]);
       }
@@ -591,35 +591,60 @@ app.put('/api/uploads/:id', async (req, res) => {
   const up = await readUpload(id);
   if (!up) return res.status(404).json({ error: 'Unknown upload.' });
   const offset = Number(req.query.offset);
-  if (!Number.isInteger(offset) || offset !== up.received) {
-    return res.status(409).json({ error: 'Offset mismatch.', received: up.received });
+  if (!Number.isInteger(offset)) return res.status(400).json({ error: 'Invalid offset.' });
+
+  // If the server already received past or equal to this offset (e.g. duplicate retry after dropped ACK),
+  // return success immediately so the client can advance without conflict.
+  if (offset < up.received) {
+    return res.json({ received: up.received, bytesReceived: up.received, synced: true });
   }
+
+  // If offset skips ahead of received bytes, notify client of the actual received offset.
+  if (offset > up.received) {
+    return res.status(409).json({ error: 'Offset mismatch.', received: up.received, bytesReceived: up.received });
+  }
+
   const rawLen = req.headers['content-length'];
   const expectedLen = rawLen !== undefined ? Number(rawLen) : null;
   if (expectedLen !== null && (!Number.isFinite(expectedLen) || expectedLen < 1 || expectedLen > MAX_CHUNK || offset + expectedLen > up.size)) {
     return res.status(400).json({ error: 'Bad chunk size.' });
   }
-  if (uploadsBusy.has(id)) return res.status(409).json({ error: 'Chunk already in progress.', received: up.received, bytesReceived: up.received });
-  uploadsBusy.add(id);
+
+  // Terminate any previous hanging connection on this upload ID immediately so the client can proceed
+  const prev = uploadsActive.get(id);
+  if (prev) {
+    try { prev.req.destroy(); } catch {}
+    uploadsActive.delete(id);
+  }
+  uploadsActive.set(id, { req, res });
+  req.setTimeout(15000, () => {
+    try { req.destroy(new Error('Socket timeout')); } catch {}
+  });
+
   const p = uploadPaths(id);
   try {
-    await pipeline(req, createWriteStream(p.part));
-    const st = await stat(p.part);
-    const actualLen = st.size;
-    if (actualLen < 1 || actualLen > MAX_CHUNK || offset + actualLen > up.size) {
+    await pipeline(req, createWriteStream(p.data, { flags: 'a' }));
+    const st = await stat(p.data);
+    const actualReceived = st.size;
+    const actualLen = actualReceived - offset;
+    if (actualLen < 1 || actualLen > MAX_CHUNK || actualReceived > up.size) {
       throw new Error('invalid chunk size');
     }
     if (expectedLen !== null && actualLen !== expectedLen) throw new Error('short chunk');
-    await pipeline(createReadStream(p.part), createWriteStream(p.data, { flags: 'a' }));
     const now = new Date();
-    await import('node:fs/promises').then(({ utimes }) => utimes(p.meta, now, now)).catch(() => {});
-    if (!res.headersSent) res.json({ received: offset + actualLen, bytesReceived: offset + actualLen });
+    await utimes(p.meta, now, now).catch(() => {});
+    if (!res.headersSent) res.json({ received: actualReceived, bytesReceived: actualReceived });
   } catch {
+    // Truncate back to initial offset so any interrupted/partial chunk write is discarded
+    await truncate(p.data, offset).catch(() => {});
     const cur = await readUpload(id);
-    if (!res.headersSent && !res.destroyed) res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0, bytesReceived: cur ? cur.received : 0 });
+    if (!res.headersSent && !res.destroyed) {
+      res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0, bytesReceived: cur ? cur.received : 0 });
+    }
   } finally {
-    uploadsBusy.delete(id);
-    await rm(p.part, { force: true }).catch(() => {});
+    if (uploadsActive.get(id)?.req === req) {
+      uploadsActive.delete(id);
+    }
   }
 });
 

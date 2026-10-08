@@ -37,19 +37,18 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// 1 MB chunks: small enough that no single PUT lives long enough for a relay
-// (Tailscale Funnel) or a flaky mobile link to cut it mid-body. 8 MB stalled at
-// chunk 4 on the Funnel path (phone test, 2026-10-07).
+// 1 MB chunks: reliable upload granularity over Wi-Fi and mobile links
 const CHUNK = 1 * 1024 * 1024;
-const CHUNK_TIMEOUT_MS = 45 * 1000;   // a hung PUT aborts instead of hanging forever
-const CHUNK_RETRIES = 4;              // per chunk, with a fresh offset read between tries
+const CHUNK_TIMEOUT_MS = 15 * 1000;   // 15s timeout per 1 MB slice
+const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
 
 const MODES = [
   { id: 'hdr', label: 'FPS + Quality + HDR', shortLabel: 'FPS + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
   { id: 'standard', label: 'FPS + Quality', shortLabel: 'FPS + Quality', badge: 'Standard', Icon: FpsIcon }
 ];
 
-const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+// Decimal byte formatting matching Apple iOS / macOS Files app (1 MB = 1,000,000 bytes)
+const fmt = (b) => (b >= 1000000 ? (b / 1000000).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1000)) + ' KB');
 const hdrLabel = (t) => (!t || t === 'unknown' || t === 'sdr' ? 'SDR' : t === 'smpte2084' ? 'HDR10 / PQ' : t === 'arib-std-b67' ? 'HLG' : String(t).toUpperCase());
 const fmtDur = (s) => (s ? Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0') : '—');
 
@@ -497,7 +496,18 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               if (xhr.status === 401) return reject(new Error('KEY_NEEDED'));
               if (xhr.status >= 200 && xhr.status < 300) {
                 try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
-              } else reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
+                return;
+              }
+              if (xhr.status === 409) {
+                try {
+                  const data = JSON.parse(xhr.responseText);
+                  if (typeof data.received === 'number' && data.received > offset) {
+                    resolve({ synced: true, received: data.received });
+                    return;
+                  }
+                } catch {}
+              }
+              reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
             };
             xhr.onerror = () => reject(new Error('NET_ERR'));
             xhr.ontimeout = () => reject(new Error('NET_TIMEOUT'));
@@ -510,9 +520,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           if (attempt === CHUNK_RETRIES - 1) {
             return fail('Upload interrupted. Check your connection.');
           }
-          // The server may already hold part of it: re-read the offset and
-          // continue from wherever it really is (nothing is re-sent).
-          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           try {
             const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
             if (r.ok) {
@@ -558,51 +566,56 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
   /* ----- start user action ----- */
   const start = async (f) => {
-    if (!f) return;
-    if (!/\.(mp4|mov|m4v)$/i.test(f.name)) return fail('Only MP4, MOV, and M4V video files are supported.');
-    if (f.size > MAX_BYTES) { setFile(f); return fail('That video exceeds the 600 MB size limit.'); }
-
-    setFile(f);
-    fileRef.current = f;
-    savedFile.current = f;
-    setError('');
-    setResult(null);
-    setLog([]);
-    setOut(null);
-    setDl({ state: 'idle', pct: 0 });
-
-    const m = readMap();
-    const hit = m[fileKey(f)];
-    upId.current = hit?.id || null;
-    jobId.current = null;
-
-    let p = null;
     try {
-      p = await probeLocalFile(f);
+      if (!f) return;
+      if (!/\.(mp4|mov|m4v)$/i.test(f.name)) return fail('Only MP4, MOV, and M4V video files are supported.');
+      if (f.size > MAX_BYTES) { setFile(f); return fail('That video exceeds the 600 MB size limit.'); }
+
+      setFile(f);
+      fileRef.current = f;
+      savedFile.current = f;
+      setError('');
+      setResult(null);
+      setLog([]);
+      setOut(null);
+      setDl({ state: 'idle', pct: 0 });
+
+      const m = readMap();
+      const hit = m[fileKey(f)];
+      upId.current = hit?.id || null;
+      jobId.current = null;
+
+      let p = null;
+      try {
+        p = await probeLocalFile(f);
+      } catch (err) {
+        console.warn('Local probe error, using fallback:', err);
+      }
+
+      const detected = p || {
+        size: f.size,
+        dur: null,
+        w: null,
+        h: null,
+        fps: null,
+        codec: (f.name.split('.').pop() || 'MP4').toUpperCase(),
+        transfer: 'sdr'
+      };
+
+      setSrc(detected);
+      srcRef.current = detected;
+      setConfirmAt('pre');
+      setPhase('confirm');
+      setLog([
+        `[client] Selected: ${f.name} (${fmt(f.size)})`,
+        p
+          ? `[obito] On-device probe: ${p.w}×${p.h} · ${p.fps} fps · ${(p.codec || '').toUpperCase()}${p.transfer ? ' · ' + p.transfer : ''}`
+          : `[obito] Ready for lossless remuxing: ${f.name} (${fmt(f.size)})`
+      ]);
     } catch (err) {
-      console.warn('Local probe error, using fallback:', err);
+      console.error('Error selecting file:', err);
+      fail('Could not load selected video: ' + (err.message || 'unknown error'));
     }
-
-    const detected = p || {
-      size: f.size,
-      dur: null,
-      w: null,
-      h: null,
-      fps: null,
-      codec: (f.name.split('.').pop() || 'MP4').toUpperCase(),
-      transfer: 'sdr'
-    };
-
-    setSrc(detected);
-    srcRef.current = detected;
-    setConfirmAt('pre');
-    setPhase('confirm');
-    setLog([
-      `[client] Selected: ${f.name} (${fmt(f.size)})`,
-      p
-        ? `[obito] On-device probe: ${p.w}×${p.h} · ${p.fps} fps · ${(p.codec || '').toUpperCase()}${p.transfer ? ' · ' + p.transfer : ''}`
-        : `[obito] Ready for lossless remuxing: ${f.name} (${fmt(f.size)})`
-    ]);
   };
 
   const pause = () => { flags.current.pause = true; xhrRef.current?.abort(); setPhase('paused'); };
@@ -612,9 +625,15 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     flags.current.pause = false;
     xhrRef.current?.abort();
     clearInterval(timer.current);
-    if (upId.current && file && pct > 0) {
-      setKept({ id: upId.current, pct, name: file.name, file });
+    const f = fileRef.current;
+    if (f) {
+      const m = readMap();
+      delete m[fileKey(f)];
+      writeMap(m);
     }
+    upId.current = null;
+    jobId.current = null;
+    setKept(null);
     setPhase('idle');
     setPct(0);
   };
