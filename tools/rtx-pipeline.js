@@ -23,7 +23,7 @@
  *   node tools/rtx-pipeline.js INPUT.mp4 OUTPUT.mp4 \
  *     [--audio-elst-ms N] [--filler-count N] [--keep-temp]
  */
-import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -228,7 +228,9 @@ function reportProgress(percent, stage) {
 // 1. Pre-check the source: video timescale must map to 19200 exactly
 // ---------------------------------------------------------------------------
 
-const source = await readFile(inputPath);
+const inputStat = await stat(inputPath);
+const inputBytes = inputStat.size;
+let source = await readFile(inputPath);
 let sourceMoov = findMoov(source);
 if (!sourceMoov) throw new Error('No moov box found in source.');
 const sourceTraks = traksOf(source, sourceMoov);
@@ -261,7 +263,11 @@ const remuxed = await faststartRemux(inputBlob, () => {}, {
   rebrand: true,
   isoSignature: true,
 });
-const b = Buffer.from(await remuxed.blob.arrayBuffer());
+const dvStripped = remuxed.dvStripped;
+const rebranded = remuxed.rebranded;
+let b = Buffer.from(await remuxed.blob.arrayBuffer());
+source = null;
+if (global.gc) global.gc();
 reportProgress(35, 'remuxed');
 
 // ---------------------------------------------------------------------------
@@ -433,6 +439,8 @@ const workDir = await mkdtemp(path.join(tmpdir(), 'vague-rtx-pipeline-'));
 const stage1Path = path.join(workDir, 'stage1.mp4');
 const stage2Path = path.join(workDir, 'stage2.mp4');
 await writeFile(stage1Path, b);
+b = null;
+if (global.gc) global.gc();
 
 // Final-sample split (validated tool; rebuilds moov and shifts offsets).
 const splitRun = spawnSync(
@@ -471,17 +479,18 @@ reportProgress(95, 'audio-done');
 // 6. Report
 // ---------------------------------------------------------------------------
 
-const output = await readFile(outputPath);
+const outputStat = await stat(outputPath);
+const outputBytes = outputStat.size;
 const summary = {
   mode: keepDv ? 'standard' : 'hdr',
-  inputBytes: source.length,
-  outputBytes: output.length,
-  sizeGrowth: output.length - source.length,
+  inputBytes,
+  outputBytes,
+  sizeGrowth: outputBytes - inputBytes,
   hadDolbyVision: keepDv
     ? null
-    : Boolean(remuxed.dvStripped && (remuxed.dvStripped.boxes > 0 || remuxed.dvStripped.retagged > 0)),
-  dvStripped: remuxed.dvStripped,
-  rebranded: remuxed.rebranded,
+    : Boolean(dvStripped && (dvStripped.boxes > 0 || dvStripped.retagged > 0)),
+  dvStripped,
+  rebranded,
   derived: {
     sourceVideoTimescale: sourceVideoMdhd.timescale,
     sourceFps,

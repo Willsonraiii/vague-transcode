@@ -192,7 +192,7 @@ function startNextJob() {
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes)`);
 
-  const workerArgs = [PIPELINE_TOOL, job.inputPath, job.outputPath];
+  const workerArgs = ['--expose-gc', '--max-old-space-size=180', PIPELINE_TOOL, job.inputPath, job.outputPath];
   if (job.mode === 'standard') workerArgs.push('--keep-dv');
 
   const child = spawn(process.execPath, workerArgs, {
