@@ -59,11 +59,8 @@ function findVideoStts(b, moov) {
     function scan(start, end) {
       readBoxes(b, start, end, (box) => {
         if (box.type === 'hdlr') {
-          handler = b.toString(
-            'ascii',
-            box.content + 8,
-            box.content + 12,
-          );
+          const h = b.toString('ascii', box.content + 8, box.content + 12);
+          if (h === 'vide' || h === 'soun') handler = h;
         }
 
         if (box.type === 'stts') {

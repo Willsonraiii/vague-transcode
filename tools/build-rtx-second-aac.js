@@ -104,7 +104,8 @@ function scanTrak(b, trak) {
   function scan(start, end) {
     readBoxes(b, start, end, (box) => {
       if (box.type === 'hdlr') {
-        result.handler = b.toString('ascii', box.content + 8, box.content + 12);
+        const h = b.toString('ascii', box.content + 8, box.content + 12);
+        if (h === 'vide' || h === 'soun') result.handler = h;
       }
       if (box.type === 'tkhd') result.tkhd = box;
       if (box.type === 'mdhd') result.mdhd = box;

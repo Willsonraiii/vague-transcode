@@ -69,7 +69,10 @@ function scanTrak(b, trak) {
   const result = { handler: null, tkhd: null, mdhd: null, elst: null, stbl: null, stts: null, ctts: null };
   function scan(start, end) {
     readBoxes(b, start, end, (box) => {
-      if (box.type === 'hdlr') result.handler = b.toString('ascii', box.content + 8, box.content + 12);
+      if (box.type === 'hdlr') {
+        const h = b.toString('ascii', box.content + 8, box.content + 12);
+        if (h === 'vide' || h === 'soun') result.handler = h;
+      }
       if (box.type === 'tkhd') result.tkhd = box;
       if (box.type === 'mdhd') result.mdhd = box;
       if (box.type === 'elst') result.elst = box;
