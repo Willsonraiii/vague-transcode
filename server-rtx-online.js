@@ -52,14 +52,13 @@ const PROCESS_TIMEOUT_MS = Number(process.env.PROCESS_TIMEOUT_MS || 30 * 60 * 10
 const PORT = Number(process.env.PORT || 3005);
 const MAX_FILE_SIZE = 600 * 1024 * 1024;      // 600 MB upload limit
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 60 * 60 * 1000); // 1 hour
-const MIN_FREE_DISK = 2 * 1024 * 1024 * 1024; // need ~2 GB free to accept
+const MIN_FREE_DISK = 100 * 1024 * 1024; // need ~100 MB free to accept (container safe)
 const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 await mkdir(JOBS_DIR, { recursive: true });
 await mkdir(UPLOADS_DIR, { recursive: true });
 
-// No job state survives a restart: purge any orphaned job directories left by
-// a previous crash or restart (they are unreachable and would leak disk).
+// Purge any orphaned job and upload files left by previous runs or crashes to reclaim disk space
 {
   const { readdir } = await import('node:fs/promises');
   const orphans = await readdir(JOBS_DIR).catch(() => []);
@@ -68,6 +67,11 @@ await mkdir(UPLOADS_DIR, { recursive: true });
       await rm(path.join(JOBS_DIR, name), { recursive: true, force: true }).catch(() => {});
       console.log(`[startup] removed orphaned job ${name}`);
     }
+  }
+  const uploadOrphans = await readdir(UPLOADS_DIR).catch(() => []);
+  for (const name of uploadOrphans) {
+    await rm(path.join(UPLOADS_DIR, name), { force: true }).catch(() => {});
+    console.log(`[startup] removed orphaned upload ${name}`);
   }
 }
 
@@ -501,6 +505,7 @@ function logLine(job, line) {
 
 app.get('/health', async (_req, res) => {
   const ff = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' });
+  const free = freeDiskBytes(UPLOADS_DIR);
   res.json({
     ok: true,
     service: 'rtx-online',
@@ -508,6 +513,8 @@ app.get('/health', async (_req, res) => {
     node: process.version,
     maxUploadBytes: MAX_FILE_SIZE,
     auth: ACCESS_TOKEN ? 'token' : 'open',
+    freeDiskBytes: free,
+    freeDiskMb: free !== null ? Math.round(free / 1024 / 1024) : null,
     jobs: { total: jobs.size, processing },
   });
 });
@@ -589,7 +596,7 @@ app.get('/api/uploads/:id', async (req, res) => {
   res.json({ id: up.id, name: up.name, size: up.size, received: up.received, bytesReceived: up.received });
 });
 
-app.put('/api/uploads/:id', async (req, res) => {
+const handleChunk = async (req, res) => {
   const id = req.params.id;
   if (!validJobId(id)) return res.status(400).json({ error: 'Bad upload id.' });
   const up = await readUpload(id);
@@ -653,7 +660,10 @@ app.put('/api/uploads/:id', async (req, res) => {
       uploadsActive.delete(id);
     }
   }
-});
+};
+
+app.put('/api/uploads/:id', handleChunk);
+app.post('/api/uploads/:id', handleChunk);
 
 app.post('/api/uploads/:id/probe', express.json({ limit: '10kb' }), async (req, res) => {
   const id = req.params.id;

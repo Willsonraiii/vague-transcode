@@ -38,9 +38,9 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// 1 MB chunks: reliable upload granularity over Wi-Fi and mobile links
-const CHUNK = 1 * 1024 * 1024;
-const CHUNK_TIMEOUT_MS = 90 * 1000;   // 90s timeout per 1 MB slice (resilient over mobile networks)
+// 512 KB chunks: smooth progress and low-latency packet streaming over Wi-Fi and mobile links
+const CHUNK = 512 * 1024;
+const CHUNK_TIMEOUT_MS = 90 * 1000;   // 90s timeout per slice (resilient over mobile networks)
 const CHUNK_RETRIES = 6;              // per chunk, with fresh sync between tries
 
 const MODES = [
@@ -570,7 +570,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           res = await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhrRef.current = xhr;
-            xhr.open('PUT', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
+            xhr.open('POST', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
             if (keyRef.current) xhr.setRequestHeader('x-access-token', keyRef.current);
             xhr.setRequestHeader('content-type', 'application/octet-stream');
             xhr.timeout = CHUNK_TIMEOUT_MS;
@@ -594,7 +594,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                   }
                 } catch {}
               }
-              reject(new Error(xhr.responseText || 'CHUNK_FAIL'));
+              let errMsg = 'CHUNK_FAIL';
+              try {
+                const j = JSON.parse(xhr.responseText);
+                if (j.error) errMsg = j.error;
+              } catch {}
+              reject(new Error(errMsg));
             };
             xhr.onerror = () => reject(new Error('NET_ERR'));
             xhr.ontimeout = () => reject(new Error('NET_TIMEOUT'));
@@ -605,7 +610,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         } catch (err) {
           if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
           if (attempt === CHUNK_RETRIES - 1) {
-            return fail('Upload interrupted. Check your connection.');
+            const detail = err?.message && err.message !== 'CHUNK_FAIL' && err.message !== 'NET_ERR'
+              ? err.message
+              : 'Upload interrupted. Check your connection.';
+            return fail(detail);
           }
           await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           try {
