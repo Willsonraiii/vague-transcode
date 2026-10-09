@@ -570,7 +570,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           res = await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhrRef.current = xhr;
-            xhr.open('POST', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
+            xhr.open('PUT', withKey(`/api/uploads/${id}?offset=${offset}${isLast ? '&last=1' : ''}`));
             if (keyRef.current) xhr.setRequestHeader('x-access-token', keyRef.current);
             xhr.setRequestHeader('content-type', 'application/octet-stream');
             xhr.timeout = CHUNK_TIMEOUT_MS;
