@@ -141,6 +141,7 @@ function publicJob(job) {
 async function removeJob(job) {
   jobs.delete(job.id);
   await rm(job.dir, { recursive: true, force: true }).catch(() => {});
+  if (job.uploadId) await removeUpload(job.uploadId).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -615,12 +616,12 @@ app.put('/api/uploads/:id', async (req, res) => {
 
   // Terminate any previous hanging connection on this upload ID immediately so the client can proceed
   const prev = uploadsActive.get(id);
-  if (prev) {
+  if (prev && prev.req !== req) {
     try { prev.req.destroy(); } catch {}
     uploadsActive.delete(id);
   }
   uploadsActive.set(id, { req, res });
-  req.setTimeout(15000, () => {
+  req.setTimeout(90000, () => {
     try { req.destroy(new Error('Socket timeout')); } catch {}
   });
 
@@ -631,18 +632,21 @@ app.put('/api/uploads/:id', async (req, res) => {
     const actualReceived = st.size;
     const actualLen = actualReceived - offset;
     if (actualLen < 1 || actualLen > MAX_CHUNK || actualReceived > up.size) {
-      throw new Error('invalid chunk size');
+      throw new Error(`invalid chunk size: got ${actualLen} bytes`);
     }
-    if (expectedLen !== null && actualLen !== expectedLen) throw new Error('short chunk');
+    if (expectedLen !== null && actualLen !== expectedLen) {
+      throw new Error(`short chunk: expected ${expectedLen}, got ${actualLen}`);
+    }
     const now = new Date();
     await utimes(p.meta, now, now).catch(() => {});
     if (!res.headersSent) res.json({ received: actualReceived, bytesReceived: actualReceived });
-  } catch {
+  } catch (err) {
+    console.error(`[upload ${id}] chunk error at offset ${offset}:`, err?.message || err);
     // Truncate back to initial offset so any interrupted/partial chunk write is discarded
     await truncate(p.data, offset).catch(() => {});
     const cur = await readUpload(id);
     if (!res.headersSent && !res.destroyed) {
-      res.status(400).json({ error: 'Chunk failed.', received: cur ? cur.received : 0, bytesReceived: cur ? cur.received : 0 });
+      res.status(400).json({ error: 'Chunk failed: ' + (err?.message || 'unknown'), received: cur ? cur.received : 0, bytesReceived: cur ? cur.received : 0 });
     }
   } finally {
     if (uploadsActive.get(id)?.req === req) {

@@ -1035,11 +1035,23 @@ button {
   transform: scale(0.97);
 }
 
-/* Ensure metal-fx wrapper never conceals its buttons */
+/* Ensure metal-fx wrapper never conceals its buttons or intercepts touch events */
 .metal-fx-root,
 .metal-fx-content {
   opacity: 1 !important;
   visibility: visible !important;
+}
+
+.metal-fx-canvas,
+.metal-fx-inner,
+.metal-fx-root canvas {
+  pointer-events: none !important;
+}
+
+.choose-file-label {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
 
 .btn-primary-hero:hover {

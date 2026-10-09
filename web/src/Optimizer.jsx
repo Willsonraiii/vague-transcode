@@ -40,16 +40,16 @@ function SafeMetalFx({ children, ...props }) {
 const MAX_BYTES = 600 * 1024 * 1024;
 // 1 MB chunks: reliable upload granularity over Wi-Fi and mobile links
 const CHUNK = 1 * 1024 * 1024;
-const CHUNK_TIMEOUT_MS = 15 * 1000;   // 15s timeout per 1 MB slice
-const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
+const CHUNK_TIMEOUT_MS = 90 * 1000;   // 90s timeout per 1 MB slice (resilient over mobile networks)
+const CHUNK_RETRIES = 6;              // per chunk, with fresh sync between tries
 
 const MODES = [
   { id: 'hdr', label: 'FPS + Quality + HDR', shortLabel: 'FPS + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
   { id: 'standard', label: 'FPS + Quality', shortLabel: 'FPS + Quality', badge: 'Standard', Icon: FpsIcon }
 ];
 
-// Decimal byte formatting matching Apple iOS / macOS Files app (1 MB = 1,000,000 bytes)
-const fmt = (b) => (b >= 1000000 ? (b / 1000000).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1000)) + ' KB');
+// Standard binary byte formatting (1 MB = 1024 * 1024 bytes -> 71.0 MB for 74.5M bytes)
+const fmt = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 const hdrLabel = (t) => (!t || t === 'unknown' || t === 'sdr' ? 'SDR' : t === 'smpte2084' ? 'HDR10 / PQ' : t === 'arib-std-b67' ? 'HLG' : String(t).toUpperCase());
 const fmtDur = (s) => (s ? Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0') : '—');
 
@@ -588,7 +588,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               if (xhr.status === 409) {
                 try {
                   const data = JSON.parse(xhr.responseText);
-                  if (typeof data.received === 'number' && data.received > offset) {
+                  if (typeof data.received === 'number') {
                     resolve({ synced: true, received: data.received });
                     return;
                   }
@@ -655,8 +655,14 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const start = async (f) => {
     try {
       if (!f) return;
-      if (!/\.(mp4|mov|m4v)$/i.test(f.name)) return fail('Only MP4, MOV, and M4V video files are supported.');
+      const isVideo = /\.(mp4|mov|m4v)$/i.test(f.name || '') || (f.type && (f.type.startsWith('video/') || f.type === 'video/quicktime'));
+      if (!isVideo) return fail('Only MP4, MOV, and M4V video files are supported.');
       if (f.size > MAX_BYTES) { setFile(f); return fail('That video exceeds the 600 MB size limit.'); }
+
+      // Ensure file has a proper name for display and server ingestion
+      if (!/\.(mp4|mov|m4v)$/i.test(f.name || '')) {
+        try { Object.defineProperty(f, 'name', { value: (f.name || 'video') + '.mp4', writable: true }); } catch {}
+      }
 
       setFile(f);
       fileRef.current = f;
@@ -874,19 +880,21 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             <ModeSelect value={mode} onChange={setMode} />
 
             <div className="choose-btn-wrap my-3">
-              <SafeMetalFx preset="chromatic" strength={1} theme="dark" innerShadow>
-                <button
-                  type="button"
-                  className="btn-primary-hero"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(10); } catch {}
-                    input.current?.click();
+              <label htmlFor="video-file-input" className="btn-primary-hero choose-file-label">
+                <UploadIcon width={18} height={18} />
+                <span>Choose Video File</span>
+                <input
+                  id="video-file-input"
+                  ref={input}
+                  type="file"
+                  hidden
+                  accept="video/mp4,video/quicktime,video/*,.mp4,.mov,.m4v"
+                  onChange={(e) => {
+                    start(e.target.files?.[0]);
+                    e.target.value = '';
                   }}
-                >
-                  <UploadIcon width={18} height={18} />
-                  <span>Choose Video File</span>
-                </button>
-              </SafeMetalFx>
+                />
+              </label>
             </div>
 
             <div className="engine-trust-row">
@@ -1097,16 +1105,6 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             </label>
           )}
 
-          <input
-            ref={input}
-            type="file"
-            hidden
-            accept="video/mp4,video/quicktime,.mp4,.mov,.m4v"
-            onChange={(e) => {
-              start(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
         </div>
       </div>
     </div>
