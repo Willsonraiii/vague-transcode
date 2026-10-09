@@ -92,10 +92,11 @@ function concat(parts) {
 }
 
 function u32(value, label) {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+  const rounded = Math.round(value);
+  if (!Number.isFinite(rounded) || rounded < 0 || rounded > 0xffffffff) {
     throw new Error(`Value does not fit uint32 (${label}): ${value}`);
   }
-  return value;
+  return rounded;
 }
 
 function scanTrak(b, trak) {

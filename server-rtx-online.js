@@ -769,8 +769,9 @@ app.get('/api/jobs/:id/download', (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown job.' });
   if (job.status !== 'done') return res.status(409).json({ error: `Job is ${job.status}, not done.` });
+  if (!existsSync(job.outputPath)) return res.status(404).json({ error: 'Output file is no longer on disk.' });
 
-  const baseName = (job.fileName || 'video').replace(/\.[^.]+$/, '');
+  const baseName = (job.fileName || 'video').replace(/["'/\\]/g, '_').replace(/\.[^.]+$/, '');
   const downloadName = `${baseName}-obito-${job.mode}.mp4`;
 
   res.setHeader('Accept-Ranges', 'bytes');
