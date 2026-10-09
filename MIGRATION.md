@@ -79,6 +79,7 @@ vague-transcode/
   4. **PUT/POST Compatibility**: Server accepts both `PUT` and `POST` for `/api/uploads/:id`.
   5. **Immediate Socket Cleanup**: Stale zombie connections on that upload ID are destroyed instantly.
   6. **Disk Truncation on Drop**: Disconnected chunks are rolled back with `truncate(p.data, offset)` so zero corrupt bytes accumulate.
+  7. **Auto-Recovery from "Unknown Upload"**: If the server restarted or an old upload session expired, the browser previously reused stale upload IDs cached in `localStorage` for that file, returning 404 `"Unknown upload."`. The client now actively validates cached IDs on server before uploading, auto-purges stale cache entries on 404, and automatically spawns a fresh upload session to upload from byte 0 seamlessly.
 
 ### C. Why Tailscale Worked vs Home Wi-Fi vs Live Site
 - **Tailscale HTTPS (`*.ts.net`)**:

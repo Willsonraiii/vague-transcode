@@ -281,7 +281,7 @@ curl -s https://obitostudio.willsonrai.com.np/health
 # T — TROUBLESHOOTING
 
 - **Upload interrupted / stuck at 1%** — Previous 15-second browser timeout dropped 1 MB slices over mobile WAN. Fixed with 512 KB slices, 90-second timeouts, and automatic 409 offset synchronization. If experienced on mobile, clear Safari cache or close and reopen the browser tab so Safari downloads the new JS bundle (`index-Cw0Bh2tt.js`).
-- **File picker won't open on Home Wi-Fi (`http://...`)** — iOS Safari strictly blocks synthetic programmatic `.click()` events on plain HTTP (insecure context) when triggered through WebGL canvas overlays. Fixed with native `<label htmlFor="video-file-input">` and `pointer-events: none` on WebGL canvases.
+- **"Unknown upload" error on same file** — When an upload completed or the server rebooted, the browser had cached the old upload ID in `localStorage` under that filename. Fixed with pre-upload server validation and automatic session re-initialization (`index-CxaSVCuz.js`). If seen, reload the tab so the new bundle takes effect.
 - **Multiple servers running at once** — Local server instances (e.g. port 3005 and port 3006) run on isolated ports and do not interfere with the live Suga Cloud production server (`https://obitostudio.willsonrai.com.np`). Tailscale proxies to local port 3005 directly.
 
 ## 13. Run permanently on Linux (systemd + Tailscale)
