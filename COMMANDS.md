@@ -280,14 +280,9 @@ curl -s https://obitostudio.willsonrai.com.np/health
 
 # T — TROUBLESHOOTING
 
-- **Server won't start, "Cannot find module .../lib/..."** — that was the 2026-10-02 bug; fixed in commit `ff095ca`. If you ever see it again, your copy is old: `git pull --ff-only`.
-- **Phone times out, localhost works** — firewall (W5) or PC asleep or server window closed or Tailscale off on one side.
-- **`Unrecognized option 'vsync'`** — FFmpeg 9: use `-fps_mode passthrough` AFTER `-c copy`.
-- **Garbled symbols on the page** — someone rewrote a file with `Get-Content | Set-Content`. Fix: `git checkout -- public/index.html`.
-- **No Download button** — old code; update the repo (fixed long ago in `bc7e665`).
-- **https address dead** — serve stopped: run `tailscale serve --bg 3005` again on that PC.
-- **Pipeline error about timescale** — that source's time base does not divide 19200; not supported yet.
-- **WiFi menu shows no name** — the PC has no Wi-Fi (it will say "connected by cable") or the tools are missing; on Linux it tries `iwgetid` then `nmcli`.
+- **Upload interrupted / stuck at 1%** — Previous 15-second browser timeout dropped 1 MB slices over mobile WAN. Fixed with 512 KB slices, 90-second timeouts, and automatic 409 offset synchronization. If experienced on mobile, clear Safari cache or close and reopen the browser tab so Safari downloads the new JS bundle (`index-Cw0Bh2tt.js`).
+- **File picker won't open on Home Wi-Fi (`http://...`)** — iOS Safari strictly blocks synthetic programmatic `.click()` events on plain HTTP (insecure context) when triggered through WebGL canvas overlays. Fixed with native `<label htmlFor="video-file-input">` and `pointer-events: none` on WebGL canvases.
+- **Multiple servers running at once** — Local server instances (e.g. port 3005 and port 3006) run on isolated ports and do not interfere with the live Suga Cloud production server (`https://obitostudio.willsonrai.com.np`). Tailscale proxies to local port 3005 directly.
 
 ## 13. Run permanently on Linux (systemd + Tailscale)
 

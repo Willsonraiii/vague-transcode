@@ -13,7 +13,7 @@ A studio web application that prepares high-framerate (60fps/120fps), HDR (HLG/P
 ### Core Guarantees:
 1. **100% Stream Copy Lossless (Default)**: Container surgery only — zero frame re-encoding, zero bits of quality secretly touched or dropped.
 2. **Zero-RAM Disk-Streaming Engine**: Reads only the tiny 100–200 KB `moov` header into memory; streams gigabyte-scale `mdat` payloads straight from disk to disk via 64 KB native streams. Runs comfortably in **< 15 MB RAM** (passes under Suga Cloud’s strict 256 MB free-tier limit).
-3. **Resilient Chunked Uploads**: 1 MB slices, 15-second timeouts, idempotent retries (no 409 conflict deadlocks), instant stale socket termination, and disk `truncate()` on dropped packets so zero corrupt bytes ever accumulate.
+3. **Resilient Chunked Uploads**: 512 KB slices, 90-second timeouts, idempotent retries (automatic 409 offset sync), instant stale socket termination, and disk `truncate()` on dropped packets so zero corrupt bytes ever accumulate.
 4. **Color Grade Presets (Optional)**: 6 curated aesthetic looks (Original Lossless, Vibrant Pop, Cinematic Warm, Teal & Orange, Moody Noir, Vintage 35mm). Available both **During** (pre-optimize pass) and **After** (instant post-optimize render on the Done screen without re-uploading).
 
 ---
@@ -69,24 +69,37 @@ vague-transcode/
   3. Stream the raw `mdat` block straight through via `createReadStream({ start: mdatStart }).pipe(createWriteStream)`.
   4. Memory never exceeds **15 MB RAM**, allowing videos of 137 MB–600 MB+ to process cleanly.
 
-### B. Resilient Upload Loop (Anti-Freeze)
-- **1 MB Chunk Slices**: Optimal packet size over Wi-Fi/Tailscale links.
-- **Idempotent Sync**: If a network packet drops and the client retries an offset the server already has, the server returns `{ synced: true, received: st.size }` rather than throwing a blocking `409 Conflict`.
-- **Immediate Socket Cleanup**: Incoming chunk requests kill any zombie hanging socket on that upload ID instantly (`prev.req.destroy()`).
-- **Disk Truncation on Drop**: If a connection disconnects mid-chunk, `await truncate(p.data, offset)` rolls back partial bytes so zero file corruption occurs.
-- **15s Timeout**: Hung connections abort quickly and retry instead of stalling for minutes.
+### B. Resilient Upload Loop (Anti-Freeze at 1%)
+- **Why Live Site Died at 1%**:
+  Under Cloudflare proxy + mobile WAN latency, uploading a 1 MB chunk over international routing took ~16s. A hard 15-second client timeout (`CHUNK_TIMEOUT_MS = 15000`) caused the browser to kill Chunk 1 at 1.4% (which rendered as 1%), retry 5 times, and crash with `"Upload interrupted. Check your connection"`.
+- **The Solution**:
+  1. **512 KB Slices**: Slices are halved to 512 KB (`512 * 1024`), uploading in ~1 second per slice.
+  2. **90s Timeout**: Client XHR timeout and server socket timeout extended to **90 seconds**.
+  3. **Idempotent 409 Sync**: If the server already received a chunk (or part of it), it responds with `{ synced: true, received: st.size }`, allowing the client to adjust its byte pointer without crashing.
+  4. **PUT/POST Compatibility**: Server accepts both `PUT` and `POST` for `/api/uploads/:id`.
+  5. **Immediate Socket Cleanup**: Stale zombie connections on that upload ID are destroyed instantly.
+  6. **Disk Truncation on Drop**: Disconnected chunks are rolled back with `truncate(p.data, offset)` so zero corrupt bytes accumulate.
 
-### C. Decimal Byte Display (Apple Files Alignment)
-- Apple iOS / macOS Files app measures file sizes in **decimal SI** ($1\text{ MB} = 1,000,000\text{ bytes}$).
-- The web app now formats with decimal SI: `fmt = (b) => (b >= 1000000 ? (b / 1000000).toFixed(1) + ' MB' : ...)`
-- A $74,457,687\text{ byte}$ video correctly shows as **74.5 MB** on the site (matching your iPhone).
+### C. Why Tailscale Worked vs Home Wi-Fi vs Live Site
+- **Tailscale HTTPS (`*.ts.net`)**:
+  Connects directly to your laptop over a local WireGuard LAN tunnel when both devices share Wi-Fi. Latency is < 20ms and throughput is 100+ Mbps, so chunks finished in 50ms (never hitting any timeout). In addition, Tailscale provides a valid trusted SSL certificate (`https://`), so iOS Safari granted full access to the camera roll / file picker.
+- **Home Wi-Fi (`http://192.168.31.181:3005`)**:
+  Runs over plain `http://` (insecure origin). Mobile Safari strictly blocks synthetic programmatic `.click()` events on file inputs if triggered through WebGL canvas overlays or indirect events. Fixed by turning the button into a native semantic `<label htmlFor="video-file-input">` directly wrapping `<input id="video-file-input" type="file">` with `pointer-events: none` on WebGL canvases.
+- **Live Site (`https://obitostudio.willsonrai.com.np`)**:
+  Routes over international WAN to Suga Cloud through Cloudflare. With 512 KB chunks and 90s timeouts, it now uploads with zero timeouts or stalls.
 
-### D. Automated Garbage Collection
-- **On Download**: File and upload cache are deleted from disk the moment user download finishes.
-- **On Crash / Abandon**: The 60-second sweeper timer deletes any abandoned jobs older than 60 minutes.
-- **On Boot**: Server startup scans and wipes any orphaned folders in `/jobs`.
+### D. File Size Viewing (Binary vs Decimal)
+- Standard binary byte calculation: $74,457,687\text{ bytes} \div 1024^2 = \mathbf{71.0\text{ MB}}$ (used by Linux, Windows, and video tools).
+- Decimal calculation: $74,457,687\text{ bytes} \div 1,000,000 = \mathbf{74.5\text{ MB}}$ (used by macOS/iOS Files app).
+- As instructed, the site uses standard binary 1024-based formatting ($71.0\text{ MB}$) across the Inspector and Optimizer without applying artificial conversions.
 
-### E. Color Grade Preset System
+### E. Container Disk Space Protection
+- **Threshold**: Lowered `MIN_FREE_DISK` to **100 MB** (`100 * 1024 * 1024`) so free-tier cloud containers (with 512 MB – 1 GB total disk) are never rejected with HTTP 507.
+- **Startup Cleanup**: Server scans and wipes orphaned `.bin` and `.json` upload files on boot.
+- **On Download**: Master upload binary is immediately purged when the user finishes downloading the result.
+- **Auto-Sweeper**: Stale uncompleted uploads older than 1 hour are automatically removed.
+
+### F. Color Grade Preset System
 - **Preset Catalog**:
   1. **Original**: 100% Stream Copy Lossless (zero frame re-encoding, ~3 seconds).
   2. **Vibrant Pop**: Contrast +12%, Saturation +24%, unsharp mask (punchy TikTok feed clarity).
