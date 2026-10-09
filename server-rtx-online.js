@@ -628,7 +628,7 @@ const handleChunk = async (req, res) => {
     uploadsActive.delete(id);
   }
   uploadsActive.set(id, { req, res });
-  req.setTimeout(90000, () => {
+  req.setTimeout(120000, () => {
     try { req.destroy(new Error('Socket timeout')); } catch {}
   });
 

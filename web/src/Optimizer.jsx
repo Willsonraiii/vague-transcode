@@ -38,10 +38,11 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// 512 KB chunks: smooth progress and low-latency packet streaming over Wi-Fi and mobile links
-const CHUNK = 512 * 1024;
-const CHUNK_TIMEOUT_MS = 90 * 1000;   // 90s timeout per slice (resilient over mobile networks)
-const CHUNK_RETRIES = 6;              // per chunk, with fresh sync between tries
+// Adaptive dynamic chunking: 2 MB start for quick initial feedback, scaling up to 8 MB for maximum bandwidth saturation
+const MIN_CHUNK = 2 * 1024 * 1024;
+const MAX_CHUNK = 8 * 1024 * 1024;
+const CHUNK_TIMEOUT_MS = 120 * 1000;  // 120s timeout per slice
+const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
 
 const MODES = [
   { id: 'hdr', label: 'FPS + Quality + HDR', shortLabel: 'FPS + HDR', badge: 'iPhone HDR', Icon: HdrIcon },
@@ -419,6 +420,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const presetRef = useRef('original');
   presetRef.current = colorPreset;
   const [gradeState, setGradeState] = useState({ loading: false, resultId: null, preset: null, error: '' });
+  const [uploadSpeed, setUploadSpeed] = useState('');
+  const uploadStartTime = useRef(0);
 
   const headers = useCallback(() => (keyRef.current ? { 'x-access-token': keyRef.current } : {}), []);
   const withKey = useCallback((url) => (keyRef.current ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(keyRef.current) : url), []);
@@ -429,6 +432,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     setError(msg);
     setNeedKey(askKey);
     setPhase('error');
+    setUploadSpeed('');
     const f = fileRef.current;
     if (f) {
       const m = readMap();
@@ -590,7 +594,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       } catch { return fail('Could not connect to server.'); }
     }
 
-    // 3. Chunk upload loop
+    uploadStartTime.current = Date.now();
+    let currentChunk = MIN_CHUNK;
+
+    // 3. Chunk upload loop (adaptive dynamic scaling: 2 MB -> 4 MB -> 8 MB)
     while (offset < f.size) {
       if (flags.current.cancel) return;
       if (flags.current.pause) { setPhase('paused'); return; }
@@ -602,9 +609,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         if (flags.current.cancel || flags.current.pause) break;
         // Recomputed every attempt: a failed chunk can leave the server holding
         // part of the body, and the refreshed offset decides the next slice.
-        const end = Math.min(offset + CHUNK, f.size);
+        const end = Math.min(offset + currentChunk, f.size);
         const chunk = f.slice(offset, end);
         const isLast = end === f.size;
+        const chunkStartTime = Date.now();
         try {
           res = await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -615,7 +623,16 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             xhr.timeout = CHUNK_TIMEOUT_MS;
             xhr.upload.onprogress = (e) => {
               if (e.lengthComputable && !flags.current.pause && !flags.current.cancel) {
-                setPct(((offset + e.loaded) / f.size) * 100);
+                const loadedTotal = offset + e.loaded;
+                setPct((loadedTotal / f.size) * 100);
+                const elapsed = (Date.now() - uploadStartTime.current) / 1000;
+                if (elapsed > 0.5) {
+                  const bytesPerSec = loadedTotal / elapsed;
+                  const mbps = (bytesPerSec / 1048576).toFixed(1);
+                  const remBytes = Math.max(0, f.size - loadedTotal);
+                  const remSec = Math.ceil(remBytes / (bytesPerSec || 1));
+                  setUploadSpeed(`${mbps} MB/s · ${remSec}s left`);
+                }
               }
             };
             xhr.onload = () => {
@@ -653,8 +670,17 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             xhr.onabort = () => resolve({ aborted: true });
             xhr.send(chunk);
           });
+
+          // Chunk accepted! Calculate duration for adaptive dynamic scaling
+          const chunkDurationSec = (Date.now() - chunkStartTime) / 1000;
+          if (chunkDurationSec < 3.0) {
+            currentChunk = Math.min(currentChunk * 2, MAX_CHUNK);
+          } else if (chunkDurationSec > 25.0) {
+            currentChunk = Math.max(MIN_CHUNK, Math.floor(currentChunk / 2));
+          }
           break; // chunk accepted
         } catch (err) {
+          currentChunk = MIN_CHUNK; // scale back down on retry for safety
           if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
           if (err.message === 'UNKNOWN_UPLOAD') {
             // Upload was purged/unknown on server — immediately re-create and resume from offset 0
@@ -673,6 +699,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               m[fileKey(f)] = { id, size: f.size, name: f.name, savedAt: Date.now() };
               writeMap(m);
               offset = 0;
+              uploadStartTime.current = Date.now();
+              currentChunk = MIN_CHUNK;
               res = null;
               break; // exit retry loop and continue outer while loop with new id and offset 0
             } catch {
@@ -707,10 +735,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       if (flags.current.pause) { setPhase('paused'); return; }
       if (!res) continue;              // paused/refreshed — re-enter the loop
       if (res.aborted) return;
-      offset = res.received ?? res.bytesReceived ?? Math.min(offset + CHUNK, f.size);
+      offset = res.received ?? res.bytesReceived ?? Math.min(offset + currentChunk, f.size);
     }
 
     setPct(100);
+    setUploadSpeed('');
     const m = readMap();
     delete m[fileKey(f)];
     writeMap(m);
@@ -808,6 +837,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     flags.current.pause = false;
     xhrRef.current?.abort();
     clearInterval(timer.current);
+    setUploadSpeed('');
     const f = fileRef.current;
     if (f) {
       const m = readMap();
@@ -825,6 +855,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     flags.current.pause = false;
     xhrRef.current?.abort();
     clearInterval(timer.current);
+    setUploadSpeed('');
     const f = fileRef.current;
     if (f) {
       const m = readMap();
@@ -946,7 +977,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           <p className="dropzone-sub">
             {phase === 'idle' && 'MP4 or MOV · up to 600 MB'}
             {phase === 'confirm' && `${file?.name} · zero re-encoding loss`}
-            {phase === 'upload' && `${file?.name} (${fmt(file?.size || 0)})`}
+            {phase === 'upload' && `${file?.name} (${fmt(file?.size || 0)})${uploadSpeed ? ' · ' + uploadSpeed : ''}`}
             {phase === 'paused' && `${Math.round(pct)}% uploaded · Tap Resume to continue`}
             {phase === 'queued' && 'Preparing container remux...'}
             {phase === 'process' && 'Repackaging container with zero quality loss...'}
@@ -1022,7 +1053,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               />
             </div>
             <div className="progress-meta">
-              <span className="pct-text">{phase === 'queued' ? 'Queued' : `${Math.round(pct)}%`}</span>
+              <span className="pct-text">
+                {phase === 'queued' ? 'Queued' : `${Math.round(pct)}%`}
+                {phase === 'upload' && uploadSpeed ? ` · ${uploadSpeed}` : ''}
+              </span>
               <button type="button" className="btn-abort" onClick={cancel}>Cancel</button>
             </div>
           </div>
