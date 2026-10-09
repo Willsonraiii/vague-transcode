@@ -461,17 +461,10 @@ let firstCttsOffset = 0;
 if (vInfo.ctts) {
   const entries = b.readUInt32BE(vInfo.ctts.content + 4);
   if (entries > 0) {
-    const version = b[vInfo.ctts.content];
-    firstCttsOffset = version === 1
-      ? b.readInt32BE(vInfo.ctts.content + 12)
-      : b.readUInt32BE(vInfo.ctts.content + 12);
+    firstCttsOffset = b.readInt32BE(vInfo.ctts.content + 12);
   }
 }
-const videoMediaTime = Math.round(firstCttsOffset * speed);
-if (videoMediaTime < 0) {
-  await fh1.close();
-  throw new Error('Video elst media_time is negative after scaling.');
-}
+const videoMediaTime = Math.max(0, Math.round(firstCttsOffset * speed));
 
 // Scaled media duration and the final-sample split.
 const scaledMediaTicks = videoFrameCount * uniformDuration * speed;
@@ -528,16 +521,14 @@ if (fillerCountOverride === null) {
   }
 }
 
-// Video ctts: scale offsets by speed
+// Video ctts: scale offsets by speed (composition offsets are signed 32-bit integers)
 if (vInfo.ctts) {
   const entries = b.readUInt32BE(vInfo.ctts.content + 4);
-  const version = b[vInfo.ctts.content];
   let at = vInfo.ctts.content + 8;
   for (let i = 0; i < entries; i++) {
-    const value = version === 1 ? b.readInt32BE(at + 4) : b.readUInt32BE(at + 4);
+    const value = b.readInt32BE(at + 4);
     const scaled = Math.round(value * speed);
-    if (version === 1) b.writeInt32BE(scaled, at + 4);
-    else b.writeUInt32BE(scaled, at + 4);
+    b.writeInt32BE(scaled, at + 4);
     at += 8;
   }
 }
