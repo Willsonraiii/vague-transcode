@@ -429,6 +429,13 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     setError(msg);
     setNeedKey(askKey);
     setPhase('error');
+    const f = fileRef.current;
+    if (f) {
+      const m = readMap();
+      delete m[fileKey(f)];
+      writeMap(m);
+    }
+    upId.current = null;
   }, []);
 
   /* ----- job polling ----- */
@@ -468,7 +475,17 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         body: JSON.stringify({ mode: modeRef.current, preset: presetRef.current })
       });
       if (r.status === 401) return fail('Access key required.', true);
-      if (r.status === 404) { setKept(null); return fail('Upload expired. Please re-select video.'); }
+      if (r.status === 404) {
+        const f = fileRef.current;
+        if (f) {
+          const m = readMap();
+          delete m[fileKey(f)];
+          writeMap(m);
+        }
+        upId.current = null;
+        setKept(null);
+        return fail('Upload session expired on server. Please re-select video.');
+      }
       if (!r.ok) return fail('Failed to start optimization.');
       jobId.current = (await r.json()).id;
       setLog((prev) => [...prev, `[obito] Pipeline engaged (Job ${jobId.current.slice(0, 8)}). Harmonizing container atoms...`]);
@@ -524,7 +541,37 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     flags.current.pause = false;
     flags.current.cancel = false;
     let id = upId.current;
+    let offset = 0;
 
+    // 1. If we have a cached upload ID, verify with server if it actually exists and is active
+    if (id) {
+      try {
+        const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
+        if (r.status === 401) return fail('Access key required.', true);
+        if (r.status === 404) {
+          // Stale ID from prior session or server restart — clear and create fresh upload
+          const m = readMap();
+          delete m[fileKey(f)];
+          writeMap(m);
+          id = null;
+          upId.current = null;
+          offset = 0;
+        } else if (r.ok) {
+          const u = await r.json();
+          offset = u.received ?? u.bytesReceived ?? 0;
+        } else {
+          id = null;
+          upId.current = null;
+          offset = 0;
+        }
+      } catch {
+        id = null;
+        upId.current = null;
+        offset = 0;
+      }
+    }
+
+    // 2. If no valid upload session on server, initiate a fresh one
     if (!id) {
       try {
         const r = await fetch(withKey('/api/uploads'), {
@@ -539,19 +586,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         const m = readMap();
         m[fileKey(f)] = { id, size: f.size, name: f.name, savedAt: Date.now() };
         writeMap(m);
+        offset = 0;
       } catch { return fail('Could not connect to server.'); }
     }
 
-    let offset = 0;
-    try {
-      const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
-      if (r.status === 401) return fail('Access key required.', true);
-      if (r.ok) {
-        const u = await r.json();
-        offset = u.received ?? u.bytesReceived ?? 0;
-      }
-    } catch { return fail('Could not retrieve upload status.'); }
-
+    // 3. Chunk upload loop
     while (offset < f.size) {
       if (flags.current.cancel) return;
       if (flags.current.pause) { setPhase('paused'); return; }
@@ -581,6 +620,14 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             };
             xhr.onload = () => {
               if (xhr.status === 401) return reject(new Error('KEY_NEEDED'));
+              if (xhr.status === 404) {
+                // Server lost or pruned this upload ID — purge cache and trigger auto-restart
+                const m = readMap();
+                delete m[fileKey(f)];
+                writeMap(m);
+                upId.current = null;
+                return reject(new Error('UNKNOWN_UPLOAD'));
+              }
               if (xhr.status >= 200 && xhr.status < 300) {
                 try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
                 return;
@@ -606,9 +653,32 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             xhr.onabort = () => resolve({ aborted: true });
             xhr.send(chunk);
           });
-          break;                       // chunk accepted
+          break; // chunk accepted
         } catch (err) {
           if (err.message === 'KEY_NEEDED') return fail('Access key required.', true);
+          if (err.message === 'UNKNOWN_UPLOAD') {
+            // Upload was purged/unknown on server — immediately re-create and resume from offset 0
+            setLog((prev) => [...prev, '[client] Server session expired. Re-starting fresh upload...']);
+            try {
+              const r = await fetch(withKey('/api/uploads'), {
+                method: 'POST',
+                headers: { ...headers(), 'content-type': 'application/json' },
+                body: JSON.stringify({ name: f.name, size: f.size })
+              });
+              if (r.status === 401) return fail('Access key required.', true);
+              if (!r.ok) return fail('Could not start fresh upload.');
+              id = (await r.json()).id;
+              upId.current = id;
+              const m = readMap();
+              m[fileKey(f)] = { id, size: f.size, name: f.name, savedAt: Date.now() };
+              writeMap(m);
+              offset = 0;
+              res = null;
+              break; // exit retry loop and continue outer while loop with new id and offset 0
+            } catch {
+              return fail('Lost connection to server.');
+            }
+          }
           if (attempt === CHUNK_RETRIES - 1) {
             const detail = err?.message && err.message !== 'CHUNK_FAIL' && err.message !== 'NET_ERR'
               ? err.message
@@ -618,7 +688,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           try {
             const r = await fetch(withKey('/api/uploads/' + id), { headers: headers() });
-            if (r.ok) {
+            if (r.status === 404) {
+              const m = readMap();
+              delete m[fileKey(f)];
+              writeMap(m);
+              upId.current = null;
+            } else if (r.ok) {
               const j = await r.json();
               const rec = j.received ?? j.bytesReceived;
               if (typeof rec === 'number') offset = rec;
@@ -683,7 +758,14 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
 
       const m = readMap();
       const hit = m[fileKey(f)];
-      upId.current = hit?.id || null;
+      // If cached entry is older than 30 minutes, purge it
+      if (hit && (!hit.savedAt || Date.now() - hit.savedAt > 30 * 60 * 1000)) {
+        delete m[fileKey(f)];
+        writeMap(m);
+        upId.current = null;
+      } else {
+        upId.current = hit?.id || null;
+      }
       jobId.current = null;
 
       let p = null;
@@ -743,6 +825,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     flags.current.pause = false;
     xhrRef.current?.abort();
     clearInterval(timer.current);
+    const f = fileRef.current;
+    if (f) {
+      const m = readMap();
+      delete m[fileKey(f)];
+      writeMap(m);
+    }
     setPhase('idle');
     setFile(null);
     setResult(null);
