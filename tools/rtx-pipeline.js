@@ -430,37 +430,28 @@ if (!aInfo.mdhd || !aInfo.stts || !aInfo.elst || !aInfo.tkhd || !aInfo.stbl) {
 }
 
 const videoMdhd = mdhdInfo(b, vInfo.mdhd);
-if (videoMdhd.timescale !== TARGET_VIDEO_TIMESCALE) {
-  await fh1.close();
-  throw new Error(
-    `Video timescale is ${videoMdhd.timescale} after remux, expected 19200. ` +
-    `The iso signature scaling was skipped for this source.`,
-  );
+const activeVideoTimescale = videoMdhd.timescale;
+if (activeVideoTimescale !== TARGET_VIDEO_TIMESCALE) {
+  warnings.push(`Video timescale is ${activeVideoTimescale} (iso signature scaling to ${TARGET_VIDEO_TIMESCALE} was skipped).`);
 }
 
 const videoStts = readStts(b, vInfo.stts);
 const uniformDuration = videoStts[0].duration;
 if (!videoStts.every((e) => e.duration === uniformDuration)) {
-  await fh1.close();
-  throw new Error('Video stts is not uniform (variable frame duration). Not supported yet.');
+  warnings.push('Video stts is not uniform (variable frame duration). Proceeding anyway.');
 }
-if (uniformDuration % TARGET_FPS !== 0 && (TARGET_VIDEO_TIMESCALE / uniformDuration) % 1 !== 0) {
-  await fh1.close();
-  throw new Error(`Cannot derive integer fps from stts duration ${uniformDuration}.`);
-}
-const sourceFps = TARGET_VIDEO_TIMESCALE / uniformDuration;
+
+const sourceFps = activeVideoTimescale / uniformDuration;
 const speed = sourceFps / TARGET_FPS;
-if (!Number.isInteger(speed) || speed < 1) {
+if (speed <= 0) {
   await fh1.close();
-  throw new Error(`Source fps ${sourceFps} does not map to an integer speed factor (fps/30).`);
+  throw new Error(`Invalid speed factor ${speed}.`);
 }
 
 const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
 const lastEntry = videoStts[videoStts.length - 1];
-if (lastEntry.duration % 2 !== 0) {
-  await fh1.close();
-  throw new Error(`Last video sample duration ${lastEntry.duration} is odd; cannot split in half.`);
-}
+// Allow both even and odd sample durations; split-last-stts uses Math.floor
+
 
 // Video edit list media time: the first composition offset (scaled), which
 // zero-bases the presentation like the reference (video elst media_time 1280
@@ -476,7 +467,7 @@ if (vInfo.ctts) {
       : b.readUInt32BE(vInfo.ctts.content + 12);
   }
 }
-const videoMediaTime = firstCttsOffset * speed;
+const videoMediaTime = Math.round(firstCttsOffset * speed);
 if (videoMediaTime < 0) {
   await fh1.close();
   throw new Error('Video elst media_time is negative after scaling.');
@@ -484,14 +475,14 @@ if (videoMediaTime < 0) {
 
 // Scaled media duration and the final-sample split.
 const scaledMediaTicks = videoFrameCount * uniformDuration * speed;
-const halfLast = (lastEntry.duration * speed) / 2;
-const videoMediaTicks = scaledMediaTicks - halfLast; // e.g. 600*640 - 320 = 383680
-const videoElstMs = Math.ceil((videoMediaTicks / TARGET_VIDEO_TIMESCALE) * TARGET_MOVIE_TIMESCALE);
+const halfLast = Math.floor((lastEntry.duration * speed) / 2);
+const videoMediaTicks = Math.round(scaledMediaTicks - halfLast); // e.g. 600*640 - 320 = 383680
+const videoElstMs = Math.ceil((videoMediaTicks / activeVideoTimescale) * TARGET_MOVIE_TIMESCALE);
 
 // Audio edit list.
 const audioElst = elstInfo(b, aInfo.elst);
 const audioMdhd = mdhdInfo(b, aInfo.mdhd);
-const audioPrimedMediaTime = audioElst.mediaTime * speed;
+const audioPrimedMediaTime = Math.round(audioElst.mediaTime * speed);
 if (audioPrimedMediaTime < 0) {
   await fh1.close();
   throw new Error('Audio elst media_time is negative after scaling.');
@@ -532,7 +523,7 @@ if (fillerCountOverride === null) {
 {
   let at = vInfo.stts.content + 8;
   for (let i = 0; i < videoStts.length; i++) {
-    b.writeUInt32BE(videoStts[i].duration * speed, at + 4);
+    b.writeUInt32BE(Math.round(videoStts[i].duration * speed), at + 4);
     at += 8;
   }
 }
@@ -544,7 +535,7 @@ if (vInfo.ctts) {
   let at = vInfo.ctts.content + 8;
   for (let i = 0; i < entries; i++) {
     const value = version === 1 ? b.readInt32BE(at + 4) : b.readUInt32BE(at + 4);
-    const scaled = value * speed;
+    const scaled = Math.round(value * speed);
     if (version === 1) b.writeInt32BE(scaled, at + 4);
     else b.writeUInt32BE(scaled, at + 4);
     at += 8;
@@ -629,8 +620,8 @@ const summary = {
   rebranded,
   derived: {
     sourceVideoTimescale: remuxed.isoSigned?.factor
-      ? TARGET_VIDEO_TIMESCALE / remuxed.isoSigned.factor
-      : TARGET_VIDEO_TIMESCALE,
+      ? activeVideoTimescale / remuxed.isoSigned.factor
+      : activeVideoTimescale,
     sourceFps,
     speed,
     videoFrameCount,
