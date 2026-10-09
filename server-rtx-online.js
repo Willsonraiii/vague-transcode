@@ -199,7 +199,7 @@ function startNextJob() {
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes, mode ${job.mode}${gradeLabel})`);
 
-  const workerArgs = ['--expose-gc', '--max-old-space-size=180', PIPELINE_TOOL, job.inputPath, job.outputPath];
+  const workerArgs = ['--expose-gc', '--max-old-space-size=48', PIPELINE_TOOL, job.inputPath, job.outputPath];
   if (job.mode === 'standard') workerArgs.push('--keep-dv');
   if (job.preset && job.preset !== 'original') workerArgs.push('--grade', job.preset);
 
@@ -768,14 +768,20 @@ app.get('/api/jobs/:id/download', (req, res) => {
   if (!job) return res.status(404).json({ error: 'Unknown job.' });
   if (job.status !== 'done') return res.status(409).json({ error: `Job is ${job.status}, not done.` });
 
-  res.download(job.outputPath, 'optimized.mp4', (error) => {
+  const baseName = (job.fileName || 'video').replace(/\.[^.]+$/, '');
+  const downloadName = `${baseName}-obito-${job.mode}.mp4`;
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+
+  res.download(job.outputPath, downloadName, { acceptRanges: true, cacheControl: true }, (error) => {
     if (error) {
-      console.error(`[job ${job.id}] download failed: ${error.message}`);
+      if (error.code !== 'ECONNABORTED' && !res.headersSent) {
+        console.error(`[job ${job.id}] download error: ${error.message}`);
+      }
       return;
     }
-    console.log(`[job ${job.id}] downloaded — deleting job files`);
-    removeJob(job);
-    if (job.uploadId) removeUpload(job.uploadId);
+    console.log(`[job ${job.id}] downloaded successfully (${downloadName})`);
   });
 });
 

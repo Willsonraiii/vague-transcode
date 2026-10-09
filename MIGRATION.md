@@ -153,3 +153,47 @@ git commit -m "update: your changes here"
 git push origin online-rtx-service
 ```
 Suga Cloud automatically pulls from `online-rtx-service` and deploys to `https://obitostudio.willsonrai.com.np`.
+
+## 6. Upcoming UI Technologies (Part-2 Experiments)
+
+The frontend is currently testing new premium web-gl components from `libraries.dev` in the `part-2` repository.
+
+1. **BorderBeam**: Animated SVG glows tracing the edges of cards.
+2. **MetalFx**: Real-time WebGL liquid metal displacement and chromatic aberration on buttons.
+3. **iOS Liquid Glass Dock**: Mac-OS/iOS style navigation with magnification/touch-elasticity.
+
+To test these features locally on port 3006:
+```bash
+cd ~/Desktop/part-2/web
+npm install border-beam metal-fx
+npm run build
+```
+Once approved, these UI improvements can be ported over into the main `vague-transcode` repository.
+
+## 7. Live Production Container Fixes (5% Preset OOM Stall & Midway Download Drops)
+
+### Root Cause 1: 5% Optimization Stall with Color Preset
+- **Symptom**: Choosing any color preset uploaded fine, but optimization stalled at 5% with "Lost server connection during processing".
+- **Diagnosis**: 
+  1. Suga Cloud free-tier containers have a strict **256 MB RAM ceiling**.
+  2. Previously, the worker Node process was spawned with `--max-old-space-size=180`. When FFmpeg started at 5% with `-threads 2`, Lanczos scaling, and default `mbtree=1`, FFmpeg consumed ~259 MB of RAM. Total RAM spiked to $45\text{ MB} + 40\text{ MB} + 259\text{ MB} = 344\text{ MB}$, immediately exceeding the 256 MB cgroup ceiling. The Linux kernel OOM Killer killed the Node server process (`SIGKILL`).
+  3. When Node died, Cloudflare returned 502 Bad Gateway to the phone browser. Polling threw a network error and showed "Lost server connection during processing".
+- **Fix**:
+  1. Capped Node worker process heap to `--max-old-space-size=48`.
+  2. In `applyColorGrade()`, pinned FFmpeg to `-threads 1` and `-preset ultrafast -crf 19`.
+  3. Injected `-x264-params no-mbtree=1:rc-lookahead=0:sync-lookahead=0:b-adapt=0:bframes=0:ref=1:aq-mode=0` to eliminate internal macroblock tree and reference lookahead frame buffers.
+  4. Used `flags=fast_bilinear` and dropped unnecessary intermediate `-movflags +faststart`.
+  5. Peak FFmpeg RAM plummeted from 259 MB down to **~115 MB**, safely fitting the entire container under 180 MB total RAM.
+  6. Added 15-retry resilience (~22 seconds of network dropout tolerance) to frontend polling before declaring a connection lost.
+
+### Root Cause 2: Downloads Failing Midway
+- **Symptom**: Normal lossless optimization succeeded, but downloading the resulting video failed midway on mobile Safari.
+- **Diagnosis**:
+  1. `/api/jobs/:id/download` previously deleted `job.outputPath` and `uploadId` directly inside the Express download callback (`removeJob(job)`).
+  2. On iOS Safari and mobile networks, browsers frequently send HTTP Range probes (`Range: bytes=0-...`) or split downloads into chunks. The first connection close immediately triggered the callback and deleted the file from disk.
+  3. The browser's subsequent request or continuation received a `404 Unknown job`, causing the download to abort midway.
+  4. On slow connections (0.4 MB/s), any transient Wi-Fi stall caused Safari to attempt an HTTP 206 Partial Content resume, which failed because the file was already deleted.
+- **Fix**:
+  1. Removed immediate file deletion from the `/api/jobs/:id/download` route. Files are now safely retained for the full 1-hour `JOB_TTL_MS` window.
+  2. Explicitly added `Accept-Ranges: bytes` and `Cache-Control: public, max-age=3600` headers so mobile browsers and download managers can pause, resume, and retry freely.
+  3. Added the `download` attribute to the client anchor tag so Safari natively triggers a file save to Downloads instead of streaming inside the inline QuickTime player.

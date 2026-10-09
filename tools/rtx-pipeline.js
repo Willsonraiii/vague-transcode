@@ -260,25 +260,26 @@ async function applyColorGrade(srcPath, dstPath, presetId) {
   } catch {}
 
   const targetFps = sourceFps >= 50 ? 60 : 30;
-  // Memory-safe scaling: clamps 4K/UHD down to 1080p (Lanczos), keeping aspect ratio and native res if <=1080p
-  const scaleFilter = "scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':-2:flags=lanczos";
+  // Memory-safe scaling: clamps 4K/UHD down to 1080p (fast_bilinear), keeping aspect ratio and native res if <=1080p
+  const scaleFilter = "scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':-2:flags=fast_bilinear";
   const fullVf = [scaleFilter, presetObj.ffmpegFilter].filter(Boolean).join(',');
 
   const ffArgs = [
     '-y',
     '-i', srcPath,
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
     '-vf', fullVf,
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '17',
+    '-preset', 'ultrafast',
+    '-crf', '19',
     '-r', String(targetFps),
     '-video_track_timescale', '600',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'copy',
-    '-threads', '2',
-    '-x264-params', 'rc-lookahead=10:sync-lookahead=0',
+    '-threads', '1',
+    '-x264-params', 'no-mbtree=1:rc-lookahead=0:sync-lookahead=0:b-adapt=0:bframes=0:ref=1:aq-mode=0',
     '-progress', 'pipe:2',
-    '-movflags', '+faststart',
     dstPath,
   ];
 

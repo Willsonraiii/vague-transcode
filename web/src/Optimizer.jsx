@@ -445,12 +445,19 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   /* ----- job polling ----- */
   const poll = useCallback((id) => {
     clearInterval(timer.current);
+    let failCount = 0;
     timer.current = setInterval(async () => {
       try {
         const r = await fetch(withKey('/api/jobs/' + id), { headers: headers() });
         if (r.status === 401) return fail('Access key required.', true);
         if (r.status === 404) return fail('Job session expired. Please re-select the video.');
+        if (!r.ok) {
+          failCount++;
+          if (failCount > 15) return fail('Server unavailable. Please check your connection.');
+          return;
+        }
         const job = await r.json();
+        failCount = 0;
         if (Array.isArray(job.log)) setLog(job.log);
         if (job.probeIn) setSrc(job.probeIn);
         if (job.probeOut) setOut(job.probeOut);
@@ -463,7 +470,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
           setPct(100);
           setPhase('done');
         }
-      } catch { fail('Lost server connection during processing.'); }
+      } catch {
+        failCount++;
+        if (failCount > 15) fail('Lost server connection during processing.');
+      }
     }, 1500);
   }, [fail, headers, withKey]);
 
@@ -513,10 +523,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       const data = await r.json();
       const gradeJobId = data.id;
 
+      let gradeFails = 0;
       const gradeTimer = setInterval(async () => {
         try {
           const resp = await fetch(withKey('/api/jobs/' + gradeJobId), { headers: headers() });
           if (resp.ok) {
+            gradeFails = 0;
             const j = await resp.json();
             if (j.status === 'done') {
               clearInterval(gradeTimer);
@@ -525,10 +537,19 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
               clearInterval(gradeTimer);
               setGradeState({ loading: false, resultId: null, preset: null, error: j.error || 'Grading failed.' });
             }
+          } else {
+            gradeFails++;
+            if (gradeFails > 15) {
+              clearInterval(gradeTimer);
+              setGradeState({ loading: false, resultId: null, preset: null, error: 'Lost connection to server.' });
+            }
           }
         } catch {
-          clearInterval(gradeTimer);
-          setGradeState({ loading: false, resultId: null, preset: null, error: 'Lost connection to server.' });
+          gradeFails++;
+          if (gradeFails > 15) {
+            clearInterval(gradeTimer);
+            setGradeState({ loading: false, resultId: null, preset: null, error: 'Lost connection to server.' });
+          }
         }
       }, 1500);
     } catch (err) {
@@ -1122,7 +1143,10 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             <>
               <div className="done-buttons flex flex-wrap items-center justify-center gap-3">
               {!isStandalone() ? (
-                <a href={withKey('/api/jobs/' + result.id + '/download')}>
+                <a
+                  href={withKey('/api/jobs/' + result.id + '/download')}
+                  download={(file?.name ? file.name.replace(/\.[^.]+$/, '') : 'tiktok-optimized') + '-obito-' + mode + '.mp4'}
+                >
                   <LiquidButton
                     type="button"
                     className="text-white border border-white/20 rounded-full font-semibold shadow-xl"
