@@ -519,6 +519,7 @@ app.get('/health', async (_req, res) => {
     freeDiskBytes: free,
     freeDiskMb: free !== null ? Math.round(free / 1024 / 1024) : null,
     jobs: { total: jobs.size, processing },
+    recentHistory: (await libRead()).slice(0, 10),
   });
 });
 
