@@ -24,7 +24,7 @@
  *     [--audio-elst-ms N] [--filler-count N] [--keep-temp]
  */
 import { readFile, writeFile, mkdtemp, rm, stat, open, copyFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -230,6 +230,96 @@ function reportProgress(percent, stage) {
   process.stderr.write(`progress ${percent} ${stage}\n`);
 }
 
+async function applyColorGrade(srcPath, dstPath, presetId) {
+  const presetObj = getPresetById(presetId);
+  if (!presetObj || !presetObj.ffmpegFilter) {
+    await copyFile(srcPath, dstPath);
+    return;
+  }
+
+  // Get duration and fps for progress tracking and timing integrity
+  let durationSec = 0;
+  let sourceFps = 60;
+  try {
+    const probe = spawnSync('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=r_frame_rate:format=duration',
+      '-of', 'json',
+      srcPath,
+    ], { encoding: 'utf8', timeout: 5000 });
+    if (probe.status === 0 && probe.stdout) {
+      const data = JSON.parse(probe.stdout);
+      durationSec = parseFloat(data.format?.duration || '0') || 0;
+      const fr = data.streams?.[0]?.r_frame_rate;
+      if (fr && fr.includes('/')) {
+        const [n, d] = fr.split('/').map(Number);
+        if (n && d) sourceFps = Math.round(n / d);
+      }
+    }
+  } catch {}
+
+  const targetFps = sourceFps >= 50 ? 60 : 30;
+  // Memory-safe scaling: clamps 4K/UHD down to 1080p (Lanczos), keeping aspect ratio and native res if <=1080p
+  const scaleFilter = "scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':-2:flags=lanczos";
+  const fullVf = [scaleFilter, presetObj.ffmpegFilter].filter(Boolean).join(',');
+
+  const ffArgs = [
+    '-y',
+    '-i', srcPath,
+    '-vf', fullVf,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '17',
+    '-r', String(targetFps),
+    '-video_track_timescale', '600',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'copy',
+    '-threads', '2',
+    '-x264-params', 'rc-lookahead=10:sync-lookahead=0',
+    '-progress', 'pipe:2',
+    '-movflags', '+faststart',
+    dstPath,
+  ];
+
+  return new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', ffArgs, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+
+    let lastProgressPct = 5;
+    let errOutput = '';
+
+    child.stderr.on('data', (data) => {
+      const text = data.toString();
+      const match = text.match(/out_time_us=(\d+)/);
+      if (match && durationSec > 0) {
+        const currentSec = parseInt(match[1], 10) / 1000000;
+        const pct = Math.min(45, Math.max(5, Math.round(5 + (currentSec / durationSec) * 40)));
+        if (pct > lastProgressPct) {
+          lastProgressPct = pct;
+          reportProgress(pct, 'color-grading');
+        }
+      }
+      errOutput += text;
+      if (errOutput.length > 2000) errOutput = errOutput.slice(-2000);
+    });
+
+    child.on('error', (err) => {
+      reject(new Error(`Failed to start ffmpeg color grade: ${err.message}`));
+    });
+
+    child.on('close', (code, signal) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        const reason = signal ? `killed with signal ${signal}` : `exited with code ${code}`;
+        reject(new Error(`ffmpeg color grade ${reason}: ${errOutput.slice(-500).trim()}`));
+      }
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 1. streamFaststartRemux with the iso signature directly to disk
 // ---------------------------------------------------------------------------
@@ -237,12 +327,21 @@ function reportProgress(percent, stage) {
 const inputStat = await stat(inputPath);
 const inputBytes = inputStat.size;
 
-reportProgress(5, 'reading');
 const workDir = await mkdtemp(path.join(tmpdir(), 'vague-rtx-pipeline-'));
+const isGraded = Boolean(colorPreset && colorPreset !== 'original');
+let stage0Path = inputPath;
+
+if (isGraded) {
+  reportProgress(5, 'color-grading');
+  stage0Path = path.join(workDir, 'stage0-graded.mp4');
+  await applyColorGrade(inputPath, stage0Path, colorPreset);
+}
+
 const stage1Path = path.join(workDir, 'stage1.mp4');
 const stage2Path = path.join(workDir, 'stage2.mp4');
 
-const remuxed = await streamFaststartRemux(inputPath, stage1Path, {
+reportProgress(isGraded ? 50 : 10, 'reading');
+const remuxed = await streamFaststartRemux(stage0Path, stage1Path, {
   stripDV: !keepDv,
   rebrand: true,
   isoSignature: true,
@@ -250,7 +349,7 @@ const remuxed = await streamFaststartRemux(inputPath, stage1Path, {
 
 const dvStripped = remuxed.dvStripped;
 const rebranded = remuxed.rebranded;
-reportProgress(35, 'remuxed');
+reportProgress(isGraded ? 65 : 35, 'remuxed');
 
 // ---------------------------------------------------------------------------
 // 2. Read only the header of stage1.mp4 to derive and apply timing transforms
@@ -474,7 +573,7 @@ await fh1.close();
 // 4. Hand off to the validated second-AAC tool
 // ---------------------------------------------------------------------------
 
-reportProgress(55, 'timing');
+reportProgress(isGraded ? 75 : 55, 'timing');
 
 // Final-sample split (validated tool; rebuilds moov and shifts offsets).
 const splitRun = spawnSync(
@@ -489,12 +588,10 @@ if (splitRun.status !== 0) {
 }
 
 // Audio trim + second AAC track (validated tool).
-reportProgress(70, 'split-done');
-const isGraded = Boolean(colorPreset && colorPreset !== 'original');
-const stage3Path = isGraded ? path.join(workDir, 'stage3.mp4') : outputPath;
+reportProgress(isGraded ? 85 : 70, 'split-done');
 
 const toolArgs = [
-  fileURLToPath(SECOND_AAC_TOOL), stage2Path, stage3Path,
+  fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
   '--filler-count', String(fillerCount),
   '--mvhd-v1-unknown',
   '--drop-udta',
@@ -506,38 +603,11 @@ if (run.status !== 0) {
   throw new Error(`tools/build-rtx-second-aac.js failed with status ${run.status}.`);
 }
 
-if (isGraded) {
-  reportProgress(75, 'color-grading');
-  const presetObj = getPresetById(colorPreset);
-  if (presetObj && presetObj.ffmpegFilter) {
-    const ffArgs = [
-      '-y',
-      '-i', stage3Path,
-      '-vf', presetObj.ffmpegFilter,
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '17',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'copy',
-      '-threads', '2',
-      '-movflags', '+faststart',
-      outputPath,
-    ];
-    const ff = spawnSync('ffmpeg', ffArgs, { encoding: 'utf8' });
-    if (ff.status !== 0) {
-      process.stderr.write(ff.stderr || '');
-      throw new Error(`ffmpeg color grade failed with status ${ff.status}.`);
-    }
-  } else {
-    await copyFile(stage3Path, outputPath);
-  }
-}
-
 if (!keepTemp) {
   await rm(workDir, { recursive: true, force: true });
 }
 
-reportProgress(95, isGraded ? 'grading-done' : 'audio-done');
+reportProgress(95, 'audio-done');
 
 // ---------------------------------------------------------------------------
 // 6. Report

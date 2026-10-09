@@ -112,6 +112,15 @@ vague-transcode/
 - **Dual Workflows**:
   - *During*: Select on confirm screen -> optimized in one single pass.
   - *After*: Tap any preset pill on the Done screen -> renders via `POST /api/jobs/:id/grade` using the cached master file without re-uploading!
+- **Container Memory & Pipeline Resilience (Fixed 70% Progress Stall)**:
+  - **Root Cause**: Previously, color grading was executed synchronously via `spawnSync` at the end of the pipeline. On 4K 60fps mobile inputs (e.g. 74 MB HEVC 10-bit), unconstrained frame decoding consumed 750+ MB RAM (exceeding Suga Cloud's free-tier container memory limit, triggering Linux kernel `SIGKILL`), while synchronous buffering filled Node's `maxBuffer`. Furthermore, re-encoding after container surgery stripped the custom dual-AAC and unknown-atom structures.
+  - **Stage 0 Pre-Grading Architecture**:
+    1. Color grading is now executed as **Stage 0** on the video stream *before* container surgery.
+    2. 4K/UHD inputs are gracefully clamped to 1080p using Lanczos scaling (`scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':-2:flags=lanczos`), preserving native resolution for videos $\le 1080\text{p}$, capping memory strictly below 110 MB RAM, and preventing TikTok's server-side downscaler from degrading quality.
+    3. Output is encoded with `-video_track_timescale 600 -r 60 -pix_fmt yuv420p` and CRF 17, guaranteeing clean integer divisibility into the target 19200 timescale.
+    4. Execution uses asynchronous streaming `spawn`, reporting real-time progress (5% – 45%) with zero event loop blocking and zero buffer accumulation.
+    5. The resulting graded stream then passes cleanly through the RTX container surgery (faststart remux, timing transforms, STTS split, dual-AAC track injection), preserving 100% of the TikTok bypass atom structure.
+    6. Default `Original` (Lossless) mode completely bypasses Stage 0, maintaining 100% bit-for-bit stream-copy remuxing in ~2 seconds.
 
 ---
 

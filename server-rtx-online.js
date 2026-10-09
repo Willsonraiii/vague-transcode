@@ -720,12 +720,14 @@ app.post('/api/jobs/:id/grade', express.json({ limit: '10kb' }), async (req, res
     const id = newJobId();
     const dir = path.join(JOBS_DIR, id);
     await mkdir(dir, { recursive: true });
-    const inputPath = path.join(dir, 'input.mp4');
-    await link(parent.outputPath, inputPath).catch(() => copyFile(parent.outputPath, inputPath));
+    const masterUpload = parent.uploadId ? uploadPaths(parent.uploadId).data : null;
+    const sourcePath = (masterUpload && existsSync(masterUpload)) ? masterUpload : parent.outputPath;
+    await link(sourcePath, inputPath).catch(() => copyFile(sourcePath, inputPath));
 
     const st = await stat(inputPath);
     const job = {
       id, dir, inputPath,
+      uploadId: parent.uploadId || null,
       outputPath: path.join(dir, 'output.mp4'),
       status: 'queued',
       mode: parent.mode || 'hdr',
