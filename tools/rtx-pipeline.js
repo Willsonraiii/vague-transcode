@@ -266,6 +266,10 @@ async function applyColorGrade(srcPath, dstPath, presetId) {
 
   const ffArgs = [
     '-y',
+    // Restrict decoder and filter threading as well as the encoder below.
+    // Output-only -threads 1 does not limit the input decoder or filter graph.
+    '-filter_threads', '1',
+    '-threads:v', '1',
     '-i', srcPath,
     '-map', '0:v:0',
     '-map', '0:a:0?',
