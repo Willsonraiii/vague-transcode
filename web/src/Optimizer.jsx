@@ -427,6 +427,34 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
   const withKey = useCallback((url) => (keyRef.current ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(keyRef.current) : url), []);
   useEffect(() => () => clearInterval(timer.current), []);
 
+  // Keep the screen awake while this page is actively transferring or processing.
+  // Browsers may release the lock when hidden; request it again on return.
+  useEffect(() => {
+    const active = phase === 'upload' || phase === 'queued' || phase === 'process' || dl.state === 'loading' || gradeState.loading;
+    if (!active || !navigator.wakeLock?.request) return;
+    let mounted = true;
+    let lock = null;
+    const acquire = async () => {
+      if (!mounted || document.visibilityState !== 'visible' || lock) return;
+      try {
+        const next = await navigator.wakeLock.request('screen');
+        if (!mounted) { await next.release(); return; }
+        lock = next;
+        next.addEventListener('release', () => {
+          if (lock === next) lock = null;
+        });
+      } catch { /* Unsupported, low battery, or OS policy: proceed normally. */ }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'visible') void acquire(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    void acquire();
+    return () => {
+      mounted = false;
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (lock) void lock.release();
+    };
+  }, [phase, dl.state, gradeState.loading]);
+
   const fail = useCallback((msg, askKey = false) => {
     clearInterval(timer.current);
     setError(msg);
