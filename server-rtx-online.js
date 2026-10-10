@@ -237,6 +237,7 @@ function startNextJob() {
   child.on('error', (err) => {
     clearTimeout(timeout);
     job.status = 'failed';
+    job.finishedAt = Date.now();
     job.error = `worker error: ${err.message}`;
     job.child = null;
     processing = false;
@@ -247,7 +248,8 @@ function startNextJob() {
     clearTimeout(timeout);
     processing = false;
     job.child = null;
-    if (code === 0 && existsSync(job.outputPath)) {
+    job.finishedAt = Date.now();
+    if (!job.cancelled && code === 0 && existsSync(job.outputPath)) {
       job.status = 'done';
       job.progress = 100;
       job.stage = 'done';
@@ -285,15 +287,19 @@ function startNextJob() {
 }
 
 // ---------------------------------------------------------------------------
-// Cleanup timer: delete abandoned jobs (queued/processing/done) past the TTL
+// Cleanup timer: retain queued/processing jobs; expire finished jobs after their completion.
 // ---------------------------------------------------------------------------
 
 setInterval(() => {
   const now = Date.now();
   for (const job of [...jobs.values()]) {
-    if (now - job.createdAt > JOB_TTL_MS) {
-      console.log(`[job ${job.id}] expired after ${Math.round((now - job.createdAt) / 60000)} min — deleting`);
-      removeJob(job);
+    // Never remove a worker's input/output while it is still running. A queued
+    // job may also wait behind a long encode, so its TTL starts only when done.
+    if (job.status !== 'done' && job.status !== 'failed') continue;
+    const finishedAt = job.finishedAt ?? job.createdAt;
+    if (now - finishedAt > JOB_TTL_MS) {
+      console.log(`[job ${job.id}] expired ${Math.round((now - finishedAt) / 60000)} min after finishing — deleting`);
+      void removeJob(job);
     }
   }
   // abandoned resumable uploads (paused/cancelled and never continued)
