@@ -430,28 +430,37 @@ if (!aInfo.mdhd || !aInfo.stts || !aInfo.elst || !aInfo.tkhd || !aInfo.stbl) {
 }
 
 const videoMdhd = mdhdInfo(b, vInfo.mdhd);
-const activeVideoTimescale = videoMdhd.timescale;
-if (activeVideoTimescale !== TARGET_VIDEO_TIMESCALE) {
-  warnings.push(`Video timescale is ${activeVideoTimescale} (iso signature scaling to ${TARGET_VIDEO_TIMESCALE} was skipped).`);
+if (videoMdhd.timescale !== TARGET_VIDEO_TIMESCALE) {
+  await fh1.close();
+  throw new Error(
+    `Video timescale is ${videoMdhd.timescale} after remux, expected 19200. ` +
+    `The iso signature scaling was skipped for this source.`,
+  );
 }
 
 const videoStts = readStts(b, vInfo.stts);
 const uniformDuration = videoStts[0].duration;
 if (!videoStts.every((e) => e.duration === uniformDuration)) {
-  warnings.push('Video stts is not uniform (variable frame duration). Proceeding anyway.');
-}
-
-const sourceFps = activeVideoTimescale / uniformDuration;
-const speed = sourceFps / TARGET_FPS;
-if (speed <= 0) {
   await fh1.close();
-  throw new Error(`Invalid speed factor ${speed}.`);
+  throw new Error('Video stts is not uniform (variable frame duration). Not supported yet.');
+}
+if (uniformDuration % TARGET_FPS !== 0 && (TARGET_VIDEO_TIMESCALE / uniformDuration) % 1 !== 0) {
+  await fh1.close();
+  throw new Error(`Cannot derive integer fps from stts duration ${uniformDuration}.`);
+}
+const sourceFps = TARGET_VIDEO_TIMESCALE / uniformDuration;
+const speed = sourceFps / TARGET_FPS;
+if (!Number.isInteger(speed) || speed < 1) {
+  await fh1.close();
+  throw new Error(`Source fps ${sourceFps} does not map to an integer speed factor (fps/30).`);
 }
 
 const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
 const lastEntry = videoStts[videoStts.length - 1];
-// Allow both even and odd sample durations; split-last-stts uses Math.floor
-
+if (lastEntry.duration % 2 !== 0) {
+  await fh1.close();
+  throw new Error(`Last video sample duration ${lastEntry.duration} is odd; cannot split in half.`);
+}
 
 // Video edit list media time: the first composition offset (scaled), which
 // zero-bases the presentation like the reference (video elst media_time 1280
@@ -461,21 +470,28 @@ let firstCttsOffset = 0;
 if (vInfo.ctts) {
   const entries = b.readUInt32BE(vInfo.ctts.content + 4);
   if (entries > 0) {
-    firstCttsOffset = b.readInt32BE(vInfo.ctts.content + 12);
+    const version = b[vInfo.ctts.content];
+    firstCttsOffset = version === 1
+      ? b.readInt32BE(vInfo.ctts.content + 12)
+      : b.readUInt32BE(vInfo.ctts.content + 12);
   }
 }
-const videoMediaTime = Math.max(0, Math.round(firstCttsOffset * speed));
+const videoMediaTime = firstCttsOffset * speed;
+if (videoMediaTime < 0) {
+  await fh1.close();
+  throw new Error('Video elst media_time is negative after scaling.');
+}
 
 // Scaled media duration and the final-sample split.
 const scaledMediaTicks = videoFrameCount * uniformDuration * speed;
-const halfLast = Math.floor((lastEntry.duration * speed) / 2);
-const videoMediaTicks = Math.round(scaledMediaTicks - halfLast); // e.g. 600*640 - 320 = 383680
-const videoElstMs = Math.ceil((videoMediaTicks / activeVideoTimescale) * TARGET_MOVIE_TIMESCALE);
+const halfLast = (lastEntry.duration * speed) / 2;
+const videoMediaTicks = scaledMediaTicks - halfLast; // e.g. 600*640 - 320 = 383680
+const videoElstMs = Math.ceil((videoMediaTicks / TARGET_VIDEO_TIMESCALE) * TARGET_MOVIE_TIMESCALE);
 
 // Audio edit list.
 const audioElst = elstInfo(b, aInfo.elst);
 const audioMdhd = mdhdInfo(b, aInfo.mdhd);
-const audioPrimedMediaTime = Math.round(audioElst.mediaTime * speed);
+const audioPrimedMediaTime = audioElst.mediaTime * speed;
 if (audioPrimedMediaTime < 0) {
   await fh1.close();
   throw new Error('Audio elst media_time is negative after scaling.');
@@ -516,19 +532,21 @@ if (fillerCountOverride === null) {
 {
   let at = vInfo.stts.content + 8;
   for (let i = 0; i < videoStts.length; i++) {
-    b.writeUInt32BE(Math.round(videoStts[i].duration * speed), at + 4);
+    b.writeUInt32BE(videoStts[i].duration * speed, at + 4);
     at += 8;
   }
 }
 
-// Video ctts: scale offsets by speed (composition offsets are signed 32-bit integers)
+// Video ctts: scale offsets by speed
 if (vInfo.ctts) {
   const entries = b.readUInt32BE(vInfo.ctts.content + 4);
+  const version = b[vInfo.ctts.content];
   let at = vInfo.ctts.content + 8;
   for (let i = 0; i < entries; i++) {
-    const value = b.readInt32BE(at + 4);
-    const scaled = Math.round(value * speed);
-    b.writeInt32BE(scaled, at + 4);
+    const value = version === 1 ? b.readInt32BE(at + 4) : b.readUInt32BE(at + 4);
+    const scaled = value * speed;
+    if (version === 1) b.writeInt32BE(scaled, at + 4);
+    else b.writeUInt32BE(scaled, at + 4);
     at += 8;
   }
 }
@@ -559,25 +577,21 @@ await fh1.close();
 reportProgress(isGraded ? 75 : 55, 'timing');
 
 // Final-sample split (validated tool; rebuilds moov and shifts offsets).
-if (global.gc) global.gc();
 const splitRun = spawnSync(
   process.execPath,
-  ['--max-old-space-size=96', fileURLToPath(SPLIT_LAST_STTS_TOOL), stage1Path, stage2Path],
+  [fileURLToPath(SPLIT_LAST_STTS_TOOL), stage1Path, stage2Path],
   { encoding: 'utf8' },
 );
 process.stdout.write(splitRun.stdout || '');
 if (splitRun.status !== 0) {
   process.stderr.write(splitRun.stderr || '');
-  const detail = (splitRun.stderr || splitRun.stdout || '').trim();
-  throw new Error(`tools/split-last-stts.js failed (${splitRun.status}): ${detail}`);
+  throw new Error(`tools/split-last-stts.js failed with status ${splitRun.status}.`);
 }
 
 // Audio trim + second AAC track (validated tool).
 reportProgress(isGraded ? 85 : 70, 'split-done');
 
-if (global.gc) global.gc();
 const toolArgs = [
-  '--max-old-space-size=96',
   fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
   '--filler-count', String(fillerCount),
   '--mvhd-v1-unknown',
@@ -587,8 +601,7 @@ const run = spawnSync(process.execPath, toolArgs, { encoding: 'utf8' });
 process.stdout.write(run.stdout || '');
 if (run.status !== 0) {
   process.stderr.write(run.stderr || '');
-  const detail = (run.stderr || run.stdout || '').trim();
-  throw new Error(`tools/build-rtx-second-aac.js failed (${run.status}): ${detail}`);
+  throw new Error(`tools/build-rtx-second-aac.js failed with status ${run.status}.`);
 }
 
 if (!keepTemp) {
@@ -616,8 +629,8 @@ const summary = {
   rebranded,
   derived: {
     sourceVideoTimescale: remuxed.isoSigned?.factor
-      ? activeVideoTimescale / remuxed.isoSigned.factor
-      : activeVideoTimescale,
+      ? TARGET_VIDEO_TIMESCALE / remuxed.isoSigned.factor
+      : TARGET_VIDEO_TIMESCALE,
     sourceFps,
     speed,
     videoFrameCount,

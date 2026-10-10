@@ -52,7 +52,7 @@ const PROCESS_TIMEOUT_MS = Number(process.env.PROCESS_TIMEOUT_MS || 30 * 60 * 10
 const PORT = Number(process.env.PORT || 3005);
 const MAX_FILE_SIZE = 600 * 1024 * 1024;      // 600 MB upload limit
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 60 * 60 * 1000); // 1 hour
-const MIN_FREE_DISK = 1536 * 1024 * 1024; // 1.5 GB free space required to accept new uploads safely
+const MIN_FREE_DISK = 100 * 1024 * 1024; // need ~100 MB free to accept (container safe)
 const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 await mkdir(JOBS_DIR, { recursive: true });
@@ -183,7 +183,7 @@ async function removeUpload(id) {
 // Worker: runs the validated pipeline one job at a time
 // ---------------------------------------------------------------------------
 
-async function startNextJob() {
+function startNextJob() {
   if (processing) return;
   const job = [...jobs.values()].find((j) => j.status === 'queued');
   if (!job) return;
@@ -194,12 +194,12 @@ async function startNextJob() {
   job.stage = 'starting';
   const gradeLabel = job.preset && job.preset !== 'original' ? ` · preset ${job.preset}` : ' · pure lossless';
   job.log = [`[obito] optimizing ${job.fileName || 'video'} · mode ${job.mode}${gradeLabel}`];
-  job.probeIn = summarizeProbe(await probeFile(job.inputPath));
+  job.probeIn = summarizeProbe(probeFile(job.inputPath));
   if (job.probeIn) logLine(job, `[obito] source: ${job.probeIn.w}x${job.probeIn.h} · ${job.probeIn.fps} fps · ${job.probeIn.codec}${job.probeIn.transfer && job.probeIn.transfer !== 'unknown' ? ' · ' + job.probeIn.transfer : ''}`);
   job.startedAt = Date.now();
   console.log(`[job ${job.id}] processing started (${job.inputBytes} bytes, mode ${job.mode}${gradeLabel})`);
 
-  const workerArgs = ['--expose-gc', '--max-old-space-size=192', PIPELINE_TOOL, job.inputPath, job.outputPath];
+  const workerArgs = ['--expose-gc', '--max-old-space-size=48', PIPELINE_TOOL, job.inputPath, job.outputPath];
   if (job.mode === 'standard') workerArgs.push('--keep-dv');
   if (job.preset && job.preset !== 'original') workerArgs.push('--grade', job.preset);
 
@@ -243,7 +243,7 @@ async function startNextJob() {
     console.error(`[job ${job.id}] failed to start: ${err.message}`);
   });
 
-  child.on('close', async (code) => {
+  child.on('close', (code) => {
     clearTimeout(timeout);
     processing = false;
     job.child = null;
@@ -257,7 +257,7 @@ async function startNextJob() {
         try { job.result = JSON.parse(line.slice('PIPELINE_RESULT '.length)); } catch {}
       }
       logLine(job, '[obito] repackaged — copy test & probe…');
-      job.probeOut = summarizeProbe(await probeFile(job.outputPath));
+      job.probeOut = summarizeProbe(probeFile(job.outputPath));
       logLine(job, `[obito] done ✓ output ${job.probeOut ? job.probeOut.w + 'x' + job.probeOut.h + ' · ' + job.probeOut.fps + ' fps' : ''}${job.probeOut?.dv ? ' · DV stripped' : ''}`);
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'done', at: Date.now(), in: job.probeIn || null, out: job.probeOut || null, result: job.result || null }).catch(() => {});
       stat(job.outputPath)
@@ -466,12 +466,9 @@ app.post('/api/inspect-link', express.json({ limit: '10kb' }), async (req, res) 
 // --- Library: persistent metadata-only history + probes for the stats UI ---
 const LIB_FILE = path.join(ROOT, 'library.json');
 function probeFile(fp) {
-  return new Promise((resolve) => {
-    execFile('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', fp], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
-      if (err) return resolve(null);
-      try { resolve(JSON.parse(stdout)); } catch { resolve(null); }
-    });
-  });
+  const p = spawnSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', fp], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  if (p.status !== 0) return null;
+  try { return JSON.parse(p.stdout); } catch { return null; }
 }
 function summarizeProbe(probe) {
   if (!probe) return null;
@@ -519,7 +516,6 @@ app.get('/health', async (_req, res) => {
     freeDiskBytes: free,
     freeDiskMb: free !== null ? Math.round(free / 1024 / 1024) : null,
     jobs: { total: jobs.size, processing },
-    recentHistory: (await libRead()).slice(0, 10),
   });
 });
 
@@ -675,7 +671,7 @@ app.post('/api/uploads/:id/probe', express.json({ limit: '10kb' }), async (req, 
   const up = await readUpload(id);
   if (!up) return res.status(404).json({ error: 'Unknown upload.' });
   if (up.received !== up.size) return res.status(409).json({ error: 'Upload is not complete.', received: up.received });
-  res.json({ probe: summarizeProbe(await probeFile(uploadPaths(id).data)) });
+  res.json({ probe: summarizeProbe(probeFile(uploadPaths(id).data)) });
 });
 
 app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, res) => {
@@ -725,7 +721,8 @@ app.post('/api/jobs/:id/grade', express.json({ limit: '10kb' }), async (req, res
     const dir = path.join(JOBS_DIR, id);
     await mkdir(dir, { recursive: true });
     const inputPath = path.join(dir, 'input.mp4');
-    const sourcePath = parent.inputPath;
+    const masterUpload = parent.uploadId ? uploadPaths(parent.uploadId).data : null;
+    const sourcePath = (masterUpload && existsSync(masterUpload)) ? masterUpload : parent.outputPath;
     await link(sourcePath, inputPath).catch(() => copyFile(sourcePath, inputPath));
 
     const st = await stat(inputPath);
@@ -770,9 +767,8 @@ app.get('/api/jobs/:id/download', (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown job.' });
   if (job.status !== 'done') return res.status(409).json({ error: `Job is ${job.status}, not done.` });
-  if (!existsSync(job.outputPath)) return res.status(404).json({ error: 'Output file is no longer on disk.' });
 
-  const baseName = (job.fileName || 'video').replace(/["'/\\]/g, '_').replace(/\.[^.]+$/, '');
+  const baseName = (job.fileName || 'video').replace(/\.[^.]+$/, '');
   const downloadName = `${baseName}-obito-${job.mode}.mp4`;
 
   res.setHeader('Accept-Ranges', 'bytes');

@@ -93,31 +93,26 @@ function rebuildRange(b, start, end, target) {
   readBoxes(b, start, end, (box) => {
     if (box.start === target.start && box.end === target.end) {
       const oldEntryCount = b.readUInt32BE(box.content + 4);
-      if (oldEntryCount < 1) {
-        throw new Error('stts table is empty.');
+      if (oldEntryCount !== 1) {
+        throw new Error(
+          `Expected one stts entry, found ${oldEntryCount}`,
+        );
       }
 
-      const newContentLen = 8 + (oldEntryCount + 1) * 8;
-      const content = Buffer.alloc(newContentLen);
-      b.copy(content, 0, box.content, box.content + 8 + (oldEntryCount - 1) * 8);
-      content.writeUInt32BE(oldEntryCount + 1, 4);
+      const count = b.readUInt32BE(box.content + 8);
+      const duration = b.readUInt32BE(box.content + 12);
 
-      const lastAt = box.content + 8 + (oldEntryCount - 1) * 8;
-      const lastCount = b.readUInt32BE(lastAt);
-      const lastDuration = b.readUInt32BE(lastAt + 4);
-
-      const outLastAt = 8 + (oldEntryCount - 1) * 8;
-      if (lastCount > 1) {
-        content.writeUInt32BE(lastCount - 1, outLastAt);
-        content.writeUInt32BE(lastDuration, outLastAt + 4);
-        content.writeUInt32BE(1, outLastAt + 8);
-        content.writeUInt32BE(Math.floor(lastDuration / 2), outLastAt + 12);
-      } else {
-        content.writeUInt32BE(1, outLastAt);
-        content.writeUInt32BE(Math.floor(lastDuration / 2), outLastAt + 4);
-        content.writeUInt32BE(0, outLastAt + 8);
-        content.writeUInt32BE(0, outLastAt + 12);
+      if (count < 2 || duration < 2) {
+        throw new Error('stts entry cannot be split.');
       }
+
+      const content = Buffer.alloc(24);
+      b.copy(content, 0, box.content, box.content + 4);
+      content.writeUInt32BE(2, 4);
+      content.writeUInt32BE(count - 1, 8);
+      content.writeUInt32BE(duration, 12);
+      content.writeUInt32BE(1, 16);
+      content.writeUInt32BE(Math.floor(duration / 2), 20);
 
       parts.push(makeBox(b, 'stts', content));
       return;

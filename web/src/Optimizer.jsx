@@ -38,9 +38,9 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// Adaptive dynamic chunking: 2 MB start, capped at 4 MB for rock-solid mobile Wi-Fi stability without timeout drops
+// Adaptive dynamic chunking: 2 MB start for quick initial feedback, scaling up to 8 MB for maximum bandwidth saturation
 const MIN_CHUNK = 2 * 1024 * 1024;
-const MAX_CHUNK = 4 * 1024 * 1024;
+const MAX_CHUNK = 8 * 1024 * 1024;
 const CHUNK_TIMEOUT_MS = 120 * 1000;  // 120s timeout per slice
 const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
 
@@ -623,7 +623,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
       if (flags.current.cancel) return;
       if (flags.current.pause) { setPhase('paused'); return; }
 
-      setPct((prev) => Math.max(prev, (offset / f.size) * 100));
+      setPct((offset / f.size) * 100);
 
       let res = null;
       for (let attempt = 0; attempt < CHUNK_RETRIES; attempt++) {
@@ -645,7 +645,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             xhr.upload.onprogress = (e) => {
               if (e.lengthComputable && !flags.current.pause && !flags.current.cancel) {
                 const loadedTotal = offset + e.loaded;
-                setPct((prev) => Math.max(prev, (loadedTotal / f.size) * 100));
+                setPct((loadedTotal / f.size) * 100);
                 const elapsed = (Date.now() - uploadStartTime.current) / 1000;
                 if (elapsed > 0.5) {
                   const bytesPerSec = loadedTotal / elapsed;
