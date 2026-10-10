@@ -559,21 +559,25 @@ await fh1.close();
 reportProgress(isGraded ? 75 : 55, 'timing');
 
 // Final-sample split (validated tool; rebuilds moov and shifts offsets).
+if (global.gc) global.gc();
 const splitRun = spawnSync(
   process.execPath,
-  [fileURLToPath(SPLIT_LAST_STTS_TOOL), stage1Path, stage2Path],
+  ['--max-old-space-size=96', fileURLToPath(SPLIT_LAST_STTS_TOOL), stage1Path, stage2Path],
   { encoding: 'utf8' },
 );
 process.stdout.write(splitRun.stdout || '');
 if (splitRun.status !== 0) {
   process.stderr.write(splitRun.stderr || '');
-  throw new Error(`tools/split-last-stts.js failed with status ${splitRun.status}.`);
+  const detail = (splitRun.stderr || splitRun.stdout || '').trim();
+  throw new Error(`tools/split-last-stts.js failed (${splitRun.status}): ${detail}`);
 }
 
 // Audio trim + second AAC track (validated tool).
 reportProgress(isGraded ? 85 : 70, 'split-done');
 
+if (global.gc) global.gc();
 const toolArgs = [
+  '--max-old-space-size=96',
   fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
   '--filler-count', String(fillerCount),
   '--mvhd-v1-unknown',
@@ -583,7 +587,8 @@ const run = spawnSync(process.execPath, toolArgs, { encoding: 'utf8' });
 process.stdout.write(run.stdout || '');
 if (run.status !== 0) {
   process.stderr.write(run.stderr || '');
-  throw new Error(`tools/build-rtx-second-aac.js failed with status ${run.status}.`);
+  const detail = (run.stderr || run.stdout || '').trim();
+  throw new Error(`tools/build-rtx-second-aac.js failed (${run.status}): ${detail}`);
 }
 
 if (!keepTemp) {

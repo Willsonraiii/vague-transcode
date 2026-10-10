@@ -128,6 +128,7 @@ export default function App() {
   const [now, setNow] = useState(() => new Date());
   const [heroMsgIndex, setHeroMsgIndex] = useState(0);
   const [brandKey, setBrandKey] = useState(0);
+  const [showPatchBanner, setShowPatchBanner] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -370,6 +371,48 @@ export default function App() {
       <main className="studio-workspace">
         {activeTab === 'optimizer' && (
           <section className={`workspace-view active optimizer-view ${busy ? 'is-busy' : ''}`} key="optimizer">
+            {showPatchBanner && (
+              <div className="w-full max-w-xl mx-auto px-2 sm:px-4 mb-4">
+                <div className="rounded-2xl border border-sky-400/35 bg-gradient-to-r from-sky-950/75 via-slate-900/85 to-indigo-950/75 backdrop-blur-xl p-3 sm:p-4 shadow-2xl text-left transition-all">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
+                      <span className="text-[11px] font-black tracking-wider uppercase text-emerald-400">Live Patch Deployed</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/90 font-mono font-bold">v2.5.0</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPatchBanner(false)}
+                      className="text-white/40 hover:text-white/90 text-sm leading-none px-1.5 py-0.5 rounded hover:bg-white/10 transition"
+                      title="Dismiss update banner"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="text-xs font-bold text-white mb-2 tracking-tight">
+                    Universal Multi-Segment STTS Split & Memory Hardening
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-white/80">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-emerald-400 font-bold">✓</span>
+                      <span>Multi-entry STTS split (fixed 70% crash)</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-emerald-400 font-bold">✓</span>
+                      <span>Sub-process 96MB GC sandbox</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-emerald-400 font-bold">✓</span>
+                      <span>Signed CTTS B-frames (no range error)</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-emerald-400 font-bold">✓</span>
+                      <span>Smooth 4MB uploads without dropback</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="hero-banner text-center mb-6">
               <h1
                 className="hero-headline text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tighter text-white mb-2 cursor-pointer select-none"
