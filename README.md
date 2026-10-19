@@ -13,13 +13,16 @@
 When creators upload high-end exports (from DaVinci Resolve, Premiere Pro, or CapCut) to TikTok, the platform’s ingestion pipeline frequently:
 1. **Downsamples 60fps / 120fps to 30fps** due to mismatched container clock timescales.
 2. **Compresses and desaturates HDR** footage into flat, washed-out grey tones.
-3. **Creates micro-stutters** caused by variable frame rates or unaligned audio priming.
+3. **Creates micro-stutters and severe periodic buffering** caused by audio/video chunk displacement during CDN HTTP Range streaming.
+4. **Hangs on "Processing forever"** when containers have malformed trailing atoms or timeline stretching.
 
 **Obito Studio** fixes the MP4 container before upload using **100% lossless stream copy (`-c copy`)**:
-* Video frames and audio streams are **never transcoded or compressed**.
+* Video frames and audio streams are **never transcoded or compressed** (100% bit-exact original quality and 60fps fluidity).
+* **Zero-Buffering Granular Interleaving**: Interleaves audio and video packets (~6 bytes apart) so TikTok CDN streaming never starves on audio.
+* **In-`mdat` Clean Layout**: Encapsulates filler samples strictly inside `mdat` with zero trailing null atoms, preventing TikTok ingestion hangs.
+* **1:1 Native Timeline**: Preserves source 60fps timing and duration without 2x timeline distortion.
 * Harmonizes container clocks to TikTok's native **19200 timescale base**.
 * Injects native **HDR (HLG / PQ)** and Dolby Vision color transfer tags.
-* Injects **SMPTE cinema timecode (`tmcd` + `tref`)** tracks for studio synchronization.
 * Probes local files and remote TikTok links in **0.05 seconds** with virtually zero RAM usage via HTTP Range header inspection.
 
 ---

@@ -1,15 +1,15 @@
 # Vague Transcode (Obito Studio) — Migration & Handoff Notes
 
-> **LATEST PRODUCTION HANDOFF (2026-10-12):**
-> **Current Active Branch:** `online-rtx-service` (mirrored to `main`).
-> **Production Service:** Running live on port `3005` via systemd `obito-studio.service` at `https://obitostudio.willsonrai.com.np`.
-> **Primary Architecture:** React 18 SPA in `web/` built with Vite to `public/`, backed by Node.js `server-rtx-online.js`.
-> **Key Capabilities Active:**
-> 1. 100% Stream Copy (`-c copy`) lossless remuxing with 19200 timescale clock harmonization.
-> 2. SMPTE Cinema Timecode injection (`tmcd` & `tref` tracks) via `lib/timecode-injector.js`.
-> 3. Zero-RAM Remote Link Inspector with TikWM CDN resolution and HTTP Range header probing (`bytes=0-1572863`, 1.5MB), extracting true FPS, resolution, codec, and timescale in <1s.
-> 4. Liquid glass mobile UI with tactile bottom dock, multi-tab sweep gestures, and no AI-generated tropes (zero sparkle emojis, zero purple gradients).
-> **For complete agent guidelines, see [AGENTS.md](file:///home/willson/Desktop/vague-transcode/AGENTS.md).**
+> **LATEST PRODUCTION HANDOFF (2026-10-20):**
+> **Current Version:** `v3.1.0-zero-buffering`
+> **Active Environment:** Port `3006` (`server-rtx-online.js`) connected via Tailscale Funnel to `https://willson-inspiron-15-3552.tail5e494c.ts.net/`.
+> **Primary Achievements:**
+> 1. **Zero-Buffering Playback**: Resolved periodic 1-2 second playback stalls on TikTok CDN HTTP Range streaming by implementing granular packet-by-packet stream interleaving (`ffmpeg -c copy -max_interleave_delta 0`), positioning Audio Chunk 0 and Video Chunk 0 ~6 bytes apart.
+> 2. **In-`mdat` Container Encapsulation**: Resolved TikTok upload "Post is processing forever" freeze by dynamically expanding `mdatBox.size` in `tools/build-rtx-second-aac.js` so filler data is strictly enclosed inside `mdat` with zero trailing null box headers (`\0\0\0\0`).
+> 3. **1:1 Native Timeline Cadence**: Preserved source 60fps timing and duration (`speed = 1`), eliminating 2x timeline distortion.
+> 4. **100% Quality & 10-bit HLG HDR Preservation**: Pure stream copy (`-c copy`) without frame re-encoding. Native 4K (2160×3840), 60fps, BT.2020 primaries, and ARIB-STD-B67 HLG transfer intact.
+> 5. **Update Announcement Overlay**: Added single-view update overlay (`web/src/App.jsx`) tracked via `localStorage` so users see the changelog exactly once per update across refreshes.
+> **For complete agent guidelines, see [AGENTS.md](file:///home/willson/Desktop/part-2/agent-docs/AGENTS.md).**
 
 ## PWA + PRIVATE ACCESS PLAN (2026-09-30)
 

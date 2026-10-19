@@ -122,11 +122,28 @@ const HERO_MESSAGES = [
   }
 ];
 
+const CURRENT_UPDATE_VER = 'v3.1.0-zero-buffering';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | guide | optimizer | inspect | specs
   const [apiKey, setApiKey] = useState(() => lsGet('obitoKey') || '');
   const [busy, setBusy] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(() => {
+    try {
+      return lsGet('vague_update_seen_ver') !== CURRENT_UPDATE_VER;
+    } catch {
+      return false;
+    }
+  });
+
+  const dismissUpdateModal = useCallback(() => {
+    setShowUpdateModal(false);
+    try {
+      lsSet('vague_update_seen_ver', CURRENT_UPDATE_VER);
+    } catch {}
+  }, []);
+
   // Owner sign-in uses the site's existing server access code.
   const memberPreview = true;
   const [ownerAuthenticated, setOwnerAuthenticated] = useState(false);
@@ -555,6 +572,80 @@ export default function App() {
             <div className="modal-actions">
               <button type="button" className="btn-studio primary" onClick={() => setShowKeyModal(false)}>
                 Save Token
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Engine Update Announcement Modal (shown once per user per update) */}
+      {showUpdateModal && (
+        <div className="modal-backdrop" onClick={dismissUpdateModal} style={{ zIndex: 300 }}>
+          <div className="studio-modal update-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 490, padding: '24px' }}>
+            <div className="modal-header" style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
+                <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#34d399' }}>Live Update Deployed</span>
+                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: '#ffffff', fontFamily: 'monospace', fontWeight: 700 }}>v3.1.0</span>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={dismissUpdateModal}
+                title="Dismiss update announcement"
+              >
+                ×
+              </button>
+            </div>
+
+            <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#ffffff', marginBottom: '6px', letterSpacing: '-0.02em', lineHeight: 1.3 }}>
+              Zero-Buffering Engine &amp; Ingestion Hardening
+            </h3>
+            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '16px', lineHeight: 1.5 }}>
+              A major platform update has been deployed to eliminate TikTok CDN buffering underruns and ingestion stalls.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>⚡</span>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#ffffff' }}>Lossless 1:1 Packet Interleaving</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4, marginTop: '2px' }}>
+                    Audio and video packets are positioned tightly adjacent (~6 bytes apart) to stop all HTTP Range CDN playback starvation stalls.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>🛡️</span>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#ffffff' }}>Clean In-mdat Container Encapsulation</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4, marginTop: '2px' }}>
+                    Filler data is strictly contained inside the expanded <code style={{ color: '#38bdf8' }}>mdat</code> atom with zero orphaned bytes, permanently fixing the &ldquo;Post is processing forever&rdquo; hang.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>🎬</span>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#ffffff' }}>100% Native 4K 60fps &amp; 10-bit HLG HDR</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4, marginTop: '2px' }}>
+                    Pure stream copy with zero frame re-encoding. 100% master bitrate, fluid 60fps cadence, and BT.2020 dynamic range preserved.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <span style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.4)' }}>Shown once per update</span>
+              <button
+                type="button"
+                className="btn-studio primary"
+                style={{ fontSize: '12px', padding: '8px 18px', fontWeight: 700, borderRadius: '8px' }}
+                onClick={dismissUpdateModal}
+              >
+                Got it, Continue
               </button>
             </div>
           </div>
