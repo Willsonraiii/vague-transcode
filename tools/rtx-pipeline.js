@@ -24,6 +24,7 @@
  *     [--audio-elst-ms N] [--filler-count N] [--keep-temp]
  */
 import { readFile, writeFile, mkdtemp, rm, stat, open, copyFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -344,11 +345,103 @@ if (isGraded) {
   await applyColorGrade(inputPath, stage0Path, colorPreset);
 }
 
+// Probe audio stream count
+const probe = spawnSync('ffprobe', [
+  '-v', 'error',
+  '-show_entries', 'stream=codec_type',
+  '-of', 'json',
+  stage0Path,
+], { encoding: 'utf8' });
+
+let audioStreamsCount = 0;
+if (probe.status === 0 && probe.stdout) {
+  try {
+    const data = JSON.parse(probe.stdout);
+    audioStreamsCount = (data.streams || []).filter((s) => s.codec_type === 'audio').length;
+  } catch {}
+}
+
+if (audioStreamsCount === 0) {
+  // Silent video: synthesize a silent stereo AAC track without re-encoding video frames
+  reportProgress(isGraded ? 40 : 5, 'adding-audio');
+  const stage0Audio = path.join(workDir, 'stage0-audio.mp4');
+  const res = spawnSync('ffmpeg', [
+    '-y',
+    '-i', stage0Path,
+    '-f', 'lavfi',
+    '-i', 'anullsrc=r=48000:cl=stereo',
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-shortest',
+    stage0Audio,
+  ], { encoding: 'utf8' });
+  if (res.status === 0 && existsSync(stage0Audio)) stage0Path = stage0Audio;
+} else if (audioStreamsCount > 1) {
+  // Multiple audio tracks: isolate primary audio track losslessly
+  reportProgress(isGraded ? 40 : 5, 'normalizing-audio');
+  const stage0Audio = path.join(workDir, 'stage0-audio.mp4');
+  const res = spawnSync('ffmpeg', [
+    '-y',
+    '-i', stage0Path,
+    '-map', '0:v:0',
+    '-map', '0:a:0',
+    '-c', 'copy',
+    stage0Audio,
+  ], { encoding: 'utf8' });
+  if (res.status === 0 && existsSync(stage0Audio)) stage0Path = stage0Audio;
+}
+
 const stage1Path = path.join(workDir, 'stage1.mp4');
 const stage2Path = path.join(workDir, 'stage2.mp4');
 
-reportProgress(isGraded ? 50 : 10, 'reading');
-const remuxed = await streamFaststartRemux(stage0Path, stage1Path, {
+// ---------------------------------------------------------------------------
+// 1. Lossless Granular Chunk Interleaving (Zero-Buffering Engine)
+// ---------------------------------------------------------------------------
+// Raw phone and editor recordings store video in large 1-2 MB clumps without
+// close audio interleaving. During HTTP Range streaming on TikTok CDN, this causes
+// audio buffer starvation and severe periodic stalls.
+// We interleave audio and video packets (~20ms / 1 frame per chunk) with 100%
+// lossless stream copy, preserving all HDR metadata and Dolby Vision intact.
+reportProgress(isGraded ? 45 : 8, 'interleaving');
+let sourceForRemux = stage0Path;
+const stage0Interleaved = path.join(workDir, 'stage0-interleaved.mp4');
+let interleaved = false;
+
+try {
+  const ff = spawnSync('ffmpeg', [
+    '-y',
+    '-i', stage0Path,
+    '-c', 'copy',
+    '-max_interleave_delta', '0',
+    '-map_metadata', '0',
+    stage0Interleaved,
+  ], {
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  if (ff.status === 0 && existsSync(stage0Interleaved)) {
+    sourceForRemux = stage0Interleaved;
+    interleaved = true;
+  }
+} catch {}
+
+if (!interleaved) {
+  try {
+    const mp4box = spawnSync('MP4Box', ['-inter', '20', stage0Path, '-out', stage0Interleaved], {
+      encoding: 'utf8',
+      timeout: 60000,
+    });
+    if (mp4box.status === 0 && existsSync(stage0Interleaved)) {
+      sourceForRemux = stage0Interleaved;
+      interleaved = true;
+    }
+  } catch {}
+}
+
+reportProgress(isGraded ? 50 : 15, 'reading');
+const remuxed = await streamFaststartRemux(sourceForRemux, stage1Path, {
   stripDV: !keepDv,
   rebrand: true,
   isoSignature: true,
@@ -451,16 +544,15 @@ if (!videoStts.every((e) => e.duration === uniformDuration)) {
   await fh1.close();
   throw new Error('Video stts is not uniform (variable frame duration). Not supported yet.');
 }
-if (uniformDuration % TARGET_FPS !== 0 && (TARGET_VIDEO_TIMESCALE / uniformDuration) % 1 !== 0) {
-  await fh1.close();
-  throw new Error(`Cannot derive integer fps from stts duration ${uniformDuration}.`);
-}
 const sourceFps = TARGET_VIDEO_TIMESCALE / uniformDuration;
-const speed = sourceFps / TARGET_FPS;
-if (!Number.isInteger(speed) || speed < 1) {
+if (!Number.isInteger(sourceFps) || sourceFps <= 0) {
   await fh1.close();
-  throw new Error(`Source fps ${sourceFps} does not map to an integer speed factor (fps/30).`);
+  throw new Error(`Cannot derive an integer source fps from stts duration ${uniformDuration}.`);
 }
+// TikTok processing accepted the same RTXFury-style output with source timing,
+// while the prior 60 -> 30 fps / 2x timeline remained stuck. Keep timestamps
+// 1:1 for video and audio rather than stretching the media timeline.
+const speed = 1;
 
 const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
 const lastEntry = videoStts[videoStts.length - 1];
@@ -601,6 +693,8 @@ reportProgress(isGraded ? 85 : 70, 'split-done');
 const toolArgs = [
   fileURLToPath(SECOND_AAC_TOOL), stage2Path, outputPath,
   '--filler-count', String(fillerCount),
+  '--speed-factor', String(speed),
+  '--filler-layout', 'mdat',
   '--mvhd-v1-unknown',
   '--drop-udta',
 ];
@@ -635,6 +729,7 @@ const summary = {
     : Boolean(dvStripped && (dvStripped.boxes > 0 || dvStripped.retagged > 0)),
   dvStripped,
   rebranded,
+  interleaved,
   derived: {
     sourceVideoTimescale: remuxed.isoSigned?.factor
       ? TARGET_VIDEO_TIMESCALE / remuxed.isoSigned.factor

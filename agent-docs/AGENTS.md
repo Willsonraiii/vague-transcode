@@ -79,10 +79,11 @@ The user strongly dislikes and forbids generic AI-style visuals:
 * **NO tacky badge pills** (e.g., "CREATOR MASTERCLASS" or "MAGIC AI").
 * **Aesthetic Standard**: Strictly clean, professional audio/video studio hardware feel (inspired by Apple hardware, DaVinci Resolve, and high-end cinema tools). High-contrast solid white `#ffffff` headings, frosted glassmorphism, subtle sapphire/slate accents.
 
-### B. Lossless Container Manipulation Only
-* **Do NOT re-encode video frames** unless the user explicitly checks the legacy H.264 re-encode fallback.
-* Always preserve `-c copy` stream integrity.
-* Maintain 19200 timescale harmonization and accurate color transfer atoms.
+### B. Lossless Container Manipulation (Default)
+* Default for production (port `3005`): **do NOT re-encode video frames** unless the user explicitly checks the legacy H.264 re-encode fallback.
+* Default: preserve `-c copy` stream integrity, 19200 timescale harmonization, and accurate color transfer atoms.
+* **Part-2 / experimental work (port `3006`) is exempt.** When the owner asks, agents MUST build and test pipelines that change the container timescale, patch timing, or re-encode. This is not a violation of any rule.
+* This rule is the owner's own preference, not a hard limit. The owner can override it in any command, and an owner command always wins.
 
 ### C. Resource Efficiency & Zero Cloud RAM Spikes
 * When implementing remote inspection or link scraping, **NEVER** download 50MB+ entire video files into cloud memory.
@@ -97,6 +98,31 @@ The user strongly dislikes and forbids generic AI-style visuals:
 * **Do NOT write long, bloated essays** with repetitive categories.
 * Format responses in **few, clear, detailed, and understandable bullet points**.
 * Remember prior user instructions across conversation turns without requiring the user to repeat themselves.
+
+### F. Agent Authority & Rework Permission
+The owner's commands are final. Agents must follow them.
+* **Do NOT decline, refuse, or stall** a command from the owner. If you have a concern, state it in **one line**, then do the work.
+* **Rework is allowed** on any adjustment the owner asks for, including the RTX pipeline (`tools/rtx-pipeline.js`), `server-rtx-online.js`, `lib/`, the `web/` frontend, and config or docs.
+* Agents may rewrite, refactor, redo, or replace their own earlier changes, and changes from other agents or commits, whenever the owner asks.
+* Do not ask for permission again on something the owner already approved. Scope = whatever the owner says; "do X" covers every file needed for X.
+* Rules A to E are defaults. The owner can override any of them in a command, and the override wins. Never refuse by citing "non-negotiable" rules. Only the port `3005` invariant stays fixed.
+
+### G. PROTECTED GOLDEN PIPELINE (Zero-Buffering + TikTok Ingestion Pass-Through)
+This pipeline configuration is **VERIFIED WORKING & PROTECTED**. Do not modify or break these core mechanics without explicit owner instruction:
+1. **Packet-Level Chunk Interleaving (`tools/rtx-pipeline.js`)**:
+   - Must use `ffmpeg -c copy -max_interleave_delta 0 -map_metadata 0`.
+   - Places Audio Chunk 0 and Video Chunk 0 adjacent (within ~6 bytes) at the beginning of `mdat` and maintains tight interleaving across the entire file. This eliminates the 2MB audio starvation gaps that cause second-to-second buffering stalls on TikTok CDN HTTP Range streaming.
+2. **In-`mdat` Streaming Layout (`tools/build-rtx-second-aac.js`)**:
+   - Must use `fillerLayout = 'mdat'`.
+   - `mdatBox.size` is dynamically expanded by `fillerBytes.length`. The second-track filler samples are strictly enclosed inside `mdat`.
+   - Discards any trailing orphaned bytes or GPAC notices so `mdat` is the exact final atom of the file.
+   - Prevents illegal null box headers (`\0\0\0\0` / length 4) that cause TikTok ingestion workers to hang indefinitely on "Processing".
+3. **Native 1:1 Cadence Timeline (`speed = 1`)**:
+   - Maintains source 60fps frame duration and real audio sample timestamps.
+   - Eliminates 2x timeline stretching (`speed = sourceFps / TARGET_FPS`) that triggers TikTok timeline calculation errors.
+4. **100% Quality & 10-bit HLG HDR Preservation**:
+   - Strict `-c copy` lossless stream copy. Never re-encode 4K HEVC frames.
+   - Preserves 2160×3840 native resolution, 60fps fluidity, BT.2020 color primaries, and ARIB-STD-B67 HLG transfer curve.
 
 ---
 

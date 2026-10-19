@@ -279,6 +279,7 @@ function startNextJob() {
       if (line) {
         try { job.result = JSON.parse(line.slice('PIPELINE_RESULT '.length)); } catch {}
       }
+      job.probeOut = summarizeProbe(probeFile(job.outputPath));
       logLine(job, '[obito] repackaged — copy test & probe…');
       const hdrTag = job.probeIn?.dv && !job.probeOut?.dv ? ' · DV normalized to HLG HDR' : job.probeOut?.transfer === 'arib-std-b67' ? ' · HLG HDR' : job.probeOut?.transfer === 'smpte2084' ? ' · HDR10 / PQ' : '';
       logLine(job, `[obito] done ✓ output ${job.probeOut ? job.probeOut.w + 'x' + job.probeOut.h + ' · ' + job.probeOut.fps + ' fps' : ''}${hdrTag}`);
@@ -833,6 +834,7 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
     }
     const mode = req.body?.mode === 'standard' ? 'standard' : 'hdr';
     req.mode = mode;
+    const durationPatch = Boolean(req.body?.durationPatch);
 
     const freeBytes = freeDiskBytes(JOBS_DIR);
     if (freeBytes !== null && freeBytes < MIN_FREE_DISK) {
@@ -854,6 +856,7 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
       outputPath: path.join(dir, 'output.mp4'),
       status: 'queued',
       mode: req.mode,
+      durationPatch,
       createdAt: Date.now(),
       inputBytes: req.file.size,
       outputBytes: null,
@@ -937,7 +940,7 @@ const handleChunk = async (req, res) => {
 
   const p = uploadPaths(id);
   try {
-    await pipeline(req, createWriteStream(p.data, { flags: 'a' }));
+    await pipeline(req, createWriteStream(p.data, { flags: 'a', highWaterMark: 1024 * 1024 }));
     const st = await stat(p.data);
     const actualReceived = st.size;
     const actualLen = actualReceived - offset;
@@ -986,6 +989,7 @@ app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, 
     if (up.received !== up.size) return res.status(409).json({ error: 'Upload is not complete.', received: up.received });
     const mode = req.body?.mode === 'standard' ? 'standard' : 'hdr';
     const ensureH264 = Boolean(req.body?.ensureH264);
+    const durationPatch = Boolean(req.body?.durationPatch);
 
     const id = newJobId();
     const dir = path.join(JOBS_DIR, id);
@@ -997,12 +1001,12 @@ app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, 
     const job = {
       id, dir, inputPath, uploadId,
       outputPath: path.join(dir, 'output.mp4'),
-      status: 'queued', mode, ensureH264, createdAt: Date.now(),
+      status: 'queued', mode, ensureH264, durationPatch, createdAt: Date.now(),
       inputBytes: up.size, outputBytes: null, error: null,
       fileName: up.name || null,
     };
     jobs.set(id, job);
-    console.log(`[job ${id}] queued from upload ${uploadId} (${up.size} bytes, ensureH264=${ensureH264}, ${jobs.size} total)`);
+    console.log(`[job ${id}] queued from upload ${uploadId} (${up.size} bytes, ensureH264=${ensureH264}, durationPatch=${durationPatch}, ${jobs.size} total)`);
     startNextJob();
     res.status(201).json({ id });
   } catch (error) {

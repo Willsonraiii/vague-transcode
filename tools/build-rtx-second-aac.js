@@ -512,7 +512,7 @@ let fillerCount = 4239;
 let fillerDuration = 1;
 let fillerHex = '0000000400000000';
 let speedFactor = 2;
-let fillerLayout = 'eof';
+let fillerLayout = 'mdat';
 let mvhdV1Unknown = false;
 let dropUdta = false;
 
@@ -582,8 +582,8 @@ while (o < inputStat.size) {
   topBoxes.push(box);
   if (type === 'moov') {
     moov = box;
-    break;
   }
+  if (size === 0) break;
   o += size;
 }
 
@@ -599,7 +599,8 @@ if (moov.start > 1024) {
 const input = Buffer.alloc(moov.end);
 await fh.read(input, 0, moov.end, 0);
 await fh.close();
-const lastBox = topBoxes[topBoxes.length - 1];
+const mdatBox = topBoxes.find((b) => b.type === 'mdat');
+if (!mdatBox) throw new Error('No mdat box found in input.');
 
 let mvhdBox = null;
 const trakBoxes = [];
@@ -809,10 +810,9 @@ patchStco(trak1New.buffer, trak1New.stco, shiftedShared);
 
 let fillerOffset;
 if (fillerLayout === 'eof') {
-  fillerOffset = input.length + moovDelta; // after every existing byte
+  fillerOffset = inputStat.size + moovDelta; // after every existing byte
 } else {
-  if (lastBox.type !== 'mdat') throw new Error('filler-layout mdat requires mdat as the last box.');
-  fillerOffset = lastBox.end + moovDelta;
+  fillerOffset = mdatBox.end + moovDelta;
 }
 if (fillerOffset + fillerBytes.length > 0xffffffff && trak1New.stco.width === 4) {
   throw new Error('Filler data does not fit in 32-bit chunk offsets.');
@@ -885,11 +885,56 @@ if (newMoov.length !== moov.size + moovDelta) {
 // Assemble the output file
 // ---------------------------------------------------------------------------
 
-const finalOutputBytes = inputStat.size + moovDelta + fillerBytes.length;
-if (fillerLayout === 'eof') {
-  // Reference behaviour: filler bytes appended past the declared mdat, mdat
-  // size field untouched. Demuxers reach them through the chunk offsets.
-  // Stream directly to disk to avoid allocating a full duplicate video buffer in RAM:
+const finalOutputBytes = mdatBox.end + moovDelta + fillerBytes.length;
+if (fillerLayout === 'mdat') {
+  // Stream directly to disk: updates mdat size header so fillerBytes is completely
+  // enclosed inside mdat, guaranteeing a strictly valid MP4 with no illegal trailing atoms.
+  await new Promise((resolve, reject) => {
+    const ws = createWriteStream(outputPath);
+    ws.on('error', reject);
+    ws.on('finish', resolve);
+
+    // 1. Boxes before moov (e.g. ftyp)
+    ws.write(input.subarray(0, moov.start));
+    // 2. New moov
+    ws.write(newMoov);
+
+    const writeMdat = () => {
+      // 4. mdat header with expanded size
+      const newMdatSize = mdatBox.size + fillerBytes.length;
+      const mdatHdrBuf = Buffer.alloc(mdatBox.header);
+      if (mdatBox.header === 8) {
+        mdatHdrBuf.writeUInt32BE(newMdatSize, 0);
+        mdatHdrBuf.write('mdat', 4, 4, 'ascii');
+      } else {
+        mdatHdrBuf.writeUInt32BE(1, 0);
+        mdatHdrBuf.write('mdat', 4, 4, 'ascii');
+        mdatHdrBuf.writeBigUInt64BE(BigInt(newMdatSize), 8);
+      }
+      ws.write(mdatHdrBuf);
+
+      // 5. mdat body
+      const rsMdat = createReadStream(inputPath, { start: mdatBox.content, end: mdatBox.end - 1 });
+      rsMdat.on('error', reject);
+      rsMdat.pipe(ws, { end: false });
+      rsMdat.on('end', () => {
+        // 6. filler bytes inside mdat!
+        ws.end(fillerBytes);
+      });
+    };
+
+    // 3. Any intermediate boxes between moov.end and mdat.start (e.g. free)
+    if (mdatBox.start > moov.end) {
+      const rsMid = createReadStream(inputPath, { start: moov.end, end: mdatBox.start - 1 });
+      rsMid.on('error', reject);
+      rsMid.pipe(ws, { end: false });
+      rsMid.on('end', writeMdat);
+    } else {
+      writeMdat();
+    }
+  });
+} else {
+  // EOF fallback (streams past mdat without size expansion)
   await new Promise((resolve, reject) => {
     const ws = createWriteStream(outputPath);
     ws.on('error', reject);
@@ -903,20 +948,6 @@ if (fillerLayout === 'eof') {
       ws.end(fillerBytes);
     });
   });
-} else {
-  const output = concat([
-    input.subarray(0, moov.start),
-    newMoov,
-    input.subarray(moov.end),
-    fillerBytes,
-  ]);
-  const sizeFieldAt = lastBox.start + moovDelta;
-  if (lastBox.header === 8) {
-    output.writeUInt32BE(u32(lastBox.size + fillerBytes.length, 'mdat size'), sizeFieldAt);
-  } else {
-    output.writeBigUInt64BE(BigInt(lastBox.size + fillerBytes.length), sizeFieldAt + 8);
-  }
-  await writeFile(outputPath, output);
 }
 
 const fmtEntries = (entries) => entries.map((e) => `${e.count}x${e.duration}`).join(', ');

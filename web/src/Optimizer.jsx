@@ -36,9 +36,9 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// Adaptive dynamic chunking: 2 MB start for quick initial feedback, scaling up to 8 MB for maximum bandwidth saturation
-const MIN_CHUNK = 2 * 1024 * 1024;
-const MAX_CHUNK = 8 * 1024 * 1024;
+// High-throughput chunk streaming: 8 MB base, scaling up to 32 MB for maximum network saturation
+const MIN_CHUNK = 8 * 1024 * 1024;
+const MAX_CHUNK = 32 * 1024 * 1024;
 const CHUNK_TIMEOUT_MS = 120 * 1000;  // 120s timeout per slice
 const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
 
@@ -584,9 +584,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
     }
 
     uploadStartTime.current = Date.now();
-    let currentChunk = MIN_CHUNK;
+    // For video clips <= 32 MB (standard TikTok clips), stream in one single high-speed request
+    // to eliminate multiple round-trip latencies over Tailscale/DERP relays.
+    let currentChunk = f.size <= 32 * 1024 * 1024 ? f.size : 16 * 1024 * 1024;
 
-    // 3. Chunk upload loop (adaptive dynamic scaling: 2 MB -> 4 MB -> 8 MB)
+    // 3. Chunk upload loop (adaptive high-speed dynamic scaling)
     while (offset < f.size) {
       if (flags.current.cancel) return;
       if (flags.current.pause) { setPhase('paused'); return; }
@@ -1039,9 +1041,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             <div className="tiktok-tip-card">
               <span className="tiktok-tip-icon" aria-hidden="true">💡</span>
               <div className="tiktok-tip-content">
-                <span className="tiktok-tip-title">Creator Upload Guidance for Max Quality</span>
+                <span className="tiktok-tip-title">Browser TikTok Studio (Files App) Workflow</span>
                 <span className="tiktok-tip-desc">
-                  Publish directly as <b>Public</b> on TikTok. Saving as a <i>Private Draft</i> first triggers TikTok&apos;s aggressive secondary compression pass.
+                  To retain 100% 4K 60fps HDR: save output to your <b>Files app</b> (not Camera Roll), upload via <b>Browser TikTok Studio</b> (<a href="https://www.tiktok.com/tiktokstudio/upload" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>tiktok.com/tiktokstudio</a>), and publish directly as <b>Public</b>.
                 </span>
               </div>
             </div>
@@ -1079,9 +1081,9 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
             <div className="tiktok-tip-card">
               <span className="tiktok-tip-icon" aria-hidden="true">💡</span>
               <div className="tiktok-tip-content">
-                <span className="tiktok-tip-title">Creator Upload Tip for Max Quality</span>
+                <span className="tiktok-tip-title">Browser TikTok Studio Upload Instructions</span>
                 <span className="tiktok-tip-desc">
-                  Publish directly as <b>Public</b> on TikTok. Saving as a <i>Private Draft</i> first triggers TikTok&apos;s aggressive secondary compression pass.
+                  Save this video to your <b>Files app</b> (not Camera Roll), open <a href="https://www.tiktok.com/tiktokstudio/upload" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>tiktok.com/tiktokstudio</a> in your browser, pick the file from Files, and post directly as <b>Public</b>.
                 </span>
               </div>
             </div>

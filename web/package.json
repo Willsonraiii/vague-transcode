@@ -19,6 +19,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.7.0",
+    "prop-types": "^15.8.1",
     "thinking-orbs": "^0.3.2",
     "three": "^0.186.1"
   },
