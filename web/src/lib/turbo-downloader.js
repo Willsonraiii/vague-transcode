@@ -149,7 +149,7 @@ export async function downloadWithTurbo({
           signal,
         });
 
-        if (!res.ok && res.status !== 206) {
+        if (res.status !== 206) {
           throw new Error(`Server returned HTTP ${res.status} for range ${rangeHeader}`);
         }
 
@@ -158,6 +158,9 @@ export async function downloadWithTurbo({
           currentBatch.push(buf);
           slice.loaded += buf.byteLength;
           updateProgress(buf.byteLength);
+          if (slice.loaded < slice.total) {
+            throw new Error(`Buffer terminated prematurely: received ${slice.loaded} of ${slice.total} bytes`);
+          }
           commitBatch();
           chunkBlobs[slice.id] = new Blob(sliceBlobs, { type: 'application/octet-stream' });
           return;
@@ -180,6 +183,11 @@ export async function downloadWithTurbo({
           if (currentBatchBytes >= 4 * 1024 * 1024) {
             commitBatch();
           }
+        }
+
+        // Guarantee all bytes were delivered before marking slice complete
+        if (slice.loaded < slice.total) {
+          throw new Error(`Stream closed prematurely: received ${slice.loaded} of ${slice.total} bytes`);
         }
 
         commitBatch();
