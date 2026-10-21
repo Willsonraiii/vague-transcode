@@ -952,7 +952,6 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         fileName: name,
         totalBytes: result.bytes || 0,
         headers: headers(),
-        concurrency: 6,
         onProgress: ({ percent, speedFormatted }) => {
           setDl({ state: 'loading', pct: percent, speed: speedFormatted });
         },
@@ -964,9 +963,8 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
         setDl({ state: 'idle', pct: 0, speed: '' });
         return;
       }
-      console.warn('Turbo download fallback to direct stream:', err);
-      handleDirectDownload();
-      setDl({ state: 'idle', pct: 0, speed: '' });
+      console.warn('Turbo download error:', err);
+      setDl({ state: 'error', pct: 0, speed: '', error: 'Transfer interrupted. Tap to retry or use Direct Download.' });
     }
   };
 
@@ -1241,7 +1239,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                 <div style={{ width: '100%', maxWidth: 440, margin: '0 auto 16px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(56,189,248,0.25)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '6px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ color: '#38bdf8', fontWeight: 800 }}>⚡ Turbo 4-Thread</span>
+                      <span style={{ color: '#38bdf8', fontWeight: 800 }}>⚡ Turbo Stream</span>
                       <span>·</span>
                       <span style={{ color: '#ffffff' }}>{dl.speed || 'Transferring...'}</span>
                     </span>
@@ -1250,6 +1248,12 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy }) {
                   <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ width: `${dl.pct}%`, height: '100%', background: '#38bdf8', transition: 'width 0.2s linear' }} />
                   </div>
+                </div>
+              )}
+
+              {dl.state === 'error' && (
+                <div style={{ width: '100%', maxWidth: 440, margin: '0 auto 16px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: '12px', textAlign: 'center' }}>
+                  <span>{dl.error || 'Transfer interrupted. Tap to retry or use Direct Download below.'}</span>
                 </div>
               )}
 
