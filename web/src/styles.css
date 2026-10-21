@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 /* ==========================================================================
    OBITO STUDIO — PRO VIDEO MASTERING SUITE
    High-precision dark studio design system inspired by DaVinci Resolve,
@@ -15,13 +13,6 @@
 }
 
 :root {
-  /* Hirael Design System Tokens */
-  --bg: 240 10% 3.9%;
-  --surface: 240 5.9% 10%;
-  --stroke: 240 3.7% 15.9%;
-  --text: 0 0% 98%;
-  --muted: 240 5% 64.9%;
-
   /* Surfaces & Backgrounds */
   --bg-deep: #07080c;
   --bg-base: #0b0c12;
@@ -60,110 +51,41 @@
 
 *, *::before, *::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* Hirael Layout Utilities */
-.container-hirael {
-  width: 100%;
-  max-width: 72rem;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-@media (min-width: 640px) {
-  .container-hirael {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-  }
-}
-@media (min-width: 1024px) {
-  .container-hirael {
-    padding-left: 2rem;
-    padding-right: 2rem;
-  }
+html {
+  color-scheme: dark;
+  background-color: #08090e;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
-.section-hirael {
-  position: relative;
-  padding-top: 5rem;
-  padding-bottom: 5rem;
-}
-@media (min-width: 640px) {
-  .section-hirael {
-    padding-top: 6.5rem;
-    padding-bottom: 6.5rem;
-  }
-}
-@media (min-width: 1024px) {
-  .section-hirael {
-    padding-top: 8rem;
-    padding-bottom: 8rem;
-  }
+body {
+  background-color: #08090e;
+  background: radial-gradient(circle at 50% 0%, #121524 0%, #08090e 55%, #050608 100%);
+  color: var(--text-main);
+  min-height: 100vh;
+  line-height: 1.5;
+  font-size: 14px;
+  overflow-x: hidden;
 }
 
-.font-display {
-  font-family: 'Cormorant Garamond', 'Playfair Display', Didot, 'Bodoni MT', Georgia, serif;
+/* ---------- Typography & Utility ---------- */
+h1, h2, h3, h4 {
+  color: var(--text-main);
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
-@keyframes marquee {
-  0% { transform: translateX(0%); }
-  100% { transform: translateX(-50%); }
-}
-.animate-marquee {
-  animation: marquee 30s linear infinite;
-}
-
-@keyframes roleFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-role-fade-in {
-  animation: roleFadeIn 0.35s ease-out;
-}
-
-@keyframes scrollDown {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(200%); }
-}
-.animate-scroll-down {
-  animation: scrollDown 2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-
-.pf-gradient {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.25) 100%);
-}
-
-@layer base {
-  html {
-    color-scheme: dark;
-    background-color: #08090e;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    scroll-behavior: smooth;
-  }
-
-  body {
-    background-color: #08090e;
-    background: radial-gradient(circle at 50% 0%, #121524 0%, #08090e 55%, #050608 100%);
-    color: var(--text-main);
-    min-height: 100vh;
-    line-height: 1.5;
-    font-size: 14px;
-    overflow-x: hidden;
-  }
-
-  h1, h2, h3, h4 {
-    color: var(--text-main);
-    font-weight: 600;
-    letter-spacing: -0.025em;
-  }
-
-  button {
-    font-family: inherit;
-    cursor: pointer;
-  }
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
 }
 
 /* ---------- Studio App Layout ---------- */
