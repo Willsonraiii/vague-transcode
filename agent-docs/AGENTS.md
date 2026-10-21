@@ -116,6 +116,10 @@ Any modifications to the mastering pipeline must honor these four fundamental ru
    - Strict `-c copy` lossless stream copy. Never re-encode 4K HEVC frames.
    - Preserves 2160×3840 native resolution, 60fps fluidity, BT.2020 color primaries, and ARIB-STD-B67 HLG transfer curve.
 
+### H. Strict Experimentation Policy (Cloned Repo Only)
+* **Never conduct experiments on this main production branch**: Whenever the user asks to experiment with or prototype new updates (UI redesigns, pipeline adjustments, or architectural features), work MUST be performed **ONLY in a cloned repository** (isolated clone or worktree).
+* **Owner permission required for cloning**: If a cloned repository does not already exist, the agent MUST explicitly ask the owner for permission to create/clone one before proceeding. Strict following is required.
+
 ---
 
 ## 5. Build & Deployment Workflow

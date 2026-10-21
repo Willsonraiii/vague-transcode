@@ -24,6 +24,7 @@ Current focus (2026-10-17): a TikTok optimizer timing fix was validated by the u
 5. **Port 3005 is production.** Never bind, test, or experiment against it. Experiments use 3006.
 6. **Decisions already made — do not reopen:** no color-grade presets; TikTok products = Login Kit + Content Posting API only; legal contact `resume@willsonrai.com.np`.
 7. **Do not touch the TikTok developer portal** (app `7696831141604771848`): products, scopes, URLs, demo video, review text. The app is **In review** — any edit re-triggers the queue.
+8. **Experiments ONLY in cloned repo (strict).** When the user asks to experiment with or develop any new updates (UI redesigns, pipeline experiments, or feature prototypes), work MUST be performed **ONLY in a cloned repository** (isolated worktree/clone). Never experiment directly on this main production branch. If a cloned repository does not already exist, the agent MUST explicitly ask the owner for permission to clone before doing anything. Strict following required.
 
 ## Build & ship
 
@@ -35,8 +36,8 @@ Current focus (2026-10-17): a TikTok optimizer timing fix was validated by the u
 ## Permissions (agents here may run commands without being asked — treat these as law)
 
 - **Allowed without asking:** reading anything; frontend build; `git status/diff/log`; editing `web/src/`, `lib/`, `tools/`, `agent-docs/`.
-- **Ask first:** any `git push`; installing/updating npm packages; anything that changes TikTok/auth behavior in `server-rtx-online.js`; deleting anything outside `/tmp`; touching the TikTok portal.
-- **Never:** commit secrets; `git reset --hard` / `git clean -xfd` over uncommitted work; run experiments against port 3005; leave test videos or job outputs in the repo (fixtures in `/tmp`).
+- **Ask first:** any `git push`; installing/updating npm packages; anything that changes TikTok/auth behavior in `server-rtx-online.js`; deleting anything outside `/tmp`; touching the TikTok portal; cloning the repository for experiments (if a clone does not exist).
+- **Never:** commit secrets; `git reset --hard` / `git clean -xfd` over uncommitted work; run experiments against port 3005; run experiments or prototype changes directly on this main production branch (experiments belong ONLY in a cloned repo with owner approval); leave test videos or job outputs in the repo (fixtures in `/tmp`).
 
 ## Style & self-verification
 
