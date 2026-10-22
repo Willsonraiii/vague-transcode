@@ -207,10 +207,32 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#0b0c12;color:#fff;font-family:system-ui,-apple-system,sans-serif;padding:32px 20px;line-height:1.6}
     .ns-wrap{max-width:760px;margin:0 auto}
-    .ns-brand{display:flex;align-items:center;gap:12px;margin-bottom:32px}
-    .ns-brand h1{font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.5px}
-    .ns-brand span{font-size:12px;color:#64748b;background:#1e293b;padding:3px 8px;border-radius:4px}
-    .ns-desc{font-size:16px;color:#94a3b8;margin-bottom:32px;max-width:620px}
+    .ns-brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+    .ns-brand-left{display:flex;align-items:center;gap:12px}
+    .ns-brand h1{font-size:24px;font-weight:700;color:#fff;letter-spacing:-0.5px}
+    .ns-brand span{font-size:11px;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:3px 10px;border-radius:999px;letter-spacing:0.5px;text-transform:uppercase}
+    .ns-status{display:flex;align-items:center;gap:6px;font-size:12px;color:#10b981;font-weight:500}
+    .ns-status-dot{width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981}
+    
+    /* Studio Optimizer Workspace Mockup */
+    .ns-workspace{background:linear-gradient(180deg,#131622 0%,#0e1019 100%);border:1px solid #1e2638;border-radius:16px;padding:28px;margin-bottom:32px;box-shadow:0 20px 40px -15px rgba(0,0,0,0.6)}
+    .ns-ws-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #1c2333}
+    .ns-ws-title{font-size:13px;font-weight:600;color:#94a3b8;letter-spacing:0.5px;text-transform:uppercase}
+    .ns-ws-tag{font-size:11px;color:#64748b;font-family:monospace}
+    
+    .ns-dropzone{border:2px dashed #2a354d;border-radius:12px;background:rgba(15,20,32,0.6);padding:44px 20px;text-align:center;margin-bottom:20px}
+    .ns-dz-icon{width:48px;height:48px;margin:0 auto 16px;color:#38bdf8;display:flex;align-items:center;justify-content:center}
+    .ns-dz-title{font-size:17px;font-weight:600;color:#f1f5f9;margin-bottom:6px}
+    .ns-dz-sub{font-size:13px;color:#64748b;margin-bottom:20px;max-width:440px;margin-left:auto;margin-right:auto}
+    .ns-dz-btn{display:inline-block;background:#38bdf8;color:#0b0c12;font-size:13px;font-weight:600;padding:10px 22px;border-radius:8px;text-decoration:none;border:none}
+    
+    .ns-pipeline-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:16px}
+    .ns-pipe-pill{background:#111622;border:1px solid #1d2538;border-radius:8px;padding:10px 12px;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:8px}
+    .ns-pipe-check{color:#10b981;font-weight:bold}
+    
+    .ns-notice{font-size:12px;color:#64748b;background:rgba(30,41,59,0.5);border-radius:8px;padding:10px 14px;margin-top:16px;text-align:center}
+
+    .ns-desc{font-size:15px;color:#94a3b8;margin-bottom:28px}
     .ns-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:36px}
     .ns-card{background:#111827;border:1px solid #1e293b;border-radius:12px;padding:20px}
     .ns-card h3{font-size:14px;font-weight:600;color:#38bdf8;margin-bottom:8px}
@@ -223,18 +245,55 @@
   </style>
   <div class="ns-wrap">
     <div class="ns-brand">
-      <h1>Obito Studio</h1>
-      <span>Free · Web App</span>
+      <div class="ns-brand-left">
+        <h1>Obito Studio</h1>
+        <span>Lossless Mastering Suite</span>
+      </div>
+      <div class="ns-status">
+        <span class="ns-status-dot"></span>
+        <span>Engine Online</span>
+      </div>
     </div>
+
+    <!-- Realistic Studio Optimizer Workspace Mockup -->
+    <div class="ns-workspace">
+      <div class="ns-ws-header">
+        <span class="ns-ws-title">TikTok Lossless Pipeline Master</span>
+        <span class="ns-ws-tag">TIMESCALE: 19200 · CODEC: COPY</span>
+      </div>
+      <div class="ns-dropzone">
+        <div class="ns-dz-icon">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="ns-dz-title">Drop your master video here to optimize</div>
+        <div class="ns-dz-sub">Harmonizes 4K HEVC, 60fps/120fps frame rates, and Apple 10-bit HDR directly to TikTok native container specifications with zero quality loss.</div>
+        <button type="button" class="ns-dz-btn">Select Video Master</button>
+      </div>
+
+      <div class="ns-pipeline-grid">
+        <div class="ns-pipe-pill"><span class="ns-pipe-check">✓</span> 19200 Motion Clock</div>
+        <div class="ns-pipe-pill"><span class="ns-pipe-check">✓</span> 10-bit HLG/HDR Preserve</div>
+        <div class="ns-pipe-pill"><span class="ns-pipe-check">✓</span> Pure Stream Copy (-c copy)</div>
+        <div class="ns-pipe-pill"><span class="ns-pipe-check">✓</span> TikTok Direct Post API</div>
+      </div>
+
+      <div class="ns-notice">
+        ⚡ In-browser lossless container remuxing, atom analysis, and direct TikTok publishing run with JavaScript enabled.
+      </div>
+    </div>
+
     <p class="ns-desc">
-      Obito Studio is a free, professional lossless video mastering suite for TikTok creators.
-      Preserve full 4K resolution, 60fps/120fps frame rates, and Apple 10-bit HDR dynamic range
-      when uploading to TikTok — with zero re-encoding and zero quality loss.
+      Obito Studio is a free, professional video mastering application built specifically for creators publishing 60fps, 120fps, and Apple 10-bit HDR video to TikTok. Container surgery preserves native video quality without compression degradation.
     </p>
+
     <div class="ns-features">
       <div class="ns-card">
         <h3>Lossless Stream Copy</h3>
-        <p>Pure bit-for-bit container remuxing using <code>-c copy</code>. Zero generational quality loss. Your pixels remain identical to the original master export.</p>
+        <p>Pure bit-for-bit container remuxing using <code>-c copy</code>. Zero generational quality loss. Your pixels remain identical to your DaVinci Resolve or Premiere master export.</p>
       </div>
       <div class="ns-card">
         <h3>60fps &amp; 120fps Motion Lock</h3>
@@ -266,7 +325,7 @@
     </div>
     <div class="ns-footer">
       <p>Obito Studio &mdash; <a href="https://obitostudio.willsonrai.com.np/">obitostudio.willsonrai.com.np</a> &mdash; Contact: <a href="mailto:resume@willsonrai.com.np">resume@willsonrai.com.np</a></p>
-      <p style="margin-top:8px">Enable JavaScript in your browser to access the full Obito Studio video optimizer and mastering suite.</p>
+      <p style="margin-top:8px">Enable JavaScript in your browser to access the live Obito Studio video optimizer and mastering engine.</p>
     </div>
   </div>
 </noscript>
