@@ -109,9 +109,7 @@ function rebuildRange(b, start, end, target) {
         last.count -= 1;
         entries.push({ count: 1, duration: Math.floor(last.duration / 2) });
       } else {
-        const d = last.duration;
-        last.duration = Math.ceil(d / 2);
-        entries.push({ count: 1, duration: Math.floor(d / 2) });
+        last.duration = Math.floor(last.duration / 2);
       }
 
       const newEntryCount = entries.length;
@@ -239,11 +237,13 @@ if (!target) throw new Error('Video stts box not found.');
 const newMoov = rebuildRange(headBuf, moov.start, moov.end, target);
 const delta = newMoov.length - (moov.end - moov.start);
 
-if (delta !== 8) {
+if (delta !== 0 && delta !== 8) {
   throw new Error(`Unexpected moov size delta: ${delta}`);
 }
 
-patchChunkOffsets(newMoov, delta);
+if (delta > 0) {
+  patchChunkOffsets(newMoov, delta);
+}
 
 await new Promise((resolve, reject) => {
   const ws = createWriteStream(outputPath);

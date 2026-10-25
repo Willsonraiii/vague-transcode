@@ -319,7 +319,7 @@ try {
     stage0Interleaved,
   ], {
     encoding: 'utf8',
-    timeout: 60000,
+    timeout: 300000,
   });
   if (ff.status === 0 && existsSync(stage0Interleaved)) {
     sourceForRemux = stage0Interleaved;
@@ -333,7 +333,7 @@ if (!interleaved) {
   try {
     const mp4box = spawnSync('MP4Box', ['-inter', '20', stage0Path, '-out', stage0Interleaved], {
       encoding: 'utf8',
-      timeout: 60000,
+      timeout: 300000,
     });
     if (mp4box.status === 0 && existsSync(stage0Interleaved)) {
       sourceForRemux = stage0Interleaved;
