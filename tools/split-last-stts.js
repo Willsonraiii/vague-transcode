@@ -93,26 +93,37 @@ function rebuildRange(b, start, end, target) {
   readBoxes(b, start, end, (box) => {
     if (box.start === target.start && box.end === target.end) {
       const oldEntryCount = b.readUInt32BE(box.content + 4);
-      if (oldEntryCount !== 1) {
-        throw new Error(
-          `Expected one stts entry, found ${oldEntryCount}`,
-        );
+      if (oldEntryCount < 1) {
+        throw new Error('stts entry cannot be split: table is empty');
       }
 
-      const count = b.readUInt32BE(box.content + 8);
-      const duration = b.readUInt32BE(box.content + 12);
-
-      if (count < 2 || duration < 2) {
-        throw new Error('stts entry cannot be split.');
+      const entries = [];
+      let at = box.content + 8;
+      for (let i = 0; i < oldEntryCount; i++) {
+        entries.push({ count: b.readUInt32BE(at), duration: b.readUInt32BE(at + 4) });
+        at += 8;
       }
 
-      const content = Buffer.alloc(24);
+      const last = entries[entries.length - 1];
+      if (last.count > 1) {
+        last.count -= 1;
+        entries.push({ count: 1, duration: Math.floor(last.duration / 2) });
+      } else {
+        const d = last.duration;
+        last.duration = Math.ceil(d / 2);
+        entries.push({ count: 1, duration: Math.floor(d / 2) });
+      }
+
+      const newEntryCount = entries.length;
+      const content = Buffer.alloc(8 + newEntryCount * 8);
       b.copy(content, 0, box.content, box.content + 4);
-      content.writeUInt32BE(2, 4);
-      content.writeUInt32BE(count - 1, 8);
-      content.writeUInt32BE(duration, 12);
-      content.writeUInt32BE(1, 16);
-      content.writeUInt32BE(Math.floor(duration / 2), 20);
+      content.writeUInt32BE(newEntryCount, 4);
+      let outAt = 8;
+      for (const e of entries) {
+        content.writeUInt32BE(e.count, outAt);
+        content.writeUInt32BE(e.duration, outAt + 4);
+        outAt += 8;
+      }
 
       parts.push(makeBox(b, 'stts', content));
       return;

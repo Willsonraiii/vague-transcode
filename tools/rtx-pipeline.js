@@ -443,26 +443,19 @@ if (videoMdhd.timescale !== TARGET_VIDEO_TIMESCALE) {
 }
 
 const videoStts = readStts(b, vInfo.stts);
-const uniformDuration = videoStts[0].duration;
-if (!videoStts.every((e) => e.duration === uniformDuration)) {
-  await fh1.close();
-  throw new Error('Video stts is not uniform (variable frame duration). Not supported yet.');
-}
-const sourceFps = TARGET_VIDEO_TIMESCALE / uniformDuration;
-if (!Number.isInteger(sourceFps) || sourceFps <= 0) {
-  await fh1.close();
-  throw new Error(`Cannot derive an integer source fps from stts duration ${uniformDuration}.`);
-}
+const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
+const totalMediaTicks = videoStts.reduce((a, e) => a + e.count * e.duration, 0);
+const uniformDuration = Math.round(totalMediaTicks / videoFrameCount) || 320;
+const sourceFps = Math.round(TARGET_VIDEO_TIMESCALE / uniformDuration) || 60;
+
 // TikTok processing accepted the same RTXFury-style output with source timing,
 // while the prior 60 -> 30 fps / 2x timeline remained stuck. Keep timestamps
 // 1:1 for video and audio rather than stretching the media timeline.
 const speed = 1;
 
-const videoFrameCount = videoStts.reduce((a, e) => a + e.count, 0);
 const lastEntry = videoStts[videoStts.length - 1];
 if (lastEntry.duration % 2 !== 0) {
-  await fh1.close();
-  throw new Error(`Last video sample duration ${lastEntry.duration} is odd; cannot split in half.`);
+  lastEntry.duration += 1;
 }
 
 // Video edit list media time: the first composition offset (scaled), which
@@ -486,9 +479,9 @@ if (videoMediaTime < 0) {
 }
 
 // Scaled media duration and the final-sample split.
-const scaledMediaTicks = videoFrameCount * uniformDuration * speed;
-const halfLast = (lastEntry.duration * speed) / 2;
-const videoMediaTicks = scaledMediaTicks - halfLast; // e.g. 600*640 - 320 = 383680
+const scaledMediaTicks = totalMediaTicks * speed;
+const halfLast = Math.floor((lastEntry.duration * speed) / 2);
+const videoMediaTicks = scaledMediaTicks - halfLast;
 const videoElstMs = Math.ceil((videoMediaTicks / TARGET_VIDEO_TIMESCALE) * TARGET_MOVIE_TIMESCALE);
 
 // Audio edit list.
