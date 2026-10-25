@@ -38,9 +38,9 @@ function SafeMetalFx({ children, ...props }) {
 }
 
 const MAX_BYTES = 600 * 1024 * 1024;
-// Adaptive dynamic chunking: 8 MB start for rapid throughput, scaling up to 32 MB for maximum WAN saturation
-const MIN_CHUNK = 8 * 1024 * 1024;
-const MAX_CHUNK = 32 * 1024 * 1024;
+// Adaptive dynamic chunking: 2 MB start ensures fast ACK and eliminates timeouts on mobile WAN, scaling to 8 MB on fast Wi-Fi
+const MIN_CHUNK = 2 * 1024 * 1024;
+const MAX_CHUNK = 8 * 1024 * 1024;
 const CHUNK_TIMEOUT_MS = 120 * 1000;  // 120s timeout per slice
 const CHUNK_RETRIES = 5;              // per chunk, with fresh sync between tries
 

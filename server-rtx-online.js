@@ -1060,7 +1060,7 @@ app.get('/api/jobs/:id/download', async (req, res) => {
 
   // High-performance headers for Cloudflare CDN edge, Safari, and parallel download managers
   res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable Cloudflare / Nginx proxy buffering
+  res.setHeader('X-Accel-Buffering', 'yes'); // Enable Cloudflare / Nginx proxy buffering for high throughput
   res.setHeader('Content-Type', 'video/mp4');
   res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"; filename*=UTF-8''${encodedName}`);
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
@@ -1087,20 +1087,20 @@ app.get('/api/jobs/:id/download', async (req, res) => {
     // Flush headers immediately so edge proxies and clients start receiving data without waiting
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
-    // High throughput 2 MB buffer stream from NVMe storage
-    const stream = createReadStream(job.outputPath, { start, end, highWaterMark: 2 * 1024 * 1024 });
+    // High throughput 1 MB buffer stream from container storage
+    const stream = createReadStream(job.outputPath, { start, end, highWaterMark: 1024 * 1024 });
     stream.pipe(res);
     stream.on('error', (err) => {
       if (!res.headersSent) res.status(500).end();
     });
   } else {
-    // Full streaming with 2 MB chunk buffer to maximize pipe saturation
+    // Full streaming with 1 MB chunk buffer to maximize pipe saturation
     res.setHeader('Content-Length', statInfo.size);
 
     // Flush headers immediately
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
-    const stream = createReadStream(job.outputPath, { highWaterMark: 2 * 1024 * 1024 });
+    const stream = createReadStream(job.outputPath, { highWaterMark: 1024 * 1024 });
     stream.pipe(res);
     stream.on('error', (err) => {
       if (!res.headersSent) res.status(500).end();
