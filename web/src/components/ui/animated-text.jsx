@@ -15,13 +15,10 @@ export function AnimatedText({
   className = "",
   color,
   letterSpacing,
-  fontFamily,
 }) {
   const containerRef = useRef(null);
   const chars = String(text).split("");
   const numLetters = chars.length;
-
-  const resolvedFontFamily = fontFamily || "'Clash Display', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif";
 
   // Generate unique keyframe name per weight range to avoid collisions across multiple instances
   const animKey = `breath_${Math.round(minWeight)}_${Math.round(maxWeight)}`;
@@ -53,10 +50,9 @@ export function AnimatedText({
           animation: `${animKey} ${animationDuration}s alternate cubic-bezier(0.37, 0, 0.63, 1) infinite`,
           animationDelay: `${initialDelay}s`,
           animationFillMode: "both",
-          fontWeight: minWeight,
           fontVariationSettings: `"wght" ${minWeight}`,
           lineHeight: 1,
-          willChange: "font-variation-settings, font-weight, opacity",
+          willChange: "font-variation-settings",
           background: "transparent",
         }}
       >
@@ -81,11 +77,11 @@ export function AnimatedText({
       <p
         ref={containerRef}
         aria-label={text}
-        className="m-0"
+        className="font-sans m-0"
         style={{
           fontSize: typeof fontSize === "number" ? `${fontSize}px` : fontSize,
           fontFeatureSettings: '"wght"',
-          fontFamily: resolvedFontFamily,
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif",
           lineHeight: 0.95,
           color: color || "currentColor",
           WebkitTextFillColor: color || "currentColor",
@@ -103,14 +99,10 @@ export function AnimatedText({
         <style>{`
           @keyframes ${animKey} {
             0% {
-              font-weight: ${minWeight};
               font-variation-settings: "wght" ${minWeight};
-              opacity: 0.85;
             }
             100% {
-              font-weight: ${maxWeight};
               font-variation-settings: "wght" ${maxWeight};
-              opacity: 1;
             }
           }
         `}</style>

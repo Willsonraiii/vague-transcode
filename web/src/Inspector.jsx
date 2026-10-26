@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import {
   CheckIcon, CloseIcon, InspectIcon, UploadIcon, FilmIcon,
-  SearchIcon, AlertTriangleIcon, LightningIcon
+  SearchIcon, SparkIcon, AlertTriangleIcon, LightningIcon
 } from './icons.jsx';
 
 const MAX_BYTES = 600 * 1024 * 1024;
@@ -33,7 +33,6 @@ function parseProbe(probe, linkUser, page) {
   const size = (page?.size && page.size > Number(f.size || 0)) ? page.size : Number(f.size || 0);
   const dur = f.duration || v?.duration || page?.duration;
   const bitRate = f.bit_rate || page?.bitrate;
-  const mbps = bitRate ? (Number(bitRate) / 1e6).toFixed(1) : (dur > 0 && size > 0 ? ((size * 8) / (dur * 1e6)).toFixed(1) : null);
 
   const tiles = [
     ['Creator', user || '—'],
@@ -45,7 +44,7 @@ function parseProbe(probe, linkUser, page) {
     ['Audio Tracks', audio.length ? `${audio.length} track${audio.length > 1 ? 's' : ''} (${audio[0].codec_name})` : 'None'],
     ['Duration', fmtDur(dur)],
     ['File Size', size ? fmtBytes(size) : '—'],
-    ['Bitrate', mbps ? `${mbps} Mbps (Rec: 20–35 Mbps)` : fmtRate(bitRate)],
+    ['Bitrate', fmtRate(bitRate)],
     ['Timescale Clock', ts ? `${ts} Hz` : '—'],
     ['Container', (f.format_name || '—').split(',')[0]]
   ];
@@ -80,7 +79,7 @@ function pageReport(page, user) {
     ['Creator', user || '—'],
     ['Resolution', page.width && page.height ? `${page.width} × ${page.height}` : '—'],
     ['Duration', fmtDur(page.duration)],
-    ['Bitrate', page.bitrate ? `${(Number(page.bitrate) / 1e6).toFixed(1)} Mbps (Rec: 20–35 Mbps)` : fmtRate(page.bitrate)],
+    ['Bitrate', fmtRate(page.bitrate)],
     ['Container Ratio', page.ratio || '—'],
     ['Plays', fmtCount(page.stats?.plays)],
     ['Likes', fmtCount(page.stats?.likes)],
@@ -196,31 +195,15 @@ export default function Inspector({ apiKey }) {
   const updateInspPill = useCallback(() => {
     if (!inspTabsRef.current) return;
     const activeBtn = inspTabsRef.current.querySelector(`.insp-tab[data-insp-tab="${tab}"]`);
-    if (activeBtn && activeBtn.offsetWidth > 0) {
+    if (activeBtn) {
       setInspPill({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth, ready: true });
     }
   }, [tab]);
 
   useEffect(() => {
     updateInspPill();
-
-    let ro;
-    if (typeof ResizeObserver !== 'undefined' && inspTabsRef.current) {
-      ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          if (entry.contentRect.width > 0) {
-            updateInspPill();
-          }
-        }
-      });
-      ro.observe(inspTabsRef.current);
-    }
-
     window.addEventListener('resize', updateInspPill);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', updateInspPill);
-    };
+    return () => window.removeEventListener('resize', updateInspPill);
   }, [updateInspPill]);
 
   // Strict 1-step per swipe for Inspector tabs
@@ -307,7 +290,7 @@ export default function Inspector({ apiKey }) {
   return (
     <div className="insp">
       <div
-        className={`insp-tabs ${inspPill.ready && inspPill.width > 0 ? 'has-slider' : 'no-slider'}`}
+        className="insp-tabs"
         ref={inspTabsRef}
         role="tablist"
         onTouchStart={onInspTouchStart}
@@ -315,7 +298,7 @@ export default function Inspector({ apiKey }) {
         onTouchEnd={onInspTouchEnd}
       >
         {/* Animated Clear Glass Sliding Pill */}
-        {inspPill.ready && inspPill.width > 0 && (
+        {inspPill.ready && (
           <div
             className="insp-tab-pill-slider"
             style={{
@@ -388,7 +371,7 @@ export default function Inspector({ apiKey }) {
           </div>
           <div className="dropzone-text">
             <h2 className="dropzone-title">Inspect Video File</h2>
-            <p className="dropzone-sub">Analyze 4K resolution, 60fps/120fps cadence, and HDR color profile.</p>
+            <p className="dropzone-sub">Analyze container atoms, framerate, and color profile.</p>
           </div>
           {phase === 'sending' ? (
             <div className="insp-analyzing">
@@ -464,7 +447,7 @@ export default function Inspector({ apiKey }) {
           )}
 
           <p className="insp-note">
-            Read-only diagnostics. Original video pixels and audio remain completely untouched.
+            🔒 Read-only diagnostics. Original video pixels and audio remain completely untouched.
           </p>
         </div>
       )}

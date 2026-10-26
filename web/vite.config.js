@@ -10,10 +10,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // emptyOutDir disabled so large local media (portfolio .mp4 clips) survives rebuilds.
-  build: { outDir: '../public', emptyOutDir: false },
-  server: {
-    allowedHosts: ['willson-inspiron-15-3552.tail5e494c.ts.net', '.ts.net', 'localhost'],
-    proxy: { '/api': 'http://localhost:3005', '/health': 'http://localhost:3005' }
-  }
+  build: { outDir: '../public', emptyOutDir: true },
+  server: { proxy: { '/api': 'http://localhost:3005', '/health': 'http://localhost:3005' } }
 });
