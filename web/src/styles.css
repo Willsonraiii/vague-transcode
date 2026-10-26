@@ -1820,6 +1820,17 @@ h1, h2, h3, h4, h5, h6,
   font-weight: 500;
 }
 
+.mode-toggle-group.no-slider .mode-toggle-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.08);
+}
+
 .mode-toggle-btn:hover:not(.active) {
   color: rgba(255, 255, 255, 0.9);
 }
@@ -3300,6 +3311,14 @@ h1, h2, h3, h4, h5, h6,
 
 .insp-tab.active {
   color: #fff;
+}
+
+.insp-tabs.no-slider .insp-tab.active {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.10) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.6);
 }
 
 .insp-user {

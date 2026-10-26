@@ -253,6 +253,7 @@ export default function PortfolioView({
                   userTier={userTier}
                   onSwitchTab={onSwitchTab}
                   onSwitchToGuide={() => onSwitchTab?.('guide')}
+                  isVisible={activeTab === 'optimizer'}
                 />
               </div>
             )}

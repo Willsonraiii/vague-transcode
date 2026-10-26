@@ -196,15 +196,31 @@ export default function Inspector({ apiKey }) {
   const updateInspPill = useCallback(() => {
     if (!inspTabsRef.current) return;
     const activeBtn = inspTabsRef.current.querySelector(`.insp-tab[data-insp-tab="${tab}"]`);
-    if (activeBtn) {
+    if (activeBtn && activeBtn.offsetWidth > 0) {
       setInspPill({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth, ready: true });
     }
   }, [tab]);
 
   useEffect(() => {
     updateInspPill();
+
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && inspTabsRef.current) {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            updateInspPill();
+          }
+        }
+      });
+      ro.observe(inspTabsRef.current);
+    }
+
     window.addEventListener('resize', updateInspPill);
-    return () => window.removeEventListener('resize', updateInspPill);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', updateInspPill);
+    };
   }, [updateInspPill]);
 
   // Strict 1-step per swipe for Inspector tabs
@@ -291,7 +307,7 @@ export default function Inspector({ apiKey }) {
   return (
     <div className="insp">
       <div
-        className="insp-tabs"
+        className={`insp-tabs ${inspPill.ready && inspPill.width > 0 ? 'has-slider' : 'no-slider'}`}
         ref={inspTabsRef}
         role="tablist"
         onTouchStart={onInspTouchStart}
@@ -299,7 +315,7 @@ export default function Inspector({ apiKey }) {
         onTouchEnd={onInspTouchEnd}
       >
         {/* Animated Clear Glass Sliding Pill */}
-        {inspPill.ready && (
+        {inspPill.ready && inspPill.width > 0 && (
           <div
             className="insp-tab-pill-slider"
             style={{

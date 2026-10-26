@@ -211,23 +211,51 @@ const readMap = () => { try { return JSON.parse(lsGet('obitoUploads') || '{}'); 
 const writeMap = (m) => lsSet('obitoUploads', JSON.stringify(m));
 
 /* ---------- Sculpted Ultra-Premium Mode Toggle ---------- */
-function ModeSelect({ value, onChange }) {
+function ModeSelect({ value, onChange, isVisible = true }) {
   const modeGroupRef = useRef(null);
   const [modePill, setModePill] = useState({ left: 0, width: 0, ready: false });
 
   const updateModePill = useCallback(() => {
     if (!modeGroupRef.current) return;
     const activeBtn = modeGroupRef.current.querySelector(`.mode-toggle-btn[data-mode-id="${value}"]`);
-    if (activeBtn) {
+    if (activeBtn && activeBtn.offsetWidth > 0) {
       setModePill({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth, ready: true });
     }
   }, [value]);
 
   useEffect(() => {
     updateModePill();
+
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && modeGroupRef.current) {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            updateModePill();
+          }
+        }
+      });
+      ro.observe(modeGroupRef.current);
+    }
+
     window.addEventListener('resize', updateModePill);
-    return () => window.removeEventListener('resize', updateModePill);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', updateModePill);
+    };
   }, [updateModePill]);
+
+  useEffect(() => {
+    if (isVisible) {
+      updateModePill();
+      const raf = requestAnimationFrame(updateModePill);
+      const timer = setTimeout(updateModePill, 60);
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+      };
+    }
+  }, [isVisible, updateModePill]);
 
   const touchRef = useRef({ startX: 0, startY: 0, startTime: 0, hasSwiped: false, initialMode: 'hdr' });
   const suppressClickRef = useRef(false);
@@ -236,6 +264,12 @@ function ModeSelect({ value, onChange }) {
     if (newMode !== value) {
       if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(10); } catch {}
       onChange(newMode);
+      if (modeGroupRef.current) {
+        const targetBtn = modeGroupRef.current.querySelector(`.mode-toggle-btn[data-mode-id="${newMode}"]`);
+        if (targetBtn && targetBtn.offsetWidth > 0) {
+          setModePill({ left: targetBtn.offsetLeft, width: targetBtn.offsetWidth, ready: true });
+        }
+      }
     }
   }, [value, onChange]);
 
@@ -313,7 +347,7 @@ function ModeSelect({ value, onChange }) {
   return (
     <div className="mode-toggle-wrap">
       <div
-        className="mode-toggle-group"
+        className={`mode-toggle-group ${modePill.ready && modePill.width > 0 ? 'has-slider' : 'no-slider'}`}
         ref={modeGroupRef}
         role="radiogroup"
         aria-label="Optimization mode"
@@ -322,7 +356,7 @@ function ModeSelect({ value, onChange }) {
         onTouchEnd={onModeTouchEnd}
       >
         {/* Animated Clear Glass Sliding Pill */}
-        {modePill.ready && (
+        {modePill.ready && modePill.width > 0 && (
           <div
             className="mode-toggle-pill-slider"
             style={{
@@ -366,7 +400,7 @@ function ModeSelect({ value, onChange }) {
 }
 
 /* ---------- Main Studio Optimizer Component ---------- */
-export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Guest', userTier = 'free', onSwitchTab, onSwitchToGuide }) {
+export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Guest', userTier = 'free', onSwitchTab, onSwitchToGuide, isVisible = true }) {
   const [phase, setPhase] = useState('idle'); // idle | upload | paused | queued | process | done | error | confirm
   const [mode, setMode] = useState('hdr');
   const [pct, setPct] = useState(0);
@@ -1098,7 +1132,7 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Gue
               </div>
             )}
 
-            <ModeSelect value={mode} onChange={setMode} />
+            <ModeSelect value={mode} onChange={setMode} isVisible={isVisible} />
 
             <div className="choose-btn-wrap my-3">
               <label htmlFor="video-file-input" className="choose-file-label liquid-glass-chip rounded-full px-6 py-2.5 sm:px-7 sm:py-3 font-clash inframe-title text-xs sm:text-[13px] font-medium text-white inline-flex items-center justify-center gap-2 hover:border-white/40 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer tracking-normal">
