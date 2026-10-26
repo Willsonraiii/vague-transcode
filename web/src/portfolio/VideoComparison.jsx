@@ -100,22 +100,50 @@ export const VideoComparison = () => {
     return () => clearInterval(t);
   }, [demoActive]);
 
-  // Soft frame alignment — correct only true drift (never chase normal ±80ms jitter,
-  // which caused constant micro-seeks and the zigzag stutter on the low clip).
+  // Master clock frame-lock synchronization — lo strictly tracks hi frame-for-frame
   useEffect(() => {
-    let lastSync = 0;
-    const t = setInterval(() => {
-      const hi = demoHighVideoRef.current;
-      const lo = demoLowVideoRef.current;
-      if (!hi || !lo || hi.paused || lo.paused) return;
-      const now = performance.now();
-      if (Math.abs(hi.currentTime - lo.currentTime) > 0.4 && now - lastSync > 2000) {
-        lo.currentTime = hi.currentTime;
-        lastSync = now;
+    const hi = demoHighVideoRef.current;
+    const lo = demoLowVideoRef.current;
+    if (!hi || !lo) return;
+
+    let rafId;
+    let lastSnap = 0;
+    const checkSync = () => {
+      if (hi && lo && !hi.paused && !lo.paused) {
+        const diff = Math.abs(hi.currentTime - lo.currentTime);
+        const now = performance.now();
+        if (diff > 0.08 && now - lastSnap > 300) {
+          lo.currentTime = hi.currentTime;
+          lastSnap = now;
+        }
       }
-    }, 500);
-    return () => clearInterval(t);
-  }, []);
+      rafId = requestAnimationFrame(checkSync);
+    };
+    rafId = requestAnimationFrame(checkSync);
+
+    const onHiSeek = () => {
+      if (lo) lo.currentTime = hi.currentTime;
+    };
+    const onHiPlay = () => {
+      if (lo && lo.paused) lo.play().catch(() => {});
+    };
+    const onHiPause = () => {
+      if (lo && !lo.paused) lo.pause();
+    };
+
+    hi.addEventListener('seeking', onHiSeek);
+    hi.addEventListener('seeked', onHiSeek);
+    hi.addEventListener('play', onHiPlay);
+    hi.addEventListener('pause', onHiPause);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      hi.removeEventListener('seeking', onHiSeek);
+      hi.removeEventListener('seeked', onHiSeek);
+      hi.removeEventListener('play', onHiPlay);
+      hi.removeEventListener('pause', onHiPause);
+    };
+  }, [demoActive]);
 
   const applySlider = useCallback((clientX) => {
     if (!containerRef.current) return;
