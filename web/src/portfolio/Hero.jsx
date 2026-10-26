@@ -408,7 +408,7 @@ export const Hero = ({
   return (
     <section
       id="home"
-      className="relative flex min-h-[100svh] w-full flex-col items-center justify-start overflow-hidden pt-24 pb-12 sm:pt-28 sm:pb-16 md:pt-32 md:pb-20"
+      className="relative flex h-[100svh] min-h-[580px] w-full flex-col items-center justify-center overflow-hidden pt-20 pb-12 sm:pt-24 sm:pb-16 md:pt-32 md:pb-20"
     >
       {/* Background Ambient Video Layer */}
       <div className="absolute inset-0 overflow-hidden">
