@@ -77,7 +77,7 @@ The user strongly dislikes and forbids generic AI-style visuals:
 * **NO sparkle emojis** (`✨`) anywhere in the application.
 * **NO purple-to-blue or rainbow gradient text** (e.g., gradient headers or vibe-coded accents).
 * **NO tacky badge pills** (e.g., "CREATOR MASTERCLASS" or "MAGIC AI").
-* **Aesthetic Standard**: Strictly clean, professional audio/video studio hardware feel (inspired by Apple hardware, DaVinci Resolve, and high-end cinema tools). High-contrast solid white `#ffffff` headings, frosted glassmorphism, subtle sapphire/slate accents.
+* **Aesthetic Standard**: Strictly clean, professional audio/video studio hardware feel (inspired by Apple hardware, DaVinci Resolve, and high-end cinema tools). High-contrast solid white `#ffffff` headings, subtle sapphire/slate accents.\n* **Liquid-Glass Mandate**: ALL UI work must follow **iOS 26 liquid-glass glassmorphism** — translucent frosted surfaces (`backdrop-blur` + saturation), hairline `rgba(255,255,255,0.15–0.3)` borders, inset specular highlights, rounded geometry and soft depth. No flat opaque cards, no cheap badge pills. When in doubt, reuse the `.liquid-glass-nav` / `.liquid-glass-frame` / `.liquid-glass-chip` material classes in `web/src/styles.css`.
 
 ### B. Lossless Container Manipulation Only
 * **Do NOT re-encode video frames** unless the user explicitly checks the legacy H.264 re-encode fallback.

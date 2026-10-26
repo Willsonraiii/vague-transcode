@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, CheckIcon, PremiumKeyIcon, SparkIcon } from './icons';
+import { CloseIcon, CheckIcon, PremiumKeyIcon, KeyIcon } from './icons';
 
 export default function AdminPassesModal({ apiKey, onClose }) {
   const [activeTab, setActiveTab] = useState('referrals'); // 'referrals' | 'clients'
@@ -215,7 +215,7 @@ export default function AdminPassesModal({ apiKey, onClose }) {
             {/* Create Referral Section */}
             <form className="admin-create-card" onSubmit={handleCreateReferral}>
               <h3 className="admin-card-heading">
-                <SparkIcon width={14} height={14} /> Create New Referral Code
+                <KeyIcon width={14} height={14} /> Create New Referral Code
               </h3>
               <div className="admin-form-grid">
                 <div className="admin-input-group">
@@ -264,7 +264,7 @@ export default function AdminPassesModal({ apiKey, onClose }) {
               <div className="admin-section-sub-row">
                 <h4 className="admin-section-sub">Active Referral Codes</h4>
                 <span className="admin-section-caption">
-                  Click 👥 Users on any code to monitor who redeemed it
+                  Click Users on any code to monitor who redeemed it
                 </span>
               </div>
               {loading ? (
@@ -306,7 +306,7 @@ export default function AdminPassesModal({ apiKey, onClose }) {
                               onClick={() => setExpandedRefCode(isExpanded ? null : ref.code)}
                               title="Monitor users who redeemed this code"
                             >
-                              👥 {redeemedClients.length} {redeemedClients.length === 1 ? 'user' : 'users'} {isExpanded ? '▲' : '▼'}
+                              {redeemedClients.length} {redeemedClients.length === 1 ? 'user' : 'users'} {isExpanded ? '▲' : '▼'}
                             </button>
                             <button
                               type="button"
@@ -414,7 +414,7 @@ export default function AdminPassesModal({ apiKey, onClose }) {
             {/* Manually Create Client Pass */}
             <form className="admin-create-card" onSubmit={handleCreateClient}>
               <h3 className="admin-card-heading">
-                <SparkIcon width={14} height={14} /> Manually Create Client Pass
+                <KeyIcon width={14} height={14} /> Manually Create Client Pass
               </h3>
               <div className="admin-form-grid">
                 <div className="admin-input-group">

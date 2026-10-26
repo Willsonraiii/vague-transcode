@@ -56,9 +56,6 @@ export const PlayIcon = (p) => (
 export const WifiIcon = (p) => (
   <svg {...base} {...p}><path d="M2.5 9.5a14 14 0 0 1 19 0M5.5 13a9.6 9.6 0 0 1 13 0M8.6 16.4a5.2 5.2 0 0 1 6.8 0" /><circle cx="12" cy="19.6" r="1" fill="currentColor" /></svg>
 );
-export const SparkIcon = (p) => (
-  <svg {...base} {...p}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
-);
 export const LayersIcon = (p) => (
   <svg {...base} {...p}><path d="m12 3 9 5-9 5-9-5z" /><path d="m3 13 9 5 9-5" /></svg>
 );
@@ -155,6 +152,16 @@ export const DashboardIcon = (p) => (
 export const ActivityIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);
+
+export const InfoIcon = (p) => (
+  <svg {...base} {...p}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+);
+
+export const TikTokIcon = (p) => (
+  <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...p}>
+    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.41a6.33 6.33 0 0 0-.85-.06A6.34 6.34 0 0 0 3.1 15.69a6.34 6.34 0 0 0 9.27 5.58 6.3 6.3 0 0 0 3.47-5.6V8.62a8.27 8.27 0 0 0 4.75 1.51V6.69z" />
   </svg>
 );
 

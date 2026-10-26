@@ -20,7 +20,7 @@ Current focus (2026-10-17): a TikTok optimizer timing fix was validated by the u
 1. **Lossless only.** Container surgery (`-c copy`), 19200 timescale harmonization, color transfer atoms preserved. Never re-encode pixels unless the user explicitly asks for the H.264 fallback.
 2. **Zero cloud RAM spikes.** Remote inspection = HTTP Range probe (`bytes=0-1572863`). Never download whole videos into memory.
 3. **Secrets.** Never print, commit or paste a real `ACCESS_TOKEN`, TikTok client secret, `TIKTOK_TOKEN_KEY`, or Gist token. Environment-variable *names* only, in docs and chat.
-4. **No AI/"vibe-coded" visuals.** No sparkle emojis, no purple/blue gradient text, no badge pills. Apple / DaVinci studio look: solid white headings, frosted glass, slate/cyan accents.
+4. **No AI/"vibe-coded" visuals.** No sparkle emojis, no purple/blue gradient text, no badge pills. Apple / DaVinci studio look: solid white headings, slate/cyan accents — always built with **iOS 26 liquid-glass glassmorphism**. Every new or edited UI surface (nav, buttons, cards, frames, menus, overlays) must use translucent frosted panels (`backdrop-blur`), hairline translucent borders, inset specular highlights and soft depth — never flat opaque cards or cheap pills.
 5. **Port 3005 is production.** Never bind, test, or experiment against it. Experiments use 3006.
 6. **Decisions already made — do not reopen:** no color-grade presets; TikTok products = Login Kit + Content Posting API only; legal contact `resume@willsonrai.com.np`.
 7. **Do not touch the TikTok developer portal** (app `7696831141604771848`): products, scopes, URLs, demo video, review text. The app is **In review** — any edit re-triggers the queue.
