@@ -577,8 +577,12 @@ export async function getAdminOptimizationsBreakdown() {
     };
   }).sort((a, b) => b.optimizationsCount - a.optimizationsCount);
 
+  const realOpts = store.totalOptimizationsCount || opts.length;
   return {
-    totalOptimizations: store.totalOptimizationsCount || opts.length,
+    totalOptimizations: realOpts,
+    realOptimizations: realOpts,
+    publicTotalOptimizations: realOpts + 54,
+    baseVideosOffset: 54,
     totalBytesProcessed: store.totalBytesProcessed || 0,
     pipelineStats,
     userLeaderboard,
@@ -621,6 +625,7 @@ export async function getReviews() {
 
 /**
  * Public platform stats for telemetry section.
+ * Adds baseline offsets (13 users, 54 videos) to real counts for public display.
  */
 export async function getGlobalPlatformStats() {
   const store = await getMembersStore();
@@ -631,9 +636,16 @@ export async function getGlobalPlatformStats() {
     ? Math.round((reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / reviews.length) * 10) / 10
     : 5.0;
 
+  const BASE_USERS = 13;
+  const BASE_VIDEOS = 54;
+
   return {
-    registeredUsers: clientsCount,
-    totalOptimizations: totalOpts,
+    registeredUsers: BASE_USERS + clientsCount,
+    totalOptimizations: BASE_VIDEOS + totalOpts,
+    realRegisteredUsers: clientsCount,
+    realOptimizations: totalOpts,
+    baseUsersOffset: BASE_USERS,
+    baseVideosOffset: BASE_VIDEOS,
     totalBytesProcessed: store.totalBytesProcessed || 0,
     averageRating: avgRating,
     reviewCount: reviews.length,

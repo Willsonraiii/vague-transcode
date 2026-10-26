@@ -139,7 +139,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined' && window.location.hash) {
       const h = window.location.hash.slice(1);
-      if (['home', 'optimizer', 'compare', 'inspect', 'dashboard', 'guide', 'specs', 'faq'].includes(h)) {
+      if (['home', 'optimizer', 'compare', 'inspect', 'dashboard', 'guide', 'specs', 'faq', 'admin'].includes(h)) {
         return h;
       }
     }
@@ -149,7 +149,7 @@ export default function App() {
   useEffect(() => {
     const onHashChange = () => {
       const h = window.location.hash.slice(1);
-      if (['home', 'optimizer', 'compare', 'inspect', 'dashboard', 'guide', 'specs', 'faq'].includes(h)) {
+      if (['home', 'optimizer', 'compare', 'inspect', 'dashboard', 'guide', 'specs', 'faq', 'admin'].includes(h)) {
         setActiveTab(h);
       }
     };
@@ -463,7 +463,7 @@ export default function App() {
         userTier={ownerAuthenticated ? (userTier || 'paid') : 'free'}
         isMasterOwner={isMasterOwner}
         onOpenSignIn={() => setShowMemberModal(true)}
-        onOpenAdmin={() => setShowAdminModal(true)}
+        onOpenAdmin={() => switchTabWithHaptic('admin')}
         onOpenReview={() => setShowReviewModal(true)}
         onSignOut={() => {
           onKeyChange("", "", "free");

@@ -12,6 +12,7 @@ import Guide from '../Guide';
 import { SectionHeader, LiquidGlassDefs } from './primitives';
 import { ChevronIcon, PremiumKeyIcon } from '../icons';
 import { GlobalTelemetry } from '../components/GlobalTelemetry';
+import AdminPage from '../AdminPage';
 
 export default function PortfolioView({
   activeTab,
@@ -347,6 +348,18 @@ export default function PortfolioView({
             </div>
           </div>
         </main>
+      )}
+
+      {/* Dedicated Standalone Admin Console Page */}
+      {activeTab === 'admin' && (
+        <AdminPage
+          apiKey={apiKey}
+          onKeyChange={onKeyChange}
+          onSwitchTab={onSwitchTab}
+          isMasterOwner={isMasterOwner}
+          ownerAuthenticated={ownerAuthenticated}
+          onSignOut={onSignOut}
+        />
       )}
 
       {/* Dedicated Guide Tab */}

@@ -80,6 +80,7 @@ export const Navbar = ({
     { id: 'optimizer', label: 'Optimizer', primary: true },
     { id: 'inspect', label: 'Inspector', primary: false },
     { id: 'dashboard', label: 'Dashboard', primary: false },
+    ...(isMasterOwner ? [{ id: 'admin', label: 'Admin', primary: false }] : []),
     { id: 'guide', label: 'Guide', primary: false },
     { id: 'faq', label: 'FAQ', primary: false },
     { id: 'specs', label: 'Specs', primary: false },
@@ -311,46 +312,59 @@ export const Navbar = ({
 
         {/* Action Button: Sign In / Member Profile */}
         {memberPreview && ownerAuthenticated ? (
-          <div className="relative shrink-0 ml-0.5">
-            <button
-              ref={userBtnRef}
-              type="button"
-              onClick={() => setShowUserMenu((v) => !v)}
-              className="liquid-glass-chip flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-white sm:px-3 sm:py-1.5 sm:text-[13px] font-clash inframe-title font-medium tracking-[-0.015em]"
-            >
-              <UserIcon width={12} height={12} />
-              <span className="hidden sm:inline max-w-[80px] truncate">{currentUserName || 'Member'}</span>
-              <ChevronDownIcon width={10} height={10} />
-            </button>
+          <div className="flex items-center gap-1 shrink-0 ml-0.5">
+            {isMasterOwner && (
+              <button
+                type="button"
+                onClick={() => onSwitchTab('admin')}
+                className="liquid-glass-chip hidden sm:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-cyan-300 hover:text-white sm:px-3 sm:py-1.5 sm:text-[12.5px] font-clash inframe-title font-medium tracking-[-0.015em] border border-cyan-500/20 mr-0.5 transition-all hover:border-cyan-400/40"
+                title="Open Studio Command Center"
+              >
+                <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span>Admin</span>
+              </button>
+            )}
 
-            {showUserMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40 pointer-events-auto cursor-pointer"
-                  onClick={() => setShowUserMenu(false)}
-                  onTouchStart={() => setShowUserMenu(false)}
-                />
-                <div
-                  ref={userPanelRef}
-                  className="dropdown-panel absolute right-0 top-full mt-2 w-48 rounded-2xl p-2 z-50 text-xs pointer-events-auto"
-                >
-                  <div className="px-3 py-2 border-b border-white/10">
-                    <span className="font-clash inframe-title text-[10px] text-neutral-400 block">Signed in as</span>
-                    <strong className="text-white truncate block">{currentUserName || 'Member'}</strong>
-                  </div>
-                  {isMasterOwner && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onOpenAdmin();
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/10 rounded-lg text-white/90 hover:text-white font-clash inframe-title font-medium tracking-[-0.015em]"
-                    >
-                      <PremiumKeyIcon width={13} height={13} />
-                      <span>Passes &amp; Referrals</span>
-                    </button>
-                  )}
+            <div className="relative shrink-0">
+              <button
+                ref={userBtnRef}
+                type="button"
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="liquid-glass-chip flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-white sm:px-3 sm:py-1.5 sm:text-[13px] font-clash inframe-title font-medium tracking-[-0.015em]"
+              >
+                <UserIcon width={12} height={12} />
+                <span className="hidden sm:inline max-w-[80px] truncate">{currentUserName || 'Member'}</span>
+                <ChevronDownIcon width={10} height={10} />
+              </button>
+
+              {showUserMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 pointer-events-auto cursor-pointer"
+                    onClick={() => setShowUserMenu(false)}
+                    onTouchStart={() => setShowUserMenu(false)}
+                  />
+                  <div
+                    ref={userPanelRef}
+                    className="dropdown-panel absolute right-0 top-full mt-2 w-52 rounded-2xl p-2 z-50 text-xs pointer-events-auto shadow-2xl"
+                  >
+                    <div className="px-3 py-2 border-b border-white/10">
+                      <span className="font-clash inframe-title text-[10px] text-neutral-400 block">Signed in as</span>
+                      <strong className="text-white truncate block">{currentUserName || 'Member'}</strong>
+                    </div>
+                    {isMasterOwner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onSwitchTab('admin');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/10 rounded-lg text-white/90 hover:text-white font-clash inframe-title font-medium tracking-[-0.015em]"
+                      >
+                        <PremiumKeyIcon width={13} height={13} />
+                        <span>Admin Command Center</span>
+                      </button>
+                    )}
                   <button
                     type="button"
                     onClick={() => {
@@ -366,6 +380,7 @@ export const Navbar = ({
               </>
             )}
           </div>
+        </div>
         ) : (
           <div className="shrink-0 ml-0.5">
             <RingLink
