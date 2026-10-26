@@ -259,6 +259,21 @@ export default function WorkflowSignalPath() {
     };
   }, []);
 
+  const handleStageClick = (index) => {
+    setActive(index);
+    if (!sectionRef.current) return;
+    const section = sectionRef.current;
+    const sticky = stickyRef.current;
+    const stickyTop = parseFloat(window.getComputedStyle(sticky).top) || 0;
+    const travel = Math.max(1, section.offsetHeight - (sticky?.offsetHeight || 0));
+    const targetScrollY =
+      window.scrollY +
+      section.getBoundingClientRect().top -
+      stickyTop +
+      (index / (STAGES.length - 1)) * travel;
+    window.scrollTo({ top: targetScrollY, behavior: 'smooth' });
+  };
+
   return (
     <div
       ref={sectionRef}
@@ -281,19 +296,24 @@ export default function WorkflowSignalPath() {
           })}
         </div>
 
-        <div className="wf-cinema-rail" aria-hidden="true">
-          <div className="wf-cinema-track">
+        <div className="wf-cinema-rail">
+          <div className="wf-cinema-track" aria-hidden="true">
             <span ref={fillRef} />
           </div>
-          <div className="wf-cinema-labels">
+          <div className="wf-cinema-labels" role="tablist" aria-label="Workflow chapters">
             {STAGES.map((stage, index) => (
-              <span
+              <button
+                type="button"
                 key={stage.n}
+                onClick={() => handleStageClick(index)}
                 className={`wf-cinema-label ${index === active ? 'is-active' : ''}`}
+                role="tab"
+                aria-selected={index === active}
+                aria-label={`${stage.n} ${stage.kicker}`}
               >
                 <b>{stage.n}</b>
-                {stage.kicker}
-              </span>
+                <span>{stage.kicker}</span>
+              </button>
             ))}
           </div>
         </div>

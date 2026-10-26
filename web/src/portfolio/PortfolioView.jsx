@@ -53,7 +53,7 @@ export default function PortfolioView({
   return (
     <div
       data-slot="portfolio"
-      className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))] antialiased selection:bg-white/20 overflow-x-hidden w-full max-w-full"
+      className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))] antialiased selection:bg-white/20 [overflow-x:clip] w-full max-w-full"
     >
       <LiquidGlassDefs />
 

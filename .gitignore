@@ -8,6 +8,8 @@ tmp/
 *.m4v
 *.hevc
 *.bin
+!public/media/**
+!web/public/media/**
 library.json
 .kilo/
 members.json
