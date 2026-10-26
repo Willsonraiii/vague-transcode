@@ -76,6 +76,7 @@ export const Contact = ({ onSwitchTab }) => {
           muted
           loop
           playsInline
+          preload="none"
           aria-hidden="true"
           className="absolute top-1/2 left-1/2 size-full min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 -scale-y-100 object-cover opacity-15"
         />

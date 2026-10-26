@@ -26,10 +26,12 @@ export const VideoComparison = () => {
       el.setAttribute('playsinline', '');
       el.setAttribute('webkit-playsinline', '');
       el.setAttribute('muted', '');
-      const p = el.play();
-      if (p) p.catch(() => {});
+      if (el.readyState >= 2 && el.paused && !document.hidden) {
+        el.play().catch(() => {});
+      }
     }
   }, []);
+
   const attachLowVideo = useCallback((el) => {
     demoLowVideoRef.current = el;
     if (el) {
@@ -39,30 +41,37 @@ export const VideoComparison = () => {
       el.setAttribute('playsinline', '');
       el.setAttribute('webkit-playsinline', '');
       el.setAttribute('muted', '');
-      const p = el.play();
-      if (p) p.catch(() => {});
     }
   }, []);
 
-  // Any user gesture lifts autoplay restrictions — resume everything the moment it happens.
+  // Any user gesture lifts autoplay restrictions — ensure master starts/resumes
   useEffect(() => {
     const resume = () => {
-      [demoHighVideoRef.current, demoLowVideoRef.current].forEach((v) => {
-        if (v) {
-          v.muted = true;
-          if (v.paused && v.readyState >= 1) v.play().catch(() => {});
-        }
-      });
+      const hi = demoHighVideoRef.current;
+      const lo = demoLowVideoRef.current;
+      if (hi && hi.paused && hi.readyState >= 1) {
+        hi.muted = true;
+        hi.play().then(() => {
+          if (lo) {
+            lo.muted = true;
+            lo.currentTime = hi.currentTime;
+            lo.play().catch(() => {});
+          }
+        }).catch(() => {});
+      }
     };
     document.addEventListener('touchstart', resume, { passive: true });
     document.addEventListener('pointerdown', resume, { passive: true });
     document.addEventListener('keydown', resume);
     window.addEventListener('scroll', resume, { passive: true });
+    const handleVis = () => { if (!document.hidden) resume(); };
+    document.addEventListener('visibilitychange', handleVis);
     return () => {
       document.removeEventListener('touchstart', resume);
       document.removeEventListener('pointerdown', resume);
       document.removeEventListener('keydown', resume);
       window.removeEventListener('scroll', resume);
+      document.removeEventListener('visibilitychange', handleVis);
     };
   }, []);
 
@@ -74,74 +83,127 @@ export const VideoComparison = () => {
   const DEMO_LOW_URL = '/media/portfolio/compare-tiktok-30fps.mp4';
   const demoActive = !demoBroken;
 
-  // Always autoplay from mount — never gated on scroll position.
-  useEffect(() => {
-    [demoHighVideoRef.current, demoLowVideoRef.current].forEach((v) => {
-      if (!v) return;
-      v.muted = true;
-      const p = v.play();
-      if (p) p.catch(() => {});
-    });
-  }, [demoActive, demoBroken]);
-
-  // Relentless keep-alive — a browser-initiated pause or a decoder race gets
-  // re-asserted within a second, forever (no give-up, no visibility gating).
+  // Keep-alive: assert master video continues playing when page is active
   useEffect(() => {
     const assert = () => {
-      [demoHighVideoRef.current, demoLowVideoRef.current].forEach((v) => {
-        if (!v) return;
-        if (v.paused) {
-          v.muted = true;
-          v.play().catch(() => {});
-        }
-      });
+      if (document.hidden) return;
+      const hi = demoHighVideoRef.current;
+      if (hi && hi.paused && hi.readyState >= 2) {
+        hi.muted = true;
+        hi.play().catch(() => {});
+      }
     };
-    const t = setInterval(assert, 1000);
+    const t = setInterval(assert, 1200);
     return () => clearInterval(t);
   }, [demoActive]);
 
-  // Master clock frame-lock synchronization — lo strictly tracks hi frame-for-frame
+  // Master clock lockstep synchronization:
+  // - High video is the master clock (60fps).
+  // - Low video strictly mirrors High video playback state and time.
+  // - Minor drift (0.02s - 0.25s) is compensated via smooth lo.playbackRate nudges (no decoder stalls).
+  // - Large drift (> 0.25s, loop wrap, or user seek) snaps lo.currentTime.
   useEffect(() => {
     const hi = demoHighVideoRef.current;
     const lo = demoLowVideoRef.current;
     if (!hi || !lo) return;
 
-    let rafId;
-    let lastSnap = 0;
-    const checkSync = () => {
+    let rafId = 0;
+
+    const syncFrames = () => {
       if (hi && lo && !hi.paused && !lo.paused) {
-        const diff = Math.abs(hi.currentTime - lo.currentTime);
-        const now = performance.now();
-        if (diff > 0.08 && now - lastSnap > 300) {
+        const diff = hi.currentTime - lo.currentTime;
+        // Minor drift: smoothly adjust follower playbackRate to avoid seeking micro-stutters
+        if (Math.abs(diff) <= 0.02) {
+          if (lo.playbackRate !== 1.0) lo.playbackRate = 1.0;
+        } else if (diff > 0.02 && diff <= 0.25) {
+          // lo is slightly behind -> gently accelerate lo
+          lo.playbackRate = 1.08;
+        } else if (diff < -0.02 && diff >= -0.25) {
+          // lo is slightly ahead -> gently decelerate lo
+          lo.playbackRate = 0.92;
+        } else {
+          // Significant drift (>250ms), seeking, or loop wrap -> hard snap
           lo.currentTime = hi.currentTime;
-          lastSnap = now;
+          lo.playbackRate = 1.0;
         }
       }
-      rafId = requestAnimationFrame(checkSync);
+      rafId = requestAnimationFrame(syncFrames);
     };
-    rafId = requestAnimationFrame(checkSync);
+    rafId = requestAnimationFrame(syncFrames);
 
-    const onHiSeek = () => {
-      if (lo) lo.currentTime = hi.currentTime;
-    };
     const onHiPlay = () => {
-      if (lo && lo.paused) lo.play().catch(() => {});
-    };
-    const onHiPause = () => {
-      if (lo && !lo.paused) lo.pause();
+      if (lo) {
+        if (Math.abs(hi.currentTime - lo.currentTime) > 0.2) {
+          lo.currentTime = hi.currentTime;
+        }
+        lo.play().catch(() => {});
+      }
     };
 
-    hi.addEventListener('seeking', onHiSeek);
-    hi.addEventListener('seeked', onHiSeek);
+    const onHiPause = () => {
+      if (lo && !lo.paused) {
+        lo.pause();
+      }
+    };
+
+    const onHiWaiting = () => {
+      // Master is buffering/waiting -> follower pauses to remain frame-locked
+      if (lo && !lo.paused) {
+        lo.pause();
+      }
+    };
+
+    const onHiPlaying = () => {
+      if (lo) {
+        if (Math.abs(hi.currentTime - lo.currentTime) > 0.15) {
+          lo.currentTime = hi.currentTime;
+        }
+        if (lo.paused) {
+          lo.play().catch(() => {});
+        }
+      }
+    };
+
+    const onHiSeeked = () => {
+      if (lo) {
+        lo.currentTime = hi.currentTime;
+        lo.playbackRate = 1.0;
+      }
+    };
+
+    const onHiCanPlay = () => {
+      if (hi.paused && !document.hidden) {
+        hi.play().then(() => {
+          if (lo && lo.paused) lo.play().catch(() => {});
+        }).catch(() => {});
+      }
+    };
+
     hi.addEventListener('play', onHiPlay);
     hi.addEventListener('pause', onHiPause);
+    hi.addEventListener('waiting', onHiWaiting);
+    hi.addEventListener('playing', onHiPlaying);
+    hi.addEventListener('seeking', onHiSeeked);
+    hi.addEventListener('seeked', onHiSeeked);
+    hi.addEventListener('canplay', onHiCanPlay);
+
+    // Initial check: if hi is already playing or ready
+    if (!hi.paused && lo.paused) {
+      lo.currentTime = hi.currentTime;
+      lo.play().catch(() => {});
+    } else if (hi.readyState >= 2 && hi.paused && !document.hidden) {
+      hi.play().catch(() => {});
+    }
 
     return () => {
       cancelAnimationFrame(rafId);
-      hi.removeEventListener('seeking', onHiSeek);
-      hi.removeEventListener('seeked', onHiSeek);
       hi.removeEventListener('play', onHiPlay);
       hi.removeEventListener('pause', onHiPause);
+      hi.removeEventListener('waiting', onHiWaiting);
+      hi.removeEventListener('playing', onHiPlaying);
+      hi.removeEventListener('seeking', onHiSeeked);
+      hi.removeEventListener('seeked', onHiSeeked);
+      hi.removeEventListener('canplay', onHiCanPlay);
     };
   }, [demoActive]);
 
@@ -385,14 +447,19 @@ export const VideoComparison = () => {
                 <video
                   ref={attachHighVideo}
                   src={DEMO_HIGH_URL}
-                  autoPlay loop muted playsInline preload="auto"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  preload="auto"
                   className="size-full object-cover"
                   onError={() => setDemoBroken(true)}
-                  onLoadedMetadata={() => { const v = demoHighVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
-                  onLoadedData={() => { const v = demoHighVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
-                  onCanPlay={() => { const v = demoHighVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
-                  onStalled={() => { const v = demoHighVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
-                  onPause={() => { const v = demoHighVideoRef.current; if (v && !document.hidden) setTimeout(() => { if (v.paused) v.play().catch(() => {}); }, 120); }}
+                  onCanPlay={() => {
+                    const hi = demoHighVideoRef.current;
+                    if (hi && hi.paused && !document.hidden) {
+                      hi.play().catch(() => {});
+                    }
+                  }}
                 />
               ) : (
                 <canvas ref={canvasHighRef} width={1280} height={720} className="size-full object-cover" />
@@ -408,14 +475,13 @@ export const VideoComparison = () => {
                 <video
                   ref={attachLowVideo}
                   src={DEMO_LOW_URL}
-                  autoPlay loop muted playsInline preload="auto"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  preload="auto"
                   className="size-full object-cover"
                   onError={() => setDemoBroken(true)}
-                  onLoadedMetadata={() => { const v = demoLowVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
-                  onLoadedData={() => { const v = demoLowVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
-                  onCanPlay={() => { const v = demoLowVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
-                  onStalled={() => { const v = demoLowVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
-                  onPause={() => { const v = demoLowVideoRef.current; if (v && !document.hidden) setTimeout(() => { if (v.paused) v.play().catch(() => {}); }, 120); }}
                 />
               ) : (
                 <canvas ref={canvasLowRef} width={1280} height={720} className="size-full object-cover" />
