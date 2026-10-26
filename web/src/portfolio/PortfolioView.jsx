@@ -80,6 +80,10 @@ export default function PortfolioView({
             onSwitchTab={onSwitchTab}
             ownerAuthenticated={ownerAuthenticated}
             memberPreview={memberPreview}
+            currentUserName={currentUserName}
+            userName={userName}
+            isMasterOwner={isMasterOwner}
+            userTier={userTier}
           />
 
           {/* 2. Realtime Video Swap Comparison Section */}
@@ -119,13 +123,13 @@ export default function PortfolioView({
           </section>
 
           {/* 3. How Obito Studio Works */}
-          <section id="architecture" className="section-hirael scroll-anchor bg-[hsl(var(--bg))]">
+          <section id="architecture" className="scroll-anchor bg-[hsl(var(--bg))] pt-10 pb-12 sm:pt-16 sm:pb-20 md:pt-20 md:pb-24">
             <div className="container-hirael">
               <SectionHeader
                 lead="How Obito Studio"
                 accent="Works"
                 subtext="Container surgery, not compression. Four moves between your timeline and TikTok."
-                className="mb-8 sm:mb-12"
+                className="mb-5 sm:mb-8"
               />
 
               <WorkflowSignalPath />
@@ -144,13 +148,13 @@ export default function PortfolioView({
 
       {/* Dedicated Optimizer Pipeline Studio Page */}
       {activeTab === 'optimizer' && (
-        <main id="optimizer" className="scroll-anchor pt-20 sm:pt-24 md:pt-28 pb-10 sm:pb-14">
+        <main id="optimizer" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-10 sm:pb-14">
           <div className="container-hirael">
             <SectionHeader
               lead="Pipeline"
               accent="Studio"
               subtext="Bit-for-bit video mastering in 4K, 60fps & 120fps with native Apple HDR preservation."
-              className="mb-5 sm:mb-7"
+              className="mb-6 sm:mb-8"
             />
 
             {memberPreview && authChecking ? (
@@ -255,13 +259,13 @@ export default function PortfolioView({
 
       {/* Dedicated FAQ Page */}
       {activeTab === 'faq' && (
-        <main id="faq" className="scroll-anchor pt-28 sm:pt-32 md:pt-36 pb-20 sm:pb-28 min-h-screen">
+        <main id="faq" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-20 sm:pb-28 min-h-screen">
           <div className="container-hirael">
             <SectionHeader
               lead="Frequently Asked"
               accent="Questions"
               subtext="Quick answers about quality, privacy, and uploads."
-              className="mb-8 sm:mb-12"
+              className="mb-6 sm:mb-8"
             />
 
             <div className="space-y-3.5 max-w-3xl mx-auto text-left">
@@ -286,20 +290,20 @@ export default function PortfolioView({
 
       {/* Dedicated Compare Tab */}
       {activeTab === 'compare' && (
-        <main id="compare" className="scroll-anchor pt-28 sm:pt-32 md:pt-36 pb-20 sm:pb-28">
+        <main id="compare" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-20 sm:pb-28">
           <VideoComparison />
         </main>
       )}
 
       {/* Dedicated Inspector Tab */}
       {activeTab === 'inspect' && (
-        <main id="inspect" className="scroll-anchor pt-28 sm:pt-32 md:pt-36 pb-20 sm:pb-28">
+        <main id="inspect" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-20 sm:pb-28">
           <div className="container-hirael">
             <SectionHeader
               lead="TikTok Container"
               accent="Inspector"
               subtext="Audit 4K resolution, 60fps & 120fps fluid playback, and native HDR color profile."
-              className="mb-8 sm:mb-12"
+              className="mb-6 sm:mb-8"
             />
             <div className="w-full">
               <Inspector apiKey={apiKey} />
@@ -310,7 +314,7 @@ export default function PortfolioView({
 
       {/* Dedicated Dashboard Tab */}
       {activeTab === 'dashboard' && (
-        <main id="dashboard" className="scroll-anchor pt-20 sm:pt-24 md:pt-28 pb-12 sm:pb-16">
+        <main id="dashboard" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-12 sm:pb-16">
           <div className="container-hirael">
             <SectionHeader
               lead="Creator"
@@ -337,7 +341,7 @@ export default function PortfolioView({
 
       {/* Dedicated Guide Tab */}
       {activeTab === 'guide' && (
-        <main id="guide" className="scroll-anchor pt-20 sm:pt-24 md:pt-28 pb-14 sm:pb-20">
+        <main id="guide" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-14 sm:pb-20">
           <div className="container-hirael">
             <SectionHeader
               lead="Creator"

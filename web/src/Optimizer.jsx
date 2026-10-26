@@ -102,10 +102,13 @@ function LiveTerminal({ log = [], busy, phase, queuePos, userName = 'Guest', use
   const terminalBodyRef = useRef(null);
 
   useEffect(() => {
-    if (terminalBodyRef.current) {
-      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
-    }
-  }, [log]);
+    const el = terminalBodyRef.current;
+    if (!el) return;
+    const timer = setTimeout(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [log, phase]);
 
   // ONLY show once video actually starts working (upload, queued, process, done)
   // NEVER on gallery pick / confirm screen!
@@ -132,7 +135,7 @@ function LiveTerminal({ log = [], busy, phase, queuePos, userName = 'Guest', use
         <div className="terminal-line term-auth-line">
           <span className="term-num">SYS</span>
           <span className="term-text font-mono">
-            <span className="text-emerald-400 font-semibold">[auth]</span> User: <b className="text-white">@{cleanUser}</b> · Tier: <span className={`term-tier-badge tier-${tierKey}`}>{tierKey.toUpperCase()}</span> · Engine: <span className="text-sky-300">RTX Sovereign</span>
+            <span className="text-emerald-400 font-semibold">[auth]</span> User: <b className="text-white">@{cleanUser}</b> · Tier: <span className={`term-tier-badge tier-${tierKey}`}>{tierKey.toUpperCase()}</span> · Engine: <span className="text-sky-300">Obito Sovereign Engine</span>
           </span>
         </div>
         {phase === 'queued' && (

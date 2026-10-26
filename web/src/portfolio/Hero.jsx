@@ -387,17 +387,28 @@ export const Navbar = ({
   );
 };
 
-export const Hero = ({ onOpenSignIn, onSwitchTab, ownerAuthenticated, memberPreview }) => {
+export const Hero = ({
+  onOpenSignIn,
+  onSwitchTab,
+  ownerAuthenticated,
+  memberPreview,
+  currentUserName,
+  userName,
+  isMasterOwner,
+  userTier,
+}) => {
   const [roleIndex, setRoleIndex] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setRoleIndex((i) => (i + 1) % ROLES.length), ROLE_INTERVAL);
     return () => clearInterval(id);
   }, []);
 
+  const displayName = currentUserName || (isMasterOwner ? 'Owner' : (userName && userName !== 'Guest' ? userName : 'Member'));
+
   return (
     <section
       id="home"
-      className="relative flex h-[100svh] min-h-[580px] w-full flex-col items-center justify-center overflow-hidden pt-20 pb-12 sm:pt-24 sm:pb-16 md:pt-32 md:pb-20"
+      className="relative flex min-h-[100svh] w-full flex-col items-center justify-start overflow-hidden pt-24 pb-12 sm:pt-28 sm:pb-16 md:pt-32 md:pb-20"
     >
       {/* Background Ambient Video Layer */}
       <div className="absolute inset-0 overflow-hidden">
@@ -510,7 +521,7 @@ export const Hero = ({ onOpenSignIn, onSwitchTab, ownerAuthenticated, memberPrev
               className="font-clash inframe-title text-xs sm:text-[13px] text-white/55 hover:text-white transition-colors cursor-pointer inline-flex items-center gap-1.5 group"
             >
               <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Signed in as Member</span>
+              <span>Signed in as <strong className="text-white/90 font-medium">{displayName}</strong></span>
               <span className="text-white/80 group-hover:text-cyan-300 underline underline-offset-4 ml-0.5">Open Dashboard</span>
               <ArrowUpRight className="size-3 text-white/40 group-hover:text-cyan-300 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </button>

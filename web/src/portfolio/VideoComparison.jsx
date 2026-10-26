@@ -17,16 +17,31 @@ export const VideoComparison = () => {
   const timeRef = useRef(0);
   const lastLowDrawTime = useRef(0);
 
-  // Force-mute at the DOM property level — React's JSX `muted` attribute does not
-  // guarantee the media element property on client-mounted nodes, and unmuted
-  // autoplay is blocked by every strict media policy (funnel first visits).
   const attachHighVideo = useCallback((el) => {
     demoHighVideoRef.current = el;
-    if (el) { el.muted = true; el.defaultMuted = true; }
+    if (el) {
+      el.muted = true;
+      el.defaultMuted = true;
+      el.playsInline = true;
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
+      el.setAttribute('muted', '');
+      const p = el.play();
+      if (p) p.catch(() => {});
+    }
   }, []);
   const attachLowVideo = useCallback((el) => {
     demoLowVideoRef.current = el;
-    if (el) { el.muted = true; el.defaultMuted = true; }
+    if (el) {
+      el.muted = true;
+      el.defaultMuted = true;
+      el.playsInline = true;
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
+      el.setAttribute('muted', '');
+      const p = el.play();
+      if (p) p.catch(() => {});
+    }
   }, []);
 
   // Any user gesture lifts autoplay restrictions — resume everything the moment it happens.
@@ -345,6 +360,8 @@ export const VideoComparison = () => {
                   autoPlay loop muted playsInline preload="auto"
                   className="size-full object-cover"
                   onError={() => setDemoBroken(true)}
+                  onLoadedMetadata={() => { const v = demoHighVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
+                  onLoadedData={() => { const v = demoHighVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
                   onCanPlay={() => { const v = demoHighVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
                   onStalled={() => { const v = demoHighVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
                   onPause={() => { const v = demoHighVideoRef.current; if (v && !document.hidden) setTimeout(() => { if (v.paused) v.play().catch(() => {}); }, 120); }}
@@ -366,6 +383,8 @@ export const VideoComparison = () => {
                   autoPlay loop muted playsInline preload="auto"
                   className="size-full object-cover"
                   onError={() => setDemoBroken(true)}
+                  onLoadedMetadata={() => { const v = demoLowVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
+                  onLoadedData={() => { const v = demoLowVideoRef.current; if (v) { v.muted = true; v.play().catch(() => {}); } }}
                   onCanPlay={() => { const v = demoLowVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
                   onStalled={() => { const v = demoLowVideoRef.current; if (v && v.paused && !document.hidden) v.play().catch(() => {}); }}
                   onPause={() => { const v = demoLowVideoRef.current; if (v && !document.hidden) setTimeout(() => { if (v.paused) v.play().catch(() => {}); }, 120); }}
