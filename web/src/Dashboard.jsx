@@ -38,10 +38,31 @@ export default function Dashboard({
   const [keepNotice, setKeepNotice] = useState(false);
   const ttPopup = useRef(null);
 
+  // ---------- Personal Optimization History & Pipelines ----------
+  const [history, setHistory] = useState([]);
+  const [historyStats, setHistoryStats] = useState({ total: 0, favoritePipeline: 'HDR Rec.2020 / HLG' });
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
   const ttHeaders = useCallback(
     () => ({ 'content-type': 'application/json', ...(apiKey ? { 'x-access-token': apiKey } : {}) }),
     [apiKey]
   );
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const r = await fetch('/api/user/optimizations', { headers: ttHeaders() });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.ok) {
+        setHistory(j.items || []);
+        if (j.userStats) setHistoryStats(j.userStats);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [ttHeaders]);
 
   const loadTikTok = useCallback(async () => {
     try {
@@ -55,7 +76,11 @@ export default function Dashboard({
 
   useEffect(() => {
     loadTikTok();
-    const interval = setInterval(loadTikTok, 20000);
+    loadHistory();
+    const interval = setInterval(() => {
+      loadTikTok();
+      loadHistory();
+    }, 20000);
     const onMsg = (e) => {
       if (e.origin !== window.location.origin || e.data?.type !== 'obito-tiktok') return;
       if (e.data.ok) {
@@ -361,6 +386,160 @@ export default function Dashboard({
             Zero cloud media storage. Master video packets are processed in temporary memory and never stored.
           </div>
           <span className="dash-card-inline-status">Zero Data Retention</span>
+        </motion.div>
+      </div>
+
+      {/* ---------- Personal Optimization History & Pipelines Section ---------- */}
+      <div className="dash-accounts-section">
+        <motion.div className="dash-section-header" {...scrollBlurCard}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="dash-section-title font-clash font-bold">Optimization History &amp; Pipelines</h2>
+              <span className="dash-section-sub">
+                Verified stream telemetry, pipeline modes, and output cadence from your recent master jobs.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-white/[0.04] border border-white/10 text-neutral-300">
+                {historyStats.total} Mastered
+              </span>
+              <button
+                type="button"
+                onClick={loadHistory}
+                className="size-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all text-xs cursor-pointer"
+                title="Refresh history"
+              >
+                ↻
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* History Overview Quick Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Total Optimizations</span>
+            <span className="font-clash inframe-title font-medium text-base text-white mt-0.5 block">
+              {loadingHistory ? '—' : `${historyStats.total} Videos`}
+            </span>
+          </motion.div>
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Primary Pipeline</span>
+            <span className="font-clash inframe-title font-medium text-base text-cyan-300 mt-0.5 block truncate">
+              {loadingHistory ? '—' : historyStats.favoritePipeline}
+            </span>
+          </motion.div>
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Output Clock</span>
+            <span className="font-clash inframe-title font-medium text-base text-purple-300 mt-0.5 block">
+              19,200 Timescale Sync
+            </span>
+          </motion.div>
+        </div>
+
+        {/* History List or Studio Empty State */}
+        <motion.div className="dash-accounts-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
+          {history.length > 0 ? (
+            <div className="space-y-3">
+              {history.map((job) => {
+                const isDone = job.status === 'done';
+                const dateStr = job.timestamp ? new Date(job.timestamp).toLocaleString([], {
+                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                }) : 'Recent';
+                const modeLabel = job.mode === 'standard' ? 'Standard 709' : 'HDR Rec.2020 / HLG';
+
+                return (
+                  <div
+                    key={job.id}
+                    className="p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-all flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-xs sm:text-sm text-white truncate max-w-xs sm:max-w-md">
+                            {job.fileName || 'Master Video'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                            job.mode === 'standard'
+                              ? 'bg-neutral-500/10 text-neutral-300 border-neutral-500/20'
+                              : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25'
+                          }`}>
+                            {modeLabel}
+                            {job.ensureH264 ? ' · AVC1' : ''}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[11px] text-neutral-400 block">
+                          {dateStr} · ID: <code className="text-neutral-400 bg-white/[0.04] px-1 py-0.2 rounded font-mono">{job.id.slice(0, 12)}…</code>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase font-semibold border ${
+                          isDone
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                            : 'bg-red-500/10 text-red-400 border-red-500/25'
+                        }`}>
+                          {isDone ? 'Completed ✓' : 'Failed'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Telemetry specs row */}
+                    <div className="pt-2 border-t border-white/[0.04] grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Input Source</span>
+                        <span className="text-neutral-300 font-mono">
+                          {job.in ? `${job.in.w}x${job.in.h} · ${job.in.fps}fps` : '1080p Master'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Output Cadence</span>
+                        <span className="text-cyan-300 font-mono">
+                          {job.out ? `${job.out.w}x${job.out.h} · 19200 ts` : '19200 Base Clock'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Audio &amp; Codec</span>
+                        <span className="text-neutral-300 font-mono">
+                          {job.out ? `${job.out.codec} · 2-Track AAC` : 'Dual AAC Lossless'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Remux Duration</span>
+                        <span className="text-emerald-400 font-mono">
+                          {job.durationMs ? `${(job.durationMs / 1000).toFixed(1)}s` : '< 1s'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 px-4 space-y-3">
+              <div className="size-10 mx-auto rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center text-neutral-400 text-sm">
+                ⏱
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-clash inframe-title font-medium text-sm text-white">
+                  No Mastering History Yet
+                </h4>
+                <p className="font-sans text-xs text-neutral-400 max-w-sm mx-auto">
+                  Run your first 60fps or HDR clip through the optimizer. Your container surgery records, audio cadences, and timestamps will be saved here.
+                </p>
+              </div>
+              {onSwitchTab && (
+                <button
+                  type="button"
+                  onClick={() => onSwitchTab('optimizer')}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white transition-all cursor-pointer"
+                >
+                  <span>Open Video Optimizer</span>
+                  <span className="text-cyan-400">→</span>
+                </button>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
 

@@ -15,6 +15,8 @@ import {
 } from './icons.jsx';
 import { ShutterText } from '@/components/ui/hero-shutter-text.jsx';
 import { AnimatedText } from '@/components/ui/animated-text.jsx';
+import { CreatorReviewModal } from './components/CreatorReviewModal.jsx';
+import { UpdateBanner } from './components/UpdateBanner.jsx';
 
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
@@ -159,6 +161,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const dismissUpdateModal = useCallback(() => {
     setShowUpdateModal(false);
@@ -461,6 +464,7 @@ export default function App() {
         isMasterOwner={isMasterOwner}
         onOpenSignIn={() => setShowMemberModal(true)}
         onOpenAdmin={() => setShowAdminModal(true)}
+        onOpenReview={() => setShowReviewModal(true)}
         onSignOut={() => {
           onKeyChange("", "", "free");
           setUserTier("free");
@@ -762,6 +766,20 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Creator Satisfaction Review Modal */}
+      <CreatorReviewModal
+        isOpen={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        currentUserName={currentUserName}
+        apiKey={apiKey}
+      />
+
+      {/* Post-Update Premium Banner for Signed Users */}
+      <UpdateBanner
+        isSignedUser={Boolean(ownerAuthenticated || (userTier && userTier !== 'free') || apiKey)}
+        onSwitchTab={switchTabWithHaptic}
+      />
     </div>
   );
 }

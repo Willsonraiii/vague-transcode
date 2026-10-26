@@ -35,6 +35,8 @@ async function fetchGistStore() {
       const data = JSON.parse(file.content);
       if (Array.isArray(data.referrals)) {
         if (!Array.isArray(data.clients)) data.clients = [];
+        if (!Array.isArray(data.optimizations)) data.optimizations = [];
+        if (!Array.isArray(data.reviews)) data.reviews = [];
         return data;
       }
     }
@@ -78,7 +80,11 @@ const DEFAULT_STORE = {
       createdAt: Date.now()
     }
   ],
-  clients: []
+  clients: [],
+  optimizations: [],
+  reviews: [],
+  totalOptimizationsCount: 0,
+  totalBytesProcessed: 0
 };
 
 // In-process lock queue to prevent race conditions during concurrent requests
@@ -99,6 +105,17 @@ function withLock(fn) {
  *   Tier 5: Baked-in repo members.json
  * NEVER resets to default if any of the above stores exist.
  */
+function ensureStoreArrays(data) {
+  if (!data || typeof data !== 'object') return JSON.parse(JSON.stringify(DEFAULT_STORE));
+  if (!Array.isArray(data.referrals)) data.referrals = [];
+  if (!Array.isArray(data.clients)) data.clients = [];
+  if (!Array.isArray(data.optimizations)) data.optimizations = [];
+  if (!Array.isArray(data.reviews)) data.reviews = [];
+  if (typeof data.totalOptimizationsCount !== 'number') data.totalOptimizationsCount = data.optimizations.length;
+  if (typeof data.totalBytesProcessed !== 'number') data.totalBytesProcessed = 0;
+  return data;
+}
+
 export async function getMembersStore() {
   await mkdir(PERSISTENT_DIR, { recursive: true });
   await mkdir(SNAPSHOTS_DIR, { recursive: true });
@@ -108,10 +125,7 @@ export async function getMembersStore() {
     try {
       const raw = await readFile(MEMBERS_FILE, 'utf8');
       if (raw && raw.trim().length > 0) {
-        const data = JSON.parse(raw);
-        if (!Array.isArray(data.referrals)) data.referrals = [];
-        if (!Array.isArray(data.clients)) data.clients = [];
-        return data;
+        return ensureStoreArrays(JSON.parse(raw));
       }
     } catch (err) {
       console.error('[members-store] Failed to parse primary members.json, attempting backup recovery:', err);
@@ -123,11 +137,8 @@ export async function getMembersStore() {
     try {
       const backupRaw = await readFile(BACKUP_FILE, 'utf8');
       if (backupRaw && backupRaw.trim().length > 0) {
-        const data = JSON.parse(backupRaw);
-        if (!Array.isArray(data.referrals)) data.referrals = [];
-        if (!Array.isArray(data.clients)) data.clients = [];
-        // Restore primary from backup immediately
-        await atomicWriteFile(MEMBERS_FILE, backupRaw);
+        const data = ensureStoreArrays(JSON.parse(backupRaw));
+        await atomicWriteFile(MEMBERS_FILE, JSON.stringify(data, null, 2));
         console.warn('[members-store] Successfully recovered members store from backup file.');
         return data;
       }
@@ -144,11 +155,10 @@ export async function getMembersStore() {
         const latestSnap = path.join(SNAPSHOTS_DIR, snapFiles[snapFiles.length - 1]);
         const snapRaw = await readFile(latestSnap, 'utf8');
         if (snapRaw && snapRaw.trim().length > 0) {
-          const data = JSON.parse(snapRaw);
-          if (!Array.isArray(data.referrals)) data.referrals = [];
-          if (!Array.isArray(data.clients)) data.clients = [];
-          await atomicWriteFile(MEMBERS_FILE, snapRaw);
-          await atomicWriteFile(BACKUP_FILE, snapRaw);
+          const data = ensureStoreArrays(JSON.parse(snapRaw));
+          const serialized = JSON.stringify(data, null, 2);
+          await atomicWriteFile(MEMBERS_FILE, serialized);
+          await atomicWriteFile(BACKUP_FILE, serialized);
           console.warn(`[members-store] Successfully recovered members store from snapshot: ${latestSnap}`);
           return data;
         }
@@ -162,10 +172,11 @@ export async function getMembersStore() {
   const gistData = await fetchGistStore();
   if (gistData) {
     console.warn('[members-store] Successfully recovered members store from remote cloud Gist.');
-    const serialized = JSON.stringify(gistData, null, 2);
+    const data = ensureStoreArrays(gistData);
+    const serialized = JSON.stringify(data, null, 2);
     await atomicWriteFile(MEMBERS_FILE, serialized);
     await atomicWriteFile(BACKUP_FILE, serialized);
-    return gistData;
+    return data;
   }
 
   // 5. Check baked-in file in repo root
@@ -173,11 +184,10 @@ export async function getMembersStore() {
     try {
       const legacyRaw = await readFile(LEGACY_FILE, 'utf8');
       if (legacyRaw && legacyRaw.trim().length > 0) {
-        const data = JSON.parse(legacyRaw);
-        if (!Array.isArray(data.referrals)) data.referrals = [];
-        if (!Array.isArray(data.clients)) data.clients = [];
-        await atomicWriteFile(MEMBERS_FILE, legacyRaw);
-        await atomicWriteFile(BACKUP_FILE, legacyRaw);
+        const data = ensureStoreArrays(JSON.parse(legacyRaw));
+        const serialized = JSON.stringify(data, null, 2);
+        await atomicWriteFile(MEMBERS_FILE, serialized);
+        await atomicWriteFile(BACKUP_FILE, serialized);
         return data;
       }
     } catch {
@@ -450,3 +460,185 @@ export async function deleteClient(clientId) {
     return true;
   });
 }
+
+/**
+ * Record a completed or failed optimization job into persistent telemetry.
+ */
+export async function recordOptimization(optData) {
+  return updateMembersStore(async (store) => {
+    if (!Array.isArray(store.optimizations)) store.optimizations = [];
+    const id = optData.id || ('opt_' + randomBytes(8).toString('hex'));
+    const entry = {
+      id,
+      clientId: optData.clientId || 'guest',
+      clientName: optData.clientName || 'Guest Creator',
+      fileName: optData.fileName || 'video.mp4',
+      mode: optData.mode || 'hdr',
+      ensureH264: Boolean(optData.ensureH264),
+      status: optData.status || 'done',
+      error: optData.error || null,
+      inputBytes: Number(optData.inputBytes || 0),
+      outputBytes: Number(optData.outputBytes || 0),
+      in: optData.in || null,
+      out: optData.out || null,
+      durationMs: Number(optData.durationMs || 0),
+      timestamp: optData.timestamp || Date.now()
+    };
+    store.optimizations.unshift(entry);
+    if (store.optimizations.length > 500) {
+      store.optimizations = store.optimizations.slice(0, 500);
+    }
+    store.totalOptimizationsCount = (store.totalOptimizationsCount || 0) + 1;
+    store.totalBytesProcessed = (store.totalBytesProcessed || 0) + (entry.inputBytes || 0);
+
+    // Update client-level optimization counter
+    if (optData.clientId && optData.clientId !== 'guest' && Array.isArray(store.clients)) {
+      const client = store.clients.find((c) => c.clientId.toLowerCase() === optData.clientId.toLowerCase());
+      if (client) {
+        client.optimizationsCount = (client.optimizationsCount || 0) + 1;
+        client.lastActiveAt = Date.now();
+        if (!client.pipelineUsage) client.pipelineUsage = {};
+        const modeKey = optData.mode || 'hdr';
+        client.pipelineUsage[modeKey] = (client.pipelineUsage[modeKey] || 0) + 1;
+      }
+    }
+    return entry;
+  });
+}
+
+/**
+ * Get personal optimization history for a client.
+ */
+export async function getOptimizationsHistory({ clientId = null, limit = 50 } = {}) {
+  const store = await getMembersStore();
+  let items = store.optimizations || [];
+  if (clientId && clientId !== 'owner') {
+    items = items.filter((o) => o.clientId && o.clientId.toLowerCase() === clientId.toLowerCase());
+  }
+  const userItems = items.slice(0, limit);
+
+  // Compute breakdown
+  const modeCounts = {};
+  for (const it of items) {
+    const m = it.mode || 'hdr';
+    modeCounts[m] = (modeCounts[m] || 0) + 1;
+  }
+  let favoritePipeline = 'HDR Rec.2020 / HLG';
+  let maxCount = 0;
+  for (const [k, v] of Object.entries(modeCounts)) {
+    if (v > maxCount) {
+      maxCount = v;
+      favoritePipeline = k === 'standard' ? 'Standard 709' : 'HDR Rec.2020 / HLG';
+    }
+  }
+
+  return {
+    items: userItems,
+    userStats: {
+      total: items.length,
+      favoritePipeline,
+      lastOptimizedAt: items[0]?.timestamp || null
+    }
+  };
+}
+
+/**
+ * Admin: Get comprehensive breakdown of all optimizations across users and pipelines.
+ */
+export async function getAdminOptimizationsBreakdown() {
+  const store = await getMembersStore();
+  const opts = store.optimizations || [];
+  const clients = store.clients || [];
+
+  const pipelineStats = {
+    hdr: 0,
+    standard: 0,
+    h264Tagged: 0,
+    total: store.totalOptimizationsCount || opts.length
+  };
+
+  for (const o of opts) {
+    if (o.mode === 'standard') pipelineStats.standard++;
+    else pipelineStats.hdr++;
+    if (o.ensureH264) pipelineStats.h264Tagged++;
+  }
+
+  // User leaderboard
+  const userLeaderboard = clients.map((c) => {
+    const userOpts = opts.filter((o) => o.clientId && o.clientId.toLowerCase() === c.clientId.toLowerCase());
+    const userCount = c.optimizationsCount || userOpts.length;
+    return {
+      clientId: c.clientId,
+      name: c.name || c.clientId,
+      status: c.status,
+      optimizationsCount: userCount,
+      lastActiveAt: c.lastActiveAt || userOpts[0]?.timestamp || c.createdAt,
+      primaryPipeline: userOpts.some((o) => o.mode === 'standard') ? 'Standard 709' : 'HDR Rec.2020'
+    };
+  }).sort((a, b) => b.optimizationsCount - a.optimizationsCount);
+
+  return {
+    totalOptimizations: store.totalOptimizationsCount || opts.length,
+    totalBytesProcessed: store.totalBytesProcessed || 0,
+    pipelineStats,
+    userLeaderboard,
+    recentJobs: opts.slice(0, 100)
+  };
+}
+
+/**
+ * Record a user satisfaction review / feedback.
+ */
+export async function recordReview({ rating, category, message, contact = '', name = '', clientId = 'guest' }) {
+  return updateMembersStore(async (store) => {
+    if (!Array.isArray(store.reviews)) store.reviews = [];
+    const review = {
+      id: 'rev_' + randomBytes(6).toString('hex'),
+      clientId: clientId || 'guest',
+      name: (name || '').trim() || (clientId !== 'guest' ? clientId : 'Verified Creator'),
+      rating: Math.min(5, Math.max(1, Number(rating) || 5)),
+      category: (category || 'Video Optimization Quality').trim(),
+      message: (message || '').trim(),
+      contact: (contact || '').trim(),
+      createdAt: Date.now(),
+      status: 'new'
+    };
+    store.reviews.unshift(review);
+    if (store.reviews.length > 200) {
+      store.reviews = store.reviews.slice(0, 200);
+    }
+    return review;
+  });
+}
+
+/**
+ * Get all submitted reviews for the Admin dashboard.
+ */
+export async function getReviews() {
+  const store = await getMembersStore();
+  return store.reviews || [];
+}
+
+/**
+ * Public platform stats for telemetry section.
+ */
+export async function getGlobalPlatformStats() {
+  const store = await getMembersStore();
+  const clientsCount = Array.isArray(store.clients) ? store.clients.length : 0;
+  const totalOpts = Math.max(store.totalOptimizationsCount || 0, Array.isArray(store.optimizations) ? store.optimizations.length : 0);
+  const reviews = store.reviews || [];
+  const avgRating = reviews.length > 0
+    ? Math.round((reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / reviews.length) * 10) / 10
+    : 5.0;
+
+  return {
+    registeredUsers: clientsCount,
+    totalOptimizations: totalOpts,
+    totalBytesProcessed: store.totalBytesProcessed || 0,
+    averageRating: avgRating,
+    reviewCount: reviews.length,
+    losslessRetention: '100%',
+    timescaleBase: 19200
+  };
+}
+

@@ -24,9 +24,55 @@ export default function AdminPassesModal({ apiKey, onClose }) {
   const [newClientCode, setNewClientCode] = useState('');
   const [creatingClient, setCreatingClient] = useState(false);
 
+  // Telemetry & Reviews State
+  const [telemetryData, setTelemetryData] = useState({ totalOptimizations: 0, pipelineStats: {}, userLeaderboard: [], recentJobs: [] });
+  const [reviewsData, setReviewsData] = useState([]);
+  const [loadingTelemetry, setLoadingTelemetry] = useState(false);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [telemetrySearch, setTelemetrySearch] = useState('');
+
   const getAuthToken = useCallback(() => {
     return apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('obitoKey') : '') || '';
   }, [apiKey]);
+
+  const fetchTelemetry = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+    try {
+      setLoadingTelemetry(true);
+      const res = await fetch('/api/admin/optimizations', { headers: { 'x-access-token': token } });
+      const data = await res.json();
+      if (data?.ok) {
+        setTelemetryData({
+          totalOptimizations: data.totalOptimizations || 0,
+          pipelineStats: data.pipelineStats || {},
+          userLeaderboard: data.userLeaderboard || [],
+          recentJobs: data.recentJobs || [],
+        });
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setLoadingTelemetry(false);
+    }
+  }, [getAuthToken]);
+
+  const fetchReviews = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+    try {
+      setLoadingReviews(true);
+      const res = await fetch('/api/admin/reviews', { headers: { 'x-access-token': token } });
+      const data = await res.json();
+      if (data?.ok) {
+        setReviewsData(data.reviews || []);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [getAuthToken]);
 
   const fetchMembers = useCallback(async () => {
     const token = getAuthToken();
@@ -45,12 +91,14 @@ export default function AdminPassesModal({ apiKey, onClose }) {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load member passes');
       setReferrals(data.referrals || []);
       setClients(data.clients || []);
+      fetchTelemetry();
+      fetchReviews();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, fetchTelemetry, fetchReviews]);
 
   useEffect(() => {
     fetchMembers();
@@ -227,48 +275,57 @@ export default function AdminPassesModal({ apiKey, onClose }) {
         </div>
 
         {/* Executive Telemetry Quick Stats */}
-        <div className="grid grid-cols-3 gap-2 px-4 pt-3.5 pb-2 sm:px-6 sm:pt-4 sm:pb-3 border-b border-white/[0.06] bg-white/[0.015]">
-          <div className="rounded-xl p-2 sm:p-3 bg-white/[0.025] border border-white/[0.06] text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-4 pt-3.5 pb-2 sm:px-6 sm:pt-4 sm:pb-3 border-b border-white/[0.06] bg-white/[0.015]">
+          <div className="rounded-xl p-2 sm:p-2.5 bg-white/[0.025] border border-white/[0.06] text-center">
             <span className="block font-sans text-[10px] sm:text-[11px] text-neutral-400 uppercase tracking-wider">
               Referral Codes
             </span>
             <span className="block font-clash inframe-title font-medium text-xs sm:text-base text-amber-300 mt-0.5">
-              {activeReferralsCount} <span className="text-[10px] sm:text-xs text-neutral-400 font-normal">/ {referrals.length} active</span>
+              {activeReferralsCount} <span className="text-[10px] text-neutral-400 font-normal">/ {referrals.length}</span>
             </span>
           </div>
 
-          <div className="rounded-xl p-2 sm:p-3 bg-white/[0.025] border border-white/[0.06] text-center">
+          <div className="rounded-xl p-2 sm:p-2.5 bg-white/[0.025] border border-white/[0.06] text-center">
             <span className="block font-sans text-[10px] sm:text-[11px] text-neutral-400 uppercase tracking-wider">
               Clients
             </span>
             <span className="block font-clash inframe-title font-medium text-xs sm:text-base text-emerald-400 mt-0.5">
-              {activeClientsCount} <span className="text-[10px] sm:text-xs text-neutral-400 font-normal">/ {clients.length} active</span>
+              {activeClientsCount} <span className="text-[10px] text-neutral-400 font-normal">/ {clients.length}</span>
             </span>
           </div>
 
-          <div className="rounded-xl p-2 sm:p-3 bg-white/[0.025] border border-white/[0.06] text-center">
+          <div className="rounded-xl p-2 sm:p-2.5 bg-white/[0.025] border border-white/[0.06] text-center">
             <span className="block font-sans text-[10px] sm:text-[11px] text-neutral-400 uppercase tracking-wider">
-              Redemptions
+              Total Optimizations
             </span>
             <span className="block font-clash inframe-title font-medium text-xs sm:text-base text-cyan-300 mt-0.5">
-              {redeemedTotalCount} <span className="text-[10px] sm:text-xs text-neutral-400 font-normal">claimed</span>
+              {telemetryData.totalOptimizations || 0} <span className="text-[10px] text-neutral-400 font-normal">masters</span>
+            </span>
+          </div>
+
+          <div className="rounded-xl p-2 sm:p-2.5 bg-white/[0.025] border border-white/[0.06] text-center">
+            <span className="block font-sans text-[10px] sm:text-[11px] text-neutral-400 uppercase tracking-wider">
+              Creator Reviews
+            </span>
+            <span className="block font-clash inframe-title font-medium text-xs sm:text-base text-purple-300 mt-0.5">
+              {reviewsData.length} <span className="text-[10px] text-neutral-400 font-normal">feedback</span>
             </span>
           </div>
         </div>
 
         {/* Navigation Tabs (Liquid-Glass Segmented Control) */}
-        <div className="px-4 py-2.5 sm:px-6 sm:py-3 border-b border-white/[0.06] bg-[#090b11]">
-          <div className="flex gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/[0.08] w-full">
+        <div className="px-4 py-2.5 sm:px-6 sm:py-3 border-b border-white/[0.06] bg-[#090b11] overflow-x-auto">
+          <div className="flex gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/[0.08] min-w-max sm:w-full">
             <button
               type="button"
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs sm:text-[13px] font-medium transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'referrals'
                   ? 'bg-white/15 text-white shadow-sm border border-white/20'
                   : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
               }`}
               onClick={() => setActiveTab('referrals')}
             >
-              <span>Referral / Invite Codes</span>
+              <span>Referrals</span>
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'referrals' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-neutral-400'
               }`}>
@@ -278,18 +335,52 @@ export default function AdminPassesModal({ apiKey, onClose }) {
 
             <button
               type="button"
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs sm:text-[13px] font-medium transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'clients'
                   ? 'bg-white/15 text-white shadow-sm border border-white/20'
                   : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
               }`}
               onClick={() => setActiveTab('clients')}
             >
-              <span>Registered Clients</span>
+              <span>Clients</span>
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'clients' ? 'bg-emerald-400/20 text-emerald-300' : 'bg-white/10 text-neutral-400'
               }`}>
                 {clients.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'telemetry'
+                  ? 'bg-white/15 text-white shadow-sm border border-white/20'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+              onClick={() => setActiveTab('telemetry')}
+            >
+              <span>Optimizations &amp; Pipelines</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'telemetry' ? 'bg-cyan-400/20 text-cyan-300' : 'bg-white/10 text-neutral-400'
+              }`}>
+                {telemetryData.totalOptimizations || 0}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'reviews'
+                  ? 'bg-white/15 text-white shadow-sm border border-white/20'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              <span>Reviews</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'reviews' ? 'bg-purple-400/20 text-purple-300' : 'bg-white/10 text-neutral-400'
+              }`}>
+                {reviewsData.length}
               </span>
             </button>
           </div>
@@ -783,6 +874,265 @@ export default function AdminPassesModal({ apiKey, onClose }) {
                     );
                   })()
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: OPTIMIZATIONS & PIPELINES TELEMETRY */}
+          {activeTab === 'telemetry' && (
+            <div className="space-y-4">
+              {/* Pipeline Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl p-3.5 bg-white/[0.025] border border-white/[0.08] backdrop-blur-md">
+                  <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">
+                    HDR Rec.2020 / HLG
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="font-clash inframe-title font-medium text-xl text-cyan-300">
+                      {telemetryData.pipelineStats?.hdr || 0}
+                    </span>
+                    <span className="text-xs text-neutral-400">runs</span>
+                  </div>
+                  <span className="text-[11px] text-neutral-500 mt-0.5 block">Apple 10-bit &amp; Dolby Vision remux</span>
+                </div>
+
+                <div className="rounded-xl p-3.5 bg-white/[0.025] border border-white/[0.08] backdrop-blur-md">
+                  <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">
+                    Standard Rec.709
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="font-clash inframe-title font-medium text-xl text-neutral-200">
+                      {telemetryData.pipelineStats?.standard || 0}
+                    </span>
+                    <span className="text-xs text-neutral-400">runs</span>
+                  </div>
+                  <span className="text-[11px] text-neutral-500 mt-0.5 block">SDR Rec.709 60/120fps sync</span>
+                </div>
+
+                <div className="rounded-xl p-3.5 bg-white/[0.025] border border-white/[0.08] backdrop-blur-md">
+                  <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">
+                    AVC1 Tagged
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="font-clash inframe-title font-medium text-xl text-purple-300">
+                      {telemetryData.pipelineStats?.h264Tagged || 0}
+                    </span>
+                    <span className="text-xs text-neutral-400">runs</span>
+                  </div>
+                  <span className="text-[11px] text-neutral-500 mt-0.5 block">H.264 fourcc atom compatibility</span>
+                </div>
+              </div>
+
+              {/* User Leaderboard: Which user did how many optimizes */}
+              <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4 sm:p-5 backdrop-blur-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.06]">
+                  <div>
+                    <h3 className="font-clash inframe-title font-medium text-sm sm:text-base text-white">
+                      Creator Optimization Breakdown
+                    </h3>
+                    <p className="font-sans text-xs text-neutral-400">
+                      Check how many optimizations each user completed and their preferred pipeline.
+                    </p>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={telemetrySearch}
+                    onChange={(e) => setTelemetrySearch(e.target.value)}
+                    placeholder="Search by client ID or name…"
+                    className="h-8 px-3 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-cyan-400/50 w-full sm:w-60"
+                  />
+                </div>
+
+                <div className="mt-4 space-y-2.5">
+                  {(() => {
+                    const filtered = (telemetryData.userLeaderboard || []).filter((u) => {
+                      if (!telemetrySearch.trim()) return true;
+                      const q = telemetrySearch.toLowerCase();
+                      return u.clientId?.toLowerCase().includes(q) || u.name?.toLowerCase().includes(q);
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-6 text-center text-xs text-neutral-500 font-mono">
+                          No client optimizations found matching query.
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((u) => (
+                      <div
+                        key={u.clientId}
+                        className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-xs sm:text-sm text-white">
+                              {u.name || u.clientId}
+                            </span>
+                            <code className="text-[11px] font-mono text-neutral-400 bg-white/[0.05] px-1.5 py-0.2 rounded">
+                              {u.clientId}
+                            </code>
+                            <span className={`px-2 py-0.2 rounded-full text-[10px] font-mono border ${
+                              u.status === 'active'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              {u.status}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-neutral-400">
+                            <span>Primary: <strong className="text-neutral-300 font-normal">{u.primaryPipeline}</strong></span>
+                            <span>•</span>
+                            <span>Last Active: <strong className="text-neutral-300 font-normal">{u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleDateString() : 'Never'}</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          <div className="px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-center min-w-24">
+                            <span className="block font-clash inframe-title font-medium text-sm text-cyan-300">
+                              {u.optimizationsCount}
+                            </span>
+                            <span className="block text-[10px] font-mono uppercase text-neutral-400">
+                              Optimizations
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              {/* Recent Jobs Telemetry Stream */}
+              <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4 sm:p-5 backdrop-blur-xl">
+                <h3 className="font-clash inframe-title font-medium text-sm sm:text-base text-white mb-1">
+                  Recent Mastered Jobs Stream
+                </h3>
+                <p className="font-sans text-xs text-neutral-400 mb-3">
+                  Audit log of recent container surgery runs across all users.
+                </p>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {(telemetryData.recentJobs || []).length === 0 ? (
+                    <div className="py-6 text-center text-xs text-neutral-500 font-mono">
+                      No jobs recorded yet.
+                    </div>
+                  ) : (
+                    telemetryData.recentJobs.map((job) => (
+                      <div
+                        key={job.id}
+                        className="p-2.5 rounded-lg bg-white/[0.015] border border-white/[0.05] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-neutral-200 truncate max-w-xs">
+                              {job.fileName || 'video'}
+                            </span>
+                            <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/20">
+                              {job.mode === 'standard' ? 'Std 709' : 'HDR HLG'}
+                            </span>
+                            <span className="text-[11px] text-neutral-500">
+                              by <code className="text-neutral-400">{job.clientId}</code>
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-neutral-500 font-mono block">
+                            {job.in ? `${job.in.w}x${job.in.h} @ ${job.in.fps}fps` : ''} · {job.durationMs ? `${(job.durationMs / 1000).toFixed(1)}s` : ''} · {new Date(job.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono shrink-0 uppercase ${
+                          job.status === 'done' ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10'
+                        }`}>
+                          {job.status}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: CREATOR REVIEWS & FEEDBACK */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4 sm:p-5 backdrop-blur-xl">
+                <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/[0.06] flex-wrap">
+                  <div>
+                    <h3 className="font-clash inframe-title font-medium text-sm sm:text-base text-white">
+                      Creator Reviews &amp; Experience Ratings
+                    </h3>
+                    <p className="font-sans text-xs text-neutral-400">
+                      Direct feedback submitted by creators on video optimization quality and site satisfaction.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchReviews}
+                    className="h-8 px-3 rounded-lg text-xs font-medium bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-300 cursor-pointer"
+                  >
+                    ↻ Refresh Reviews
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {reviewsData.length === 0 ? (
+                    <div className="py-10 text-center space-y-2">
+                      <div className="text-2xl text-neutral-600">★</div>
+                      <p className="font-sans text-xs text-neutral-400">No reviews submitted yet.</p>
+                      <span className="text-[11px] text-neutral-500">Reviews submitted from the site feedback form will land here instantly.</span>
+                    </div>
+                  ) : (
+                    reviewsData.map((rev) => (
+                      <div
+                        key={rev.id}
+                        className="p-4 rounded-xl bg-white/[0.025] border border-white/[0.06] space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-amber-400 font-mono text-sm tracking-wider">
+                                {'★'.repeat(rev.rating || 5)}{'☆'.repeat(5 - (rev.rating || 5))}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                {rev.category}
+                              </span>
+                            </div>
+                            <span className="font-sans text-xs font-medium text-white block">
+                              {rev.name || 'Creator'} <span className="text-neutral-500 font-normal">({rev.clientId})</span>
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {rev.contact && (
+                              <a
+                                href={`mailto:${rev.contact}?subject=Obito Studio Support`}
+                                className="h-7 px-2.5 rounded-md text-[11px] font-medium bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-cyan-300 transition-all"
+                              >
+                                Reply via Email
+                              </a>
+                            )}
+                            <span className="text-[11px] text-neutral-500 font-mono">
+                              {new Date(rev.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="font-sans text-xs text-neutral-300 leading-relaxed bg-black/30 p-3 rounded-lg border border-white/[0.04]">
+                          "{rev.message}"
+                        </p>
+
+                        {rev.contact && (
+                          <div className="text-[11px] text-neutral-500 font-mono">
+                            Contact: <code className="text-neutral-400">{rev.contact}</code>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           )}

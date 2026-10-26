@@ -11,6 +11,7 @@ import Inspector from '../Inspector';
 import Guide from '../Guide';
 import { SectionHeader, LiquidGlassDefs } from './primitives';
 import { ChevronIcon, PremiumKeyIcon } from '../icons';
+import { GlobalTelemetry } from '../components/GlobalTelemetry';
 
 export default function PortfolioView({
   activeTab,
@@ -29,6 +30,7 @@ export default function PortfolioView({
   onOpenSignIn,
   onOpenAdmin,
   onSignOut,
+  onOpenReview,
   archPillars,
   workflowSteps,
   faqItems,
@@ -88,6 +90,9 @@ export default function PortfolioView({
 
           {/* 2. Realtime Video Swap Comparison Section */}
           <VideoComparison />
+
+          {/* 2a. Live Global Telemetry Section (Tracked signed users, videos mastered all over, lossless fidelity) */}
+          <GlobalTelemetry onOpenReview={onOpenReview} />
 
           {/* 2b. Simple Process Section (Login, Optimize, Post) */}
           <section id="process" className="section-hirael scroll-anchor bg-[hsl(var(--bg))]">
@@ -253,6 +258,7 @@ export default function PortfolioView({
                   userTier={userTier}
                   onSwitchTab={onSwitchTab}
                   onSwitchToGuide={() => onSwitchTab?.('guide')}
+                  onOpenReview={onOpenReview}
                   isVisible={activeTab === 'optimizer'}
                 />
               </div>
@@ -295,6 +301,7 @@ export default function PortfolioView({
       {activeTab === 'compare' && (
         <main id="compare" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-20 sm:pb-28">
           <VideoComparison />
+          <GlobalTelemetry onOpenReview={onOpenReview} />
         </main>
       )}
 

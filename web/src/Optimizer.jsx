@@ -400,7 +400,7 @@ function ModeSelect({ value, onChange, isVisible = true }) {
 }
 
 /* ---------- Main Studio Optimizer Component ---------- */
-export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Guest', userTier = 'free', onSwitchTab, onSwitchToGuide, isVisible = true }) {
+export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Guest', userTier = 'free', onSwitchTab, onSwitchToGuide, onOpenReview, isVisible = true }) {
   const [phase, setPhase] = useState('idle'); // idle | upload | paused | queued | process | done | error | confirm
   const [mode, setMode] = useState('hdr');
   const [pct, setPct] = useState(0);
@@ -1421,6 +1421,17 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Gue
                     Coming Soon
                   </span>
                 </button>
+
+                {onOpenReview && (
+                  <button
+                    type="button"
+                    onClick={onOpenReview}
+                    className="btn-secondary liquid-glass-chip rounded-full px-4 py-3 text-xs sm:text-sm font-medium text-amber-300/90 flex items-center gap-1.5 hover:border-amber-400/40 hover:bg-amber-500/10 transition-all cursor-pointer shadow-lg"
+                    title="Leave a satisfaction review about this optimization"
+                  >
+                    <span>★ Rate Experience</span>
+                  </button>
+                )}
 
                 <button
                   type="button"

@@ -49,7 +49,13 @@ import {
   deleteReferral,
   createClientManually,
   toggleClientStatus,
-  deleteClient
+  deleteClient,
+  recordOptimization,
+  getOptimizationsHistory,
+  getAdminOptimizationsBreakdown,
+  recordReview,
+  getReviews,
+  getGlobalPlatformStats
 } from './members-store.js';
 import { mountTikTokRoutes } from './tiktok-routes.js';
 
@@ -285,8 +291,41 @@ function startNextJob() {
       logLine(job, `[obito] done ✓ output ${job.probeOut ? job.probeOut.w + 'x' + job.probeOut.h + ' · ' + job.probeOut.fps + ' fps' : ''}${hdrTag}`);
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'done', at: Date.now(), in: job.probeIn || null, out: job.probeOut || null, result: job.result || null }).catch(() => {});
       stat(job.outputPath)
-        .then((s) => { job.outputBytes = s.size; })
-        .catch(() => {});
+        .then((s) => {
+          job.outputBytes = s.size;
+          recordOptimization({
+            id: job.id,
+            clientId: job.clientId || 'guest',
+            clientName: job.clientName || 'Guest Creator',
+            fileName: job.fileName || 'video',
+            mode: job.mode,
+            ensureH264: Boolean(job.ensureH264),
+            status: 'done',
+            inputBytes: job.inputBytes || null,
+            outputBytes: s.size,
+            in: job.probeIn || null,
+            out: job.probeOut || null,
+            durationMs: job.startedAt ? Date.now() - job.startedAt : 0,
+            timestamp: Date.now()
+          }).catch(() => {});
+        })
+        .catch(() => {
+          recordOptimization({
+            id: job.id,
+            clientId: job.clientId || 'guest',
+            clientName: job.clientName || 'Guest Creator',
+            fileName: job.fileName || 'video',
+            mode: job.mode,
+            ensureH264: Boolean(job.ensureH264),
+            status: 'done',
+            inputBytes: job.inputBytes || null,
+            outputBytes: job.outputBytes || null,
+            in: job.probeIn || null,
+            out: job.probeOut || null,
+            durationMs: job.startedAt ? Date.now() - job.startedAt : 0,
+            timestamp: Date.now()
+          }).catch(() => {});
+        });
       console.log(`[job ${job.id}] done (mode ${job.mode})`);
     } else if (job.cancelled) {
       console.log(`[job ${job.id}] cancelled — deleting`);
@@ -296,12 +335,40 @@ function startNextJob() {
       job.error = `processing timeout after ${Math.round(PROCESS_TIMEOUT_MS / 60000)} min`;
       logLine(job, '[obito] failed — timeout');
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'failed', at: Date.now(), in: job.probeIn || null, out: null, error: job.error }).catch(() => {});
+      recordOptimization({
+        id: job.id,
+        clientId: job.clientId || 'guest',
+        clientName: job.clientName || 'Guest Creator',
+        fileName: job.fileName || 'video',
+        mode: job.mode,
+        ensureH264: Boolean(job.ensureH264),
+        status: 'failed',
+        error: job.error,
+        inputBytes: job.inputBytes || null,
+        in: job.probeIn || null,
+        durationMs: job.startedAt ? Date.now() - job.startedAt : 0,
+        timestamp: Date.now()
+      }).catch(() => {});
       console.error(`[job ${job.id}] failed (timeout)`);
     } else {
       job.status = 'failed';
       job.error = (stderr || stdout || `pipeline exited with code ${code}`).split('\n').filter(Boolean).slice(-6).join(' | ');
       logLine(job, '[obito] failed — ' + (job.error || 'unknown'));
       libAdd({ id: job.id, name: job.fileName || 'video', mode: job.mode, status: 'failed', at: Date.now(), in: job.probeIn || null, out: null, error: job.error }).catch(() => {});
+      recordOptimization({
+        id: job.id,
+        clientId: job.clientId || 'guest',
+        clientName: job.clientName || 'Guest Creator',
+        fileName: job.fileName || 'video',
+        mode: job.mode,
+        ensureH264: Boolean(job.ensureH264),
+        status: 'failed',
+        error: job.error,
+        inputBytes: job.inputBytes || null,
+        in: job.probeIn || null,
+        durationMs: job.startedAt ? Date.now() - job.startedAt : 0,
+        timestamp: Date.now()
+      }).catch(() => {});
       console.error(`[job ${job.id}] failed (code ${code})`);
     }
     startNextJob();
@@ -369,8 +436,9 @@ app.get(/\/(tiktok[A-Za-z0-9_-]{16,}\.txt)$/, (req, res, next) => {
 });
 
 app.use('/api', async (req, res, next) => {
-  // Inspection and queue status are public; optimization, jobs and library remain protected.
+  // Inspection, queue status, platform telemetry stats, and review submissions are public.
   if (req.path === '/inspect' || req.path === '/inspect-link' || req.path === '/queue/status') return next();
+  if (req.path === '/telemetry/stats' || (req.path === '/reviews' && req.method === 'POST')) return next();
   // Public auth & referral redemption endpoints
   if (req.path === '/auth/redeem-referral' || req.path === '/auth/login' || req.path === '/auth/owner') return next();
   // TikTok OAuth redirect lands here without an Obito token (identity is in the signed state); config is public.
@@ -384,6 +452,8 @@ app.use('/api', async (req, res, next) => {
   if (ACCESS_TOKEN && given === ACCESS_TOKEN) {
     if (rec) failedKeyAttempts.delete(id);
     req.isOwner = true;
+    req.clientId = 'owner';
+    req.clientName = 'Studio Owner';
     return next();
   }
 
@@ -393,6 +463,8 @@ app.use('/api', async (req, res, next) => {
     if (rec) failedKeyAttempts.delete(id);
     req.client = activeClient;
     req.isOwner = false;
+    req.clientId = activeClient.clientId;
+    req.clientName = activeClient.name || activeClient.clientId;
     return next();
   }
 
@@ -551,6 +623,71 @@ app.delete('/api/admin/clients/:id', requireOwner, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Platform-wide Live Telemetry Statistics (public)
+app.get('/api/telemetry/stats', async (_req, res) => {
+  try {
+    const stats = await getGlobalPlatformStats();
+    res.json({ ok: true, stats });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read telemetry stats' });
+  }
+});
+
+// User personal optimization history
+app.get('/api/user/optimizations', async (req, res) => {
+  try {
+    const cId = req.isOwner ? 'owner' : (req.client?.clientId || req.clientId || 'guest');
+    const result = await getOptimizationsHistory({ clientId: cId });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load user optimizations' });
+  }
+});
+
+// Admin: Full breakdown of optimizations by user and pipeline
+app.get('/api/admin/optimizations', requireOwner, async (_req, res) => {
+  try {
+    const breakdown = await getAdminOptimizationsBreakdown();
+    res.json({ ok: true, ...breakdown });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load admin optimizations breakdown' });
+  }
+});
+
+// Creator Satisfaction Review submission (public / client)
+app.post('/api/reviews', express.json({ limit: '10kb' }), async (req, res) => {
+  try {
+    const { rating, category, message, contact, name } = req.body || {};
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Feedback message is required.' });
+    }
+    const cId = req.isOwner ? 'owner' : (req.client?.clientId || req.clientId || 'guest');
+    const cName = name || req.client?.name || req.clientName || 'Creator';
+    const review = await recordReview({
+      rating,
+      category,
+      message,
+      contact,
+      name: cName,
+      clientId: cId
+    });
+    console.log(`[review] Review submitted by ${cName} (${cId}): ${rating}★ [${category}]`);
+    res.json({ ok: true, review });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to submit review' });
+  }
+});
+
+// Admin: Get all creator reviews
+app.get('/api/admin/reviews', requireOwner, async (_req, res) => {
+  try {
+    const reviews = await getReviews();
+    res.json({ ok: true, reviews });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load reviews' });
   }
 });
 
@@ -874,6 +1011,8 @@ app.post('/api/jobs', upload.single('video'), async (req, res) => {
       outputBytes: null,
       error: null,
       fileName: req.file?.originalname || null,
+      clientId: req.clientId || 'guest',
+      clientName: req.clientName || 'Guest Creator',
     };
     jobs.set(id, job);
     console.log(`[job ${id}] queued (${job.inputBytes} bytes, ${jobs.size} total)`);
@@ -1015,6 +1154,8 @@ app.post('/api/uploads/:id/start', express.json({ limit: '10kb' }), async (req, 
       status: 'queued', mode, ensureH264, createdAt: Date.now(),
       inputBytes: up.size, outputBytes: null, error: null,
       fileName: up.name || null,
+      clientId: req.clientId || 'guest',
+      clientName: req.clientName || 'Guest Creator',
     };
     jobs.set(id, job);
     console.log(`[job ${id}] queued from upload ${uploadId} (${up.size} bytes, ensureH264=${ensureH264}, ${jobs.size} total)`);
