@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Logo from './Logo.jsx';
 import {
   PremiumKeyIcon, KeyIcon, RefreshIcon, CheckIcon, CopyIcon,
-  TrashIcon, SearchIcon, LogoutIcon, ChevronDownIcon, ActivityIcon,
-  ShieldIcon, FilmIcon, LightningIcon, HdrIcon, FpsIcon, UserIcon,
-  LayersIcon, AlertTriangleIcon, InfoIcon, CloseIcon
+  TrashIcon, SearchIcon, LogoutIcon, ActivityIcon,
+  ShieldIcon, FilmIcon, HdrIcon, FpsIcon, UserIcon,
+  LayersIcon, AlertTriangleIcon, CloseIcon
 } from './icons.jsx';
 
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -19,7 +19,7 @@ export default function AdminPage({
   onSignOut,
 }) {
   // Navigation tabs inside the Admin Command Center
-  const [activeAdminTab, setActiveAdminTab] = useState('telemetry'); // 'telemetry' | 'creators' | 'referrals' | 'jobs' | 'reviews' | 'system'
+  const [activeAdminTab, setActiveAdminTab] = useState('creators'); // 'creators' | 'telemetry' | 'referrals' | 'jobs' | 'reviews' | 'system'
 
   // Access & Gate State
   const [tokenInput, setTokenInput] = useState('');
@@ -397,8 +397,12 @@ export default function AdminPage({
     });
   }, [telemetry.recentJobs, jobsSearch]);
 
-  // Derived metrics
-  const totalOptimizationsCount = telemetry.totalOptimizations || 0;
+  // Real counts vs public baseline counts
+  const realOptimizationsCount = telemetry.totalOptimizations || 0;
+  const publicOptimizationsCount = 54 + realOptimizationsCount;
+  const realClientsCount = clients.length;
+  const publicUsersCount = 13 + realClientsCount;
+
   const avgSatisfaction = useMemo(() => {
     if (!reviews.length) return '5.0';
     const sum = reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
@@ -408,10 +412,9 @@ export default function AdminPage({
   // If not master owner, show the Executive Command Security Gate
   if (!ownerAuthenticated || !isMasterOwner) {
     return (
-      <main id="admin-gate" className="min-h-screen pt-28 pb-20 px-4 flex items-center justify-center bg-[hsl(var(--bg))] text-white selection:bg-cyan-500/30">
+      <main id="admin-gate" className="min-h-screen pt-32 sm:pt-36 pb-20 px-4 flex items-center justify-center bg-[hsl(var(--bg))] text-white selection:bg-cyan-500/30">
         <div className="w-full max-w-md">
           <div className="relative rounded-3xl border border-white/15 bg-neutral-950/85 p-7 sm:p-9 shadow-2xl backdrop-blur-2xl text-center overflow-hidden">
-            {/* Top accent light */}
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent pointer-events-none" />
 
             <div className="flex justify-center mb-4">
@@ -425,7 +428,7 @@ export default function AdminPage({
               Restricted Operations
             </div>
 
-            <h1 className="font-clash inframe-title font-semibold text-2xl text-white tracking-tight">
+            <h1 className="font-semibold text-2xl text-white tracking-tight">
               Studio Command Center
             </h1>
             <p className="font-sans text-xs text-neutral-400 mt-1.5 leading-relaxed">
@@ -449,7 +452,7 @@ export default function AdminPage({
                   <button
                     type="button"
                     onClick={() => setShowTokenInput((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400 hover:text-white transition-colors cursor-pointer"
                   >
                     {showTokenInput ? 'Hide' : 'Show'}
                   </button>
@@ -467,17 +470,18 @@ export default function AdminPage({
                 <button
                   type="submit"
                   disabled={authChecking || !tokenInput.trim()}
-                  className="w-full rounded-xl bg-white px-5 py-2.5 text-xs font-clash inframe-title font-semibold text-black hover:bg-neutral-200 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:pointer-events-none cursor-pointer flex items-center justify-center gap-2"
+                  style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                  className="w-full rounded-xl px-5 py-2.5 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-40"
                 >
                   {authChecking ? (
                     <>
-                      <RefreshIcon width={14} height={14} className="animate-spin" />
-                      <span>Verifying Master Credentials…</span>
+                      <RefreshIcon width={14} height={14} className="animate-spin" style={{ color: '#000000' }} />
+                      <span style={{ color: '#000000', fontWeight: 600 }}>Verifying Credentials…</span>
                     </>
                   ) : (
                     <>
-                      <ShieldIcon width={14} height={14} />
-                      <span>Unlock Command Center</span>
+                      <ShieldIcon width={14} height={14} style={{ color: '#000000' }} />
+                      <span style={{ color: '#000000', fontWeight: 600 }}>Unlock Command Center</span>
                     </>
                   )}
                 </button>
@@ -503,9 +507,9 @@ export default function AdminPage({
   return (
     <main
       id="admin-page"
-      className="min-h-screen pt-24 sm:pt-28 md:pt-32 pb-24 bg-[hsl(var(--bg))] text-white selection:bg-cyan-500/30"
+      className="min-h-screen pt-28 sm:pt-32 md:pt-36 pb-24 bg-[hsl(var(--bg))] text-white selection:bg-cyan-500/30"
     >
-      <div className="container-hirael max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+      <div className="container-hirael max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Toast Alerts */}
         {actionError && (
           <div className="fixed top-20 right-4 z-50 p-4 rounded-2xl bg-rose-950/90 border border-rose-500/30 shadow-2xl backdrop-blur-xl text-rose-200 text-xs flex items-center gap-3 animate-fade-in max-w-md">
@@ -522,146 +526,123 @@ export default function AdminPage({
           </div>
         )}
 
-        {/* 1. Command Top Navigation Bar */}
-        <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-4 sm:p-6 backdrop-blur-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
-          <div className="flex items-center gap-3.5">
-            <div className="size-11 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0">
-              <Logo size={24} />
+        {/* 1. Studio Command Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-2 border-b border-white/[0.08]">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-semibold text-xl sm:text-2xl text-white tracking-tight">
+                Studio Command Center
+              </h1>
+              <span className="px-2 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono font-medium text-cyan-300 uppercase tracking-wider">
+                Owner Console
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-clash inframe-title font-semibold text-lg sm:text-xl text-white tracking-tight">
-                  Studio Command Center
-                </h1>
-                <span className="px-2 py-0.5 rounded-md bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono font-medium text-cyan-300 uppercase tracking-wider">
-                  Master Owner
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-400 mt-1 font-mono">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Engine Online
-                </span>
-                <span className="text-white/20">·</span>
-                <span>Timescale 19,200</span>
-                <span className="text-white/20">·</span>
-                <span>{serverHealth ? `${serverHealth.freeDiskMb ? (serverHealth.freeDiskMb / 1024).toFixed(1) : '72.6'} GB Free` : 'NVMe Active'}</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-400 mt-1 font-mono">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Engine
+              </span>
+              <span className="text-white/20">·</span>
+              <span>19,200 Timescale</span>
+              <span className="text-white/20">·</span>
+              <span>{serverHealth ? `${serverHealth.freeDiskMb ? (serverHealth.freeDiskMb / 1024).toFixed(1) : '80'} GB Free NVMe` : 'Storage Active'}</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
             <button
               type="button"
               onClick={() => loadAllData(false)}
               disabled={refreshing}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-xs font-mono text-neutral-300 hover:text-white hover:bg-white/[0.07] transition-all flex items-center gap-2 cursor-pointer"
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-mono text-neutral-300 hover:text-white hover:bg-white/[0.07] transition-all flex items-center gap-1.5 cursor-pointer"
               title="Refresh all platform statistics"
             >
-              <RefreshIcon width={13} height={13} className={refreshing ? 'animate-spin text-cyan-400' : ''} />
-              <span>{refreshing ? 'Syncing…' : 'Sync Data'}</span>
+              <RefreshIcon width={12} height={12} className={refreshing ? 'animate-spin text-cyan-400' : ''} />
+              <span>{refreshing ? 'Syncing…' : 'Sync'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportSnapshot}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-xs font-mono text-neutral-300 hover:text-white hover:bg-white/[0.07] transition-all flex items-center gap-2 cursor-pointer"
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-mono text-neutral-300 hover:text-white hover:bg-white/[0.07] transition-all flex items-center gap-1.5 cursor-pointer"
               title="Download JSON snapshot of platform database"
             >
-              <ActivityIcon width={13} height={13} className="text-white/70" />
-              <span>Export Snapshot</span>
+              <ActivityIcon width={12} height={12} className="text-white/70" />
+              <span>Export</span>
             </button>
 
             <button
               type="button"
               onClick={() => onSwitchTab?.('home')}
-              className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-clash inframe-title font-medium text-white hover:bg-white/20 transition-all cursor-pointer flex items-center gap-1.5"
+              className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-all cursor-pointer flex items-center gap-1"
             >
-              <span>&larr; Studio Showcase</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-clash inframe-title font-medium text-rose-300 hover:bg-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-              title="Sign out of owner session"
-            >
-              <LogoutIcon width={13} height={13} />
-              <span className="hidden sm:inline">Exit</span>
+              <span>&larr; Studio</span>
             </button>
           </div>
         </div>
 
         {/* 2. Executive Quick-Telemetry Bar (4 Key Metric Tiles) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
           {/* Card 1: Mastered Videos */}
-          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-4 sm:p-5 backdrop-blur-xl relative overflow-hidden group">
-            <div className="flex items-center justify-between text-neutral-400 text-xs font-sans mb-1.5">
-              <span>Mastered Videos (Real)</span>
-              <FilmIcon width={15} height={15} className="text-cyan-400" />
+          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-3.5 sm:p-5 backdrop-blur-xl relative overflow-hidden">
+            <div className="flex items-center justify-between text-neutral-400 text-[11px] sm:text-xs font-sans mb-1">
+              <span>Optimizations</span>
+              <FilmIcon width={14} height={14} className="text-cyan-400 shrink-0" />
             </div>
-            <div className="font-clash inframe-title font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-2">
-              <span>{loading ? '—' : totalOptimizationsCount}</span>
-              <span className="text-[11px] font-mono text-cyan-300 font-normal">
-                ({54 + totalOptimizationsCount} public)
+            <div className="font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-1.5">
+              <span>{loading ? '—' : publicOptimizationsCount}</span>
+              <span className="text-[10px] sm:text-xs font-mono text-cyan-300 font-normal">
+                ({realOptimizationsCount} real)
               </span>
             </div>
-            <div className="mt-2 text-[10.5px] font-mono text-neutral-400 flex items-center gap-1.5">
-              <span className="text-cyan-300">54 base offset</span>
-              <span className="text-white/20">·</span>
-              <span>{totalOptimizationsCount} real runs</span>
+            <div className="mt-1.5 text-[10px] sm:text-[11px] font-mono text-neutral-400 truncate">
+              54 base · {realOptimizationsCount} real runs
             </div>
           </div>
 
           {/* Card 2: Registered Creators */}
-          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-4 sm:p-5 backdrop-blur-xl relative overflow-hidden group">
-            <div className="flex items-center justify-between text-neutral-400 text-xs font-sans mb-1.5">
-              <span>Creator Passes (Real)</span>
-              <UserIcon width={15} height={15} className="text-indigo-400" />
+          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-3.5 sm:p-5 backdrop-blur-xl relative overflow-hidden">
+            <div className="flex items-center justify-between text-neutral-400 text-[11px] sm:text-xs font-sans mb-1">
+              <span>Creator Passes</span>
+              <UserIcon width={14} height={14} className="text-indigo-400 shrink-0" />
             </div>
-            <div className="font-clash inframe-title font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-2">
-              <span>{loading ? '—' : clients.length}</span>
-              <span className="text-[11px] font-mono text-indigo-300 font-normal">
-                ({13 + clients.length} public)
+            <div className="font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-1.5">
+              <span>{loading ? '—' : publicUsersCount}</span>
+              <span className="text-[10px] sm:text-xs font-mono text-indigo-300 font-normal">
+                ({realClientsCount} real)
               </span>
             </div>
-            <div className="mt-2 text-[10.5px] font-mono text-neutral-400 flex items-center gap-1.5">
-              <span className="text-emerald-400">{clients.filter((c) => c.active !== false).length} Active</span>
-              <span className="text-white/20">·</span>
-              <span>13 base offset</span>
+            <div className="mt-1.5 text-[10px] sm:text-[11px] font-mono text-neutral-400 truncate">
+              13 base · {realClientsCount} real passes
             </div>
           </div>
 
           {/* Card 3: Referral Invites */}
-          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-4 sm:p-5 backdrop-blur-xl relative overflow-hidden group">
-            <div className="flex items-center justify-between text-neutral-400 text-xs font-sans mb-1.5">
+          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-3.5 sm:p-5 backdrop-blur-xl relative overflow-hidden">
+            <div className="flex items-center justify-between text-neutral-400 text-[11px] sm:text-xs font-sans mb-1">
               <span>Referral Codes</span>
-              <KeyIcon width={15} height={15} className="text-amber-400" />
+              <KeyIcon width={14} height={14} className="text-amber-400 shrink-0" />
             </div>
-            <div className="font-clash inframe-title font-semibold text-2xl sm:text-3xl text-white tracking-tight">
+            <div className="font-semibold text-2xl sm:text-3xl text-white tracking-tight">
               {loading ? '—' : referrals.length}
             </div>
-            <div className="mt-2 text-[10.5px] font-mono text-neutral-400 flex items-center gap-1.5">
-              <span className="text-amber-300">{referrals.filter((r) => r.active !== false).length} Active</span>
-              <span className="text-white/20">·</span>
-              <span>{referrals.reduce((acc, r) => acc + (r.usedCount || 0), 0)} Redemptions</span>
+            <div className="mt-1.5 text-[10px] sm:text-[11px] font-mono text-neutral-400 truncate">
+              {referrals.filter((r) => r.active !== false).length} active · {referrals.reduce((acc, r) => acc + (r.usedCount || 0), 0)} redeemed
             </div>
           </div>
 
           {/* Card 4: Creator Satisfaction */}
-          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-4 sm:p-5 backdrop-blur-xl relative overflow-hidden group">
-            <div className="flex items-center justify-between text-neutral-400 text-xs font-sans mb-1.5">
-              <span>Creator Satisfaction</span>
-              <span className="text-amber-300 font-bold">★</span>
+          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-3.5 sm:p-5 backdrop-blur-xl relative overflow-hidden">
+            <div className="flex items-center justify-between text-neutral-400 text-[11px] sm:text-xs font-sans mb-1">
+              <span>Satisfaction</span>
+              <span className="text-amber-300 font-bold text-xs">★</span>
             </div>
-            <div className="font-clash inframe-title font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-1.5">
+            <div className="font-semibold text-2xl sm:text-3xl text-white tracking-tight flex items-baseline gap-1">
               <span>{avgSatisfaction}</span>
-              <span className="text-xs text-neutral-400 font-sans font-normal">/ 5.0</span>
+              <span className="text-[10px] sm:text-xs text-neutral-400 font-sans font-normal">/ 5.0</span>
             </div>
-            <div className="mt-2 text-[10.5px] font-mono text-neutral-400 flex items-center gap-1.5">
-              <span className="text-white">{reviews.length} Reviews</span>
-              <span className="text-white/20">·</span>
-              <span className="text-emerald-400">100% Positive</span>
+            <div className="mt-1.5 text-[10px] sm:text-[11px] font-mono text-neutral-400 truncate">
+              {reviews.length} reviews · 100% positive
             </div>
           </div>
         </div>
@@ -670,8 +651,8 @@ export default function AdminPage({
         <div className="border-b border-white/10 pb-2">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
             {[
-              { id: 'telemetry', label: 'Pipelines & Leaderboard', icon: ActivityIcon },
               { id: 'creators', label: `Creator Passes (${clients.length})`, icon: UserIcon },
+              { id: 'telemetry', label: 'Pipelines & Leaderboard', icon: ActivityIcon },
               { id: 'referrals', label: `Referral Invites (${referrals.length})`, icon: KeyIcon },
               { id: 'jobs', label: `Mastered Jobs (${telemetry.recentJobs?.length || 0})`, icon: FilmIcon },
               { id: 'reviews', label: `Reviews & Feedback (${reviews.length})`, icon: PremiumKeyIcon },
@@ -683,201 +664,72 @@ export default function AdminPage({
                   key={id}
                   type="button"
                   onClick={() => setActiveAdminTab(id)}
-                  className={`rounded-full px-4 py-2 text-xs font-clash inframe-title font-medium transition-all shrink-0 flex items-center gap-2 cursor-pointer ${
+                  style={active ? { backgroundColor: '#ffffff', color: '#000000' } : {}}
+                  className={`rounded-full px-3.5 py-2 text-xs font-medium transition-all shrink-0 flex items-center gap-2 cursor-pointer ${
                     active
-                      ? 'bg-white text-black shadow-lg scale-[1.02]'
-                      : 'text-neutral-400 hover:text-white hover:bg-white/[0.06]'
+                      ? 'shadow-lg font-semibold scale-[1.02]'
+                      : 'text-neutral-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08]'
                   }`}
                 >
-                  <Icon width={13} height={13} className={active ? 'text-black' : 'text-neutral-400'} />
-                  <span>{label}</span>
+                  <Icon
+                    width={13}
+                    height={13}
+                    style={active ? { color: '#000000' } : {}}
+                    className={active ? 'text-black' : 'text-neutral-400'}
+                  />
+                  <span style={active ? { color: '#000000', fontWeight: 600 } : {}}>
+                    {label}
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* 4. Tab 1: Pipelines & Leaderboard */}
-        {activeAdminTab === 'telemetry' && (
-          <div className="space-y-6">
-            {/* Ingestion Mode Distribution */}
-            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-7 backdrop-blur-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
-                <div>
-                  <h2 className="font-clash inframe-title font-semibold text-lg text-white">
-                    Master Ingestion Pipelines
-                  </h2>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Live distribution across Apple HDR Rec.2020, High-Framerate 60/120fps, and Rec.709 modes.
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-neutral-400 flex items-center gap-2">
-                  <span className="size-2 rounded-full bg-cyan-400" />
-                  <span>Active Timescale: 19,200</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-neutral-400">Apple HDR (Rec.2020 / HLG)</span>
-                    <HdrIcon width={14} height={14} className="text-amber-400" />
-                  </div>
-                  <div className="font-clash inframe-title text-2xl font-semibold text-white">
-                    {telemetry.pipelineStats?.['HDR Rec.2020 / HLG'] || 0}
-                  </div>
-                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-amber-400 to-amber-200"
-                      style={{
-                        width: totalOptimizationsCount > 0
-                          ? `${Math.min(100, Math.round(((telemetry.pipelineStats?.['HDR Rec.2020 / HLG'] || 0) / totalOptimizationsCount) * 100))}%`
-                          : '0%',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-neutral-400">60fps &amp; 120fps Fluid Motion</span>
-                    <FpsIcon width={14} height={14} className="text-cyan-400" />
-                  </div>
-                  <div className="font-clash inframe-title text-2xl font-semibold text-white">
-                    {totalOptimizationsCount}
-                  </div>
-                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-200 w-full" />
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-neutral-400">Standard Rec.709 Lossless</span>
-                    <LayersIcon width={14} height={14} className="text-emerald-400" />
-                  </div>
-                  <div className="font-clash inframe-title text-2xl font-semibold text-white">
-                    {telemetry.pipelineStats?.['Standard 709'] || 0}
-                  </div>
-                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-400 to-emerald-200"
-                      style={{
-                        width: totalOptimizationsCount > 0
-                          ? `${Math.min(100, Math.round(((telemetry.pipelineStats?.['Standard 709'] || 0) / totalOptimizationsCount) * 100))}%`
-                          : '0%',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Creator Leaderboard */}
-            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-7 backdrop-blur-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                <div>
-                  <h2 className="font-clash inframe-title font-semibold text-lg text-white">
-                    Creator Activity Leaderboard
-                  </h2>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Ranked by total mastered videos and active pipeline engagement.
-                  </p>
-                </div>
-              </div>
-
-              {!telemetry.userLeaderboard || telemetry.userLeaderboard.length === 0 ? (
-                <div className="py-12 text-center text-xs text-neutral-400 font-mono">
-                  No video optimizations recorded in the audit database yet.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
-                    <thead>
-                      <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3">Rank</th>
-                        <th className="py-3 px-3">Creator Name</th>
-                        <th className="py-3 px-3">Client ID</th>
-                        <th className="py-3 px-3 text-right">Mastered Videos</th>
-                        <th className="py-3 px-3">Primary Pipeline</th>
-                        <th className="py-3 px-3">Last Active</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.05]">
-                      {telemetry.userLeaderboard.map((item, idx) => (
-                        <tr key={item.clientId} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3 px-3 font-mono text-neutral-400">
-                            #{idx + 1}
-                          </td>
-                          <td className="py-3 px-3 font-medium text-white">
-                            {item.name || item.clientId}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-neutral-400 text-[11px]">
-                            {item.clientId}
-                          </td>
-                          <td className="py-3 px-3 text-right font-clash inframe-title font-semibold text-white">
-                            {item.totalOptimizations}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className="px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[10px] font-mono">
-                              {item.primaryPipeline || '60fps Lossless'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
-                            {item.lastActive ? new Date(item.lastActive).toLocaleDateString() : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 5. Tab 2: Creator Passes */}
+        {/* 4. Tab: Creator Passes */}
         {activeAdminTab === 'creators' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Top Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex flex-1 items-center gap-2 max-w-md">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="flex flex-1 items-center gap-2">
                 <div className="relative flex-1">
                   <SearchIcon width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                   <input
                     type="text"
                     value={creatorSearch}
                     onChange={(e) => setCreatorSearch(e.target.value)}
-                    placeholder="Search by creator name or ID…"
+                    placeholder="Search creator name or ID…"
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-9 pr-3 py-2 text-xs text-white placeholder-white/30 focus:border-white/30 focus:outline-none transition-colors"
                   />
                 </div>
                 <select
                   value={creatorTierFilter}
                   onChange={(e) => setCreatorTierFilter(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 focus:outline-none"
+                  className="rounded-xl border border-white/10 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-300 focus:outline-none"
                 >
                   <option value="ALL">All Tiers</option>
-                  <option value="PAID">Paid Member</option>
-                  <option value="REDEEMED">Redeemed Invite</option>
+                  <option value="PAID">Paid</option>
+                  <option value="REDEEMED">Redeemed</option>
                 </select>
                 <select
                   value={creatorStatusFilter}
                   onChange={(e) => setCreatorStatusFilter(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 focus:outline-none"
+                  className="rounded-xl border border-white/10 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-300 focus:outline-none"
                 >
                   <option value="ALL">All Status</option>
-                  <option value="ACTIVE">Active Only</option>
-                  <option value="SUSPENDED">Suspended Only</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="SUSPENDED">Suspended</option>
                 </select>
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowCreateCreatorModal((v) => !v)}
-                className="rounded-xl bg-white px-4 py-2 text-xs font-clash inframe-title font-semibold text-black hover:bg-neutral-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                className="w-full sm:w-auto rounded-xl px-4 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-md"
               >
-                <span>+ Issue Creator Pass</span>
+                <span className="font-bold text-sm leading-none" style={{ color: '#000000' }}>+</span>
+                <span style={{ color: '#000000', fontWeight: 600 }}>Issue Creator Pass</span>
               </button>
             </div>
 
@@ -885,7 +737,7 @@ export default function AdminPage({
             {showCreateCreatorModal && (
               <form onSubmit={handleCreateClient} className="rounded-3xl border border-white/15 bg-neutral-950/90 p-5 sm:p-6 backdrop-blur-2xl space-y-4 animate-fade-in shadow-2xl">
                 <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <h3 className="font-clash inframe-title font-semibold text-sm text-white">
+                  <h3 className="font-semibold text-sm text-white">
                     Issue New Creator Pass
                   </h3>
                   <button type="button" onClick={() => setShowCreateCreatorModal(false)} className="text-neutral-400 hover:text-white">✕</button>
@@ -936,48 +788,40 @@ export default function AdminPage({
                   <button
                     type="submit"
                     disabled={creatingClient || !newClientName.trim()}
-                    className="rounded-xl bg-cyan-400 hover:bg-cyan-300 px-5 py-2 text-xs font-clash inframe-title font-semibold text-black transition-all disabled:opacity-40"
+                    style={{ backgroundColor: '#22d3ee', color: '#000000' }}
+                    className="rounded-xl px-5 py-2 text-xs font-semibold transition-all disabled:opacity-40"
                   >
-                    {creatingClient ? 'Issuing Pass…' : 'Generate & Issue Pass'}
+                    <span style={{ color: '#000000', fontWeight: 600 }}>
+                      {creatingClient ? 'Issuing Pass…' : 'Generate & Issue Pass'}
+                    </span>
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Creators Table */}
-            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-6 backdrop-blur-xl">
+            {/* Creators Content: Desktop Table + Mobile Cards */}
+            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-4 sm:p-6 backdrop-blur-xl">
               {filteredClients.length === 0 ? (
                 <div className="py-12 text-center text-xs text-neutral-400 font-mono">
                   No creator passes match the current filter criteria.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
-                    <thead>
-                      <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3">Creator Name</th>
-                        <th className="py-3 px-3">Client ID</th>
-                        <th className="py-3 px-3">Tier</th>
-                        <th className="py-3 px-3">Access Code</th>
-                        <th className="py-3 px-3">Created</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.05]">
-                      {filteredClients.map((client) => {
-                        const isSuspended = client.active === false;
-                        return (
-                          <tr key={client.clientId} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="py-3 px-3 font-medium text-white">
-                              {client.name || 'Creator'}
-                            </td>
-                            <td className="py-3 px-3 font-mono text-neutral-300 text-[11px]">
+                <>
+                  {/* Mobile View: High-clarity touch cards */}
+                  <div className="sm:hidden space-y-3">
+                    {filteredClients.map((client) => {
+                      const isSuspended = client.active === false;
+                      return (
+                        <div key={client.clientId} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-semibold text-white text-sm">
+                                {client.name || 'Creator'}
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => copyText(client.clientId, `cid_${client.clientId}`)}
-                                className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
-                                title="Click to copy Client ID"
+                                className="font-mono text-xs text-neutral-400 hover:text-cyan-300 flex items-center gap-1 mt-0.5 cursor-pointer"
                               >
                                 <span>{client.clientId}</span>
                                 {copiedKey === `cid_${client.clientId}` ? (
@@ -986,65 +830,295 @@ export default function AdminPage({
                                   <CopyIcon width={11} height={11} className="opacity-40" />
                                 )}
                               </button>
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                                client.tier === 'paid'
-                                  ? 'bg-amber-950/60 border border-amber-500/30 text-amber-300'
-                                  : 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-300'
-                              }`}>
-                                {client.tier === 'paid' ? 'Paid Member' : 'Redeemed'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 font-mono text-neutral-400 text-[11px]">
-                              <button
-                                type="button"
-                                onClick={() => copyText(client.accessCode, `code_${client.clientId}`)}
-                                className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
-                                title="Click to copy Access Code"
-                              >
-                                <span>{client.accessCode ? '••••••••••••' : '—'}</span>
-                                {copiedKey === `code_${client.clientId}` ? (
-                                  <CheckIcon width={11} height={11} className="text-emerald-400" />
-                                ) : (
-                                  <CopyIcon width={11} height={11} className="opacity-40" />
-                                )}
-                              </button>
-                            </td>
-                            <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
-                              {client.createdAt ? new Date(client.createdAt).toLocaleDateString() : '—'}
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                                isSuspended
-                                  ? 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
-                                  : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
-                              }`}>
-                                {isSuspended ? 'Suspended' : 'Active'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono shrink-0 ${
+                              client.tier === 'paid'
+                                ? 'bg-amber-950/60 border border-amber-500/30 text-amber-300'
+                                : 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-300'
+                            }`}>
+                              {client.tier === 'paid' ? 'Paid Member' : 'Redeemed'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.05]">
+                            <button
+                              type="button"
+                              onClick={() => copyText(client.accessCode, `code_${client.clientId}`)}
+                              className="font-mono text-neutral-400 hover:text-cyan-300 flex items-center gap-1.5"
+                            >
+                              <span>Code: ••••••••••••</span>
+                              {copiedKey === `code_${client.clientId}` ? (
+                                <CheckIcon width={11} height={11} className="text-emerald-400" />
+                              ) : (
+                                <CopyIcon width={11} height={11} className="opacity-40" />
+                              )}
+                            </button>
+
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                              isSuspended
+                                ? 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {isSuspended ? 'Suspended' : 'Active'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/[0.05]">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleClient(client.clientId)}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/10 text-neutral-300"
+                            >
+                              {isSuspended ? 'Activate' : 'Suspend'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteClient(client.clientId)}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop / Tablet View: Wide table */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-left text-xs font-sans">
+                      <thead>
+                        <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
+                          <th className="py-3 px-3">Creator Name</th>
+                          <th className="py-3 px-3">Client ID</th>
+                          <th className="py-3 px-3">Tier</th>
+                          <th className="py-3 px-3">Access Code</th>
+                          <th className="py-3 px-3">Created</th>
+                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.05]">
+                        {filteredClients.map((client) => {
+                          const isSuspended = client.active === false;
+                          return (
+                            <tr key={client.clientId} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="py-3 px-3 font-medium text-white">
+                                {client.name || 'Creator'}
+                              </td>
+                              <td className="py-3 px-3 font-mono text-neutral-300 text-[11px]">
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleClient(client.clientId)}
-                                  className="text-[11px] text-neutral-400 hover:text-white px-2 py-1 rounded bg-white/[0.04] hover:bg-white/10 transition-colors"
+                                  onClick={() => copyText(client.clientId, `cid_${client.clientId}`)}
+                                  className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
+                                  title="Click to copy Client ID"
                                 >
-                                  {isSuspended ? 'Activate' : 'Suspend'}
+                                  <span>{client.clientId}</span>
+                                  {copiedKey === `cid_${client.clientId}` ? (
+                                    <CheckIcon width={11} height={11} className="text-emerald-400" />
+                                  ) : (
+                                    <CopyIcon width={11} height={11} className="opacity-40" />
+                                  )}
                                 </button>
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                                  client.tier === 'paid'
+                                    ? 'bg-amber-950/60 border border-amber-500/30 text-amber-300'
+                                    : 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-300'
+                                }`}>
+                                  {client.tier === 'paid' ? 'Paid Member' : 'Redeemed'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-mono text-neutral-400 text-[11px]">
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteClient(client.clientId)}
-                                  className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
-                                  title="Permanently delete pass"
+                                  onClick={() => copyText(client.accessCode, `code_${client.clientId}`)}
+                                  className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
+                                  title="Click to copy Access Code"
                                 >
-                                  Delete
+                                  <span>{client.accessCode ? '••••••••••••' : '—'}</span>
+                                  {copiedKey === `code_${client.clientId}` ? (
+                                    <CheckIcon width={11} height={11} className="text-emerald-400" />
+                                  ) : (
+                                    <CopyIcon width={11} height={11} className="opacity-40" />
+                                  )}
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              </td>
+                              <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
+                                {client.createdAt ? new Date(client.createdAt).toLocaleDateString() : '—'}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                                  isSuspended
+                                    ? 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
+                                    : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
+                                }`}>
+                                  {isSuspended ? 'Suspended' : 'Active'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleClient(client.clientId)}
+                                    className="text-[11px] text-neutral-400 hover:text-white px-2 py-1 rounded bg-white/[0.04] hover:bg-white/10 transition-colors"
+                                  >
+                                    {isSuspended ? 'Activate' : 'Suspend'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteClient(client.clientId)}
+                                    className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
+                                    title="Permanently delete pass"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 5. Tab: Pipelines & Leaderboard */}
+        {activeAdminTab === 'telemetry' && (
+          <div className="space-y-6">
+            {/* Ingestion Mode Distribution */}
+            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-7 backdrop-blur-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+                <div>
+                  <h2 className="font-semibold text-lg text-white">
+                    Master Ingestion Pipelines
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Live distribution across Apple HDR Rec.2020, High-Framerate 60/120fps, and Rec.709 modes.
+                  </p>
+                </div>
+                <div className="text-xs font-mono text-neutral-400 flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-cyan-400" />
+                  <span>Active Timescale: 19,200</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-neutral-400">Apple HDR (Rec.2020 / HLG)</span>
+                    <HdrIcon width={14} height={14} className="text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-semibold text-white">
+                    {telemetry.pipelineStats?.['HDR Rec.2020 / HLG'] || 0}
+                  </div>
+                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-amber-200"
+                      style={{
+                        width: realOptimizationsCount > 0
+                          ? `${Math.min(100, Math.round(((telemetry.pipelineStats?.['HDR Rec.2020 / HLG'] || 0) / realOptimizationsCount) * 100))}%`
+                          : '0%',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-neutral-400">60fps &amp; 120fps Fluid Motion</span>
+                    <FpsIcon width={14} height={14} className="text-cyan-400" />
+                  </div>
+                  <div className="text-2xl font-semibold text-white">
+                    {realOptimizationsCount}
+                  </div>
+                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-200 w-full" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-neutral-400">Standard Rec.709 Lossless</span>
+                    <LayersIcon width={14} height={14} className="text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-semibold text-white">
+                    {telemetry.pipelineStats?.['Standard 709'] || 0}
+                  </div>
+                  <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-400 to-emerald-200"
+                      style={{
+                        width: realOptimizationsCount > 0
+                          ? `${Math.min(100, Math.round(((telemetry.pipelineStats?.['Standard 709'] || 0) / realOptimizationsCount) * 100))}%`
+                          : '0%',
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Creator Leaderboard */}
+            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-7 backdrop-blur-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div>
+                  <h2 className="font-semibold text-lg text-white">
+                    Creator Activity Leaderboard
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Ranked by total mastered videos and active pipeline engagement.
+                  </p>
+                </div>
+              </div>
+
+              {!telemetry.userLeaderboard || telemetry.userLeaderboard.length === 0 ? (
+                <div className="py-12 text-center text-xs text-neutral-400 font-mono">
+                  No video optimizations recorded in the audit database yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-sans">
+                    <thead>
+                      <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
+                        <th className="py-3 px-3">Rank</th>
+                        <th className="py-3 px-3">Creator Name</th>
+                        <th className="py-3 px-3">Client ID</th>
+                        <th className="py-3 px-3 text-right">Mastered Videos</th>
+                        <th className="py-3 px-3">Primary Pipeline</th>
+                        <th className="py-3 px-3">Last Active</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.05]">
+                      {telemetry.userLeaderboard.map((item, idx) => (
+                        <tr key={item.clientId} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3 px-3 font-mono text-neutral-400">
+                            #{idx + 1}
+                          </td>
+                          <td className="py-3 px-3 font-medium text-white">
+                            {item.name || item.clientId}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-neutral-400 text-[11px]">
+                            {item.clientId}
+                          </td>
+                          <td className="py-3 px-3 text-right font-semibold text-white">
+                            {item.totalOptimizations}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[10px] font-mono">
+                              {item.primaryPipeline || '60fps Lossless'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
+                            {item.lastActive ? new Date(item.lastActive).toLocaleDateString() : '—'}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -1053,12 +1127,12 @@ export default function AdminPage({
           </div>
         )}
 
-        {/* 6. Tab 3: Referral Passes */}
+        {/* 6. Tab: Referral Passes */}
         {activeAdminTab === 'referrals' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Top Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex flex-1 items-center gap-2 max-w-md">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="flex flex-1 items-center gap-2">
                 <div className="relative flex-1">
                   <SearchIcon width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                   <input
@@ -1072,10 +1146,10 @@ export default function AdminPage({
                 <select
                   value={referralStatusFilter}
                   onChange={(e) => setReferralStatusFilter(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 focus:outline-none"
+                  className="rounded-xl border border-white/10 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-300 focus:outline-none"
                 >
                   <option value="ALL">All Status</option>
-                  <option value="ACTIVE">Active Available</option>
+                  <option value="ACTIVE">Active</option>
                   <option value="EXHAUSTED">Exhausted</option>
                   <option value="DISABLED">Disabled</option>
                 </select>
@@ -1084,9 +1158,11 @@ export default function AdminPage({
               <button
                 type="button"
                 onClick={() => setShowCreateRefModal((v) => !v)}
-                className="rounded-xl bg-white px-4 py-2 text-xs font-clash inframe-title font-semibold text-black hover:bg-neutral-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                className="w-full sm:w-auto rounded-xl px-4 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-md"
               >
-                <span>+ Create Referral Pass</span>
+                <span className="font-bold text-sm leading-none" style={{ color: '#000000' }}>+</span>
+                <span style={{ color: '#000000', fontWeight: 600 }}>Create Referral Pass</span>
               </button>
             </div>
 
@@ -1094,7 +1170,7 @@ export default function AdminPage({
             {showCreateRefModal && (
               <form onSubmit={handleCreateReferral} className="rounded-3xl border border-white/15 bg-neutral-950/90 p-5 sm:p-6 backdrop-blur-2xl space-y-4 animate-fade-in shadow-2xl">
                 <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <h3 className="font-clash inframe-title font-semibold text-sm text-white">
+                  <h3 className="font-semibold text-sm text-white">
                     Create New Referral Pass
                   </h3>
                   <button type="button" onClick={() => setShowCreateRefModal(false)} className="text-neutral-400 hover:text-white">✕</button>
@@ -1150,151 +1226,248 @@ export default function AdminPage({
                   <button
                     type="submit"
                     disabled={creatingRef || !newRefCode.trim()}
-                    className="rounded-xl bg-cyan-400 hover:bg-cyan-300 px-5 py-2 text-xs font-clash inframe-title font-semibold text-black transition-all disabled:opacity-40"
+                    style={{ backgroundColor: '#22d3ee', color: '#000000' }}
+                    className="rounded-xl px-5 py-2 text-xs font-semibold transition-all disabled:opacity-40"
                   >
-                    {creatingRef ? 'Creating…' : 'Generate Referral Pass'}
+                    <span style={{ color: '#000000', fontWeight: 600 }}>
+                      {creatingRef ? 'Creating…' : 'Generate Referral Pass'}
+                    </span>
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Referral Passes Table */}
-            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-6 backdrop-blur-xl">
+            {/* Referral Passes: Desktop Table + Mobile Cards */}
+            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-4 sm:p-6 backdrop-blur-xl">
               {filteredReferrals.length === 0 ? (
                 <div className="py-12 text-center text-xs text-neutral-400 font-mono">
                   No referral passes match the current filter criteria.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
-                    <thead>
-                      <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3">Pass Code</th>
-                        <th className="py-3 px-3">Usage Progress</th>
-                        <th className="py-3 px-3">Campaign Note</th>
-                        <th className="py-3 px-3">Created</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.05]">
-                      {filteredReferrals.map((ref) => {
-                        const isExhausted = ref.maxUses !== null && (ref.usedCount || 0) >= ref.maxUses;
-                        const isDisabled = ref.active === false;
-                        const isExpanded = expandedReferralCode === ref.code;
-                        return (
-                          <React.Fragment key={ref.code}>
-                            <tr className="hover:bg-white/[0.02] transition-colors">
-                              <td className="py-3 px-3 font-mono font-semibold text-white">
-                                <button
-                                  type="button"
-                                  onClick={() => copyText(ref.code, `ref_${ref.code}`)}
-                                  className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
-                                  title="Click to copy code"
-                                >
-                                  <span>{ref.code}</span>
-                                  {copiedKey === `ref_${ref.code}` ? (
-                                    <CheckIcon width={11} height={11} className="text-emerald-400" />
-                                  ) : (
-                                    <CopyIcon width={11} height={11} className="opacity-40" />
-                                  )}
-                                </button>
-                              </td>
-                              <td className="py-3 px-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-neutral-300 text-[11px]">
-                                    {ref.usedCount || 0} / {ref.maxUses === null ? '∞' : ref.maxUses}
-                                  </span>
-                                  {ref.maxUses !== null && (
-                                    <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full ${isExhausted ? 'bg-rose-400' : 'bg-cyan-400'}`}
-                                        style={{ width: `${Math.min(100, Math.round(((ref.usedCount || 0) / ref.maxUses) * 100))}%` }}
-                                      />
-                                    </div>
-                                  )}
+                <>
+                  {/* Mobile Cards View */}
+                  <div className="sm:hidden space-y-3">
+                    {filteredReferrals.map((ref) => {
+                      const isExhausted = ref.maxUses !== null && (ref.usedCount || 0) >= ref.maxUses;
+                      const isDisabled = ref.active === false;
+                      const isExpanded = expandedReferralCode === ref.code;
+                      return (
+                        <div key={ref.code} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => copyText(ref.code, `ref_${ref.code}`)}
+                                className="font-mono font-semibold text-white text-sm hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <span>{ref.code}</span>
+                                {copiedKey === `ref_${ref.code}` ? (
+                                  <CheckIcon width={11} height={11} className="text-emerald-400" />
+                                ) : (
+                                  <CopyIcon width={11} height={11} className="opacity-40" />
+                                )}
+                              </button>
+                              <div className="text-[11px] text-neutral-400 mt-0.5">
+                                {ref.note || 'No campaign note'}
+                              </div>
+                            </div>
+
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono shrink-0 ${
+                              isDisabled
+                                ? 'bg-neutral-800 text-neutral-400'
+                                : isExhausted
+                                ? 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
+                                : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
+                            }`}>
+                              {isDisabled ? 'Disabled' : isExhausted ? 'Exhausted' : 'Available'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1 border-t border-white/[0.05]">
+                            <span className="font-mono text-neutral-300 text-xs">
+                              {ref.usedCount || 0} / {ref.maxUses === null ? '∞' : ref.maxUses} used
+                            </span>
+                            {ref.maxUses !== null && (
+                              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${isExhausted ? 'bg-rose-400' : 'bg-cyan-400'}`}
+                                  style={{ width: `${Math.min(100, Math.round(((ref.usedCount || 0) / ref.maxUses) * 100))}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/[0.05]">
+                            {ref.redeemedBy && ref.redeemedBy.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedReferralCode(isExpanded ? null : ref.code)}
+                                className="text-xs text-cyan-300 px-2.5 py-1 rounded-lg bg-cyan-950/50"
+                              >
+                                {isExpanded ? 'Hide' : `Users (${ref.redeemedBy.length})`}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleReferral(ref.code)}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/10 text-neutral-300"
+                            >
+                              {isDisabled ? 'Enable' : 'Disable'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteReferral(ref.code)}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-300"
+                            >
+                              Delete
+                            </button>
+                          </div>
+
+                          {isExpanded && ref.redeemedBy && (
+                            <div className="pt-2 border-t border-white/[0.05] text-[11px] font-mono space-y-1">
+                              {ref.redeemedBy.map((u, i) => (
+                                <div key={i} className="text-neutral-400">
+                                  {u.name || 'Creator'} ({u.clientId})
                                 </div>
-                              </td>
-                              <td className="py-3 px-3 text-neutral-400 text-xs">
-                                {ref.note || '—'}
-                              </td>
-                              <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
-                                {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : '—'}
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                                  isDisabled
-                                    ? 'bg-neutral-800 text-neutral-400'
-                                    : isExhausted
-                                    ? 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
-                                    : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
-                                }`}>
-                                  {isDisabled ? 'Disabled' : isExhausted ? 'Exhausted' : 'Available'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  {ref.redeemedBy && ref.redeemedBy.length > 0 && (
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-left text-xs font-sans">
+                      <thead>
+                        <tr className="border-b border-white/10 text-neutral-400 font-mono text-[11px] uppercase tracking-wider">
+                          <th className="py-3 px-3">Pass Code</th>
+                          <th className="py-3 px-3">Usage Progress</th>
+                          <th className="py-3 px-3">Campaign Note</th>
+                          <th className="py-3 px-3">Created</th>
+                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.05]">
+                        {filteredReferrals.map((ref) => {
+                          const isExhausted = ref.maxUses !== null && (ref.usedCount || 0) >= ref.maxUses;
+                          const isDisabled = ref.active === false;
+                          const isExpanded = expandedReferralCode === ref.code;
+                          return (
+                            <React.Fragment key={ref.code}>
+                              <tr className="hover:bg-white/[0.02] transition-colors">
+                                <td className="py-3 px-3 font-mono font-semibold text-white">
+                                  <button
+                                    type="button"
+                                    onClick={() => copyText(ref.code, `ref_${ref.code}`)}
+                                    className="hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer"
+                                    title="Click to copy code"
+                                  >
+                                    <span>{ref.code}</span>
+                                    {copiedKey === `ref_${ref.code}` ? (
+                                      <CheckIcon width={11} height={11} className="text-emerald-400" />
+                                    ) : (
+                                      <CopyIcon width={11} height={11} className="opacity-40" />
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-neutral-300 text-[11px]">
+                                      {ref.usedCount || 0} / {ref.maxUses === null ? '∞' : ref.maxUses}
+                                    </span>
+                                    {ref.maxUses !== null && (
+                                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full ${isExhausted ? 'bg-rose-400' : 'bg-cyan-400'}`}
+                                          style={{ width: `${Math.min(100, Math.round(((ref.usedCount || 0) / ref.maxUses) * 100))}%` }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 text-neutral-400 text-xs">
+                                  {ref.note || '—'}
+                                </td>
+                                <td className="py-3 px-3 text-neutral-400 font-mono text-[11px]">
+                                  {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : '—'}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                                    isDisabled
+                                      ? 'bg-neutral-800 text-neutral-400'
+                                      : isExhausted
+                                      ? 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
+                                      : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
+                                  }`}>
+                                    {isDisabled ? 'Disabled' : isExhausted ? 'Exhausted' : 'Available'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {ref.redeemedBy && ref.redeemedBy.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedReferralCode(isExpanded ? null : ref.code)}
+                                        className="text-[11px] text-cyan-300 hover:text-cyan-200 px-2 py-1 rounded bg-cyan-950/50 transition-colors"
+                                      >
+                                        {isExpanded ? 'Hide' : `Users (${ref.redeemedBy.length})`}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={() => setExpandedReferralCode(isExpanded ? null : ref.code)}
-                                      className="text-[11px] text-cyan-300 hover:text-cyan-200 px-2 py-1 rounded bg-cyan-950/50 transition-colors"
+                                      onClick={() => handleToggleReferral(ref.code)}
+                                      className="text-[11px] text-neutral-400 hover:text-white px-2 py-1 rounded bg-white/[0.04] hover:bg-white/10 transition-colors"
                                     >
-                                      {isExpanded ? 'Hide Users' : `Users (${ref.redeemedBy.length})`}
+                                      {isDisabled ? 'Enable' : 'Disable'}
                                     </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleReferral(ref.code)}
-                                    className="text-[11px] text-neutral-400 hover:text-white px-2 py-1 rounded bg-white/[0.04] hover:bg-white/10 transition-colors"
-                                  >
-                                    {isDisabled ? 'Enable' : 'Disable'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteReferral(ref.code)}
-                                    className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Expanded Redemptions List */}
-                            {isExpanded && ref.redeemedBy && (
-                              <tr className="bg-white/[0.015]">
-                                <td colSpan={6} className="py-3 px-6">
-                                  <div className="text-[11px] font-mono text-neutral-400 mb-1.5 uppercase">
-                                    Creators who redeemed {ref.code}:
-                                  </div>
-                                  <div className="space-y-1">
-                                    {ref.redeemedBy.map((rUser, rIdx) => (
-                                      <div key={rIdx} className="flex items-center gap-3 text-xs text-neutral-300 font-mono">
-                                        <span className="text-white font-medium">{rUser.name || 'Creator'}</span>
-                                        <span className="text-neutral-500">({rUser.clientId})</span>
-                                        <span className="text-neutral-500 text-[10px]">
-                                          {rUser.redeemedAt ? new Date(rUser.redeemedAt).toLocaleString() : ''}
-                                        </span>
-                                      </div>
-                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteReferral(ref.code)}
+                                      className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
+                                    >
+                                      Delete
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                              {isExpanded && ref.redeemedBy && (
+                                <tr className="bg-white/[0.015]">
+                                  <td colSpan={6} className="py-3 px-6">
+                                    <div className="text-[11px] font-mono text-neutral-400 mb-1.5 uppercase">
+                                      Creators who redeemed {ref.code}:
+                                    </div>
+                                    <div className="space-y-1">
+                                      {ref.redeemedBy.map((rUser, rIdx) => (
+                                        <div key={rIdx} className="flex items-center gap-3 text-xs text-neutral-300 font-mono">
+                                          <span className="text-white font-medium">{rUser.name || 'Creator'}</span>
+                                          <span className="text-neutral-500">({rUser.clientId})</span>
+                                          <span className="text-neutral-500 text-[10px]">
+                                            {rUser.redeemedAt ? new Date(rUser.redeemedAt).toLocaleString() : ''}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>
         )}
 
-        {/* 7. Tab 4: Mastered Jobs Log */}
+        {/* 7. Tab: Mastered Jobs Log */}
         {activeAdminTab === 'jobs' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <SearchIcon width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
@@ -1306,12 +1479,12 @@ export default function AdminPage({
                   className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-9 pr-3 py-2 text-xs text-white placeholder-white/30 focus:border-white/30 focus:outline-none"
                 />
               </div>
-              <div className="text-xs font-mono text-neutral-400">
+              <div className="text-xs font-mono text-neutral-400 shrink-0">
                 {filteredJobs.length} Processed Jobs
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-6 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-4 sm:p-6 backdrop-blur-xl">
               {filteredJobs.length === 0 ? (
                 <div className="py-12 text-center text-xs text-neutral-400 font-mono">
                   No video mastering jobs match search criteria.
@@ -1368,12 +1541,12 @@ export default function AdminPage({
           </div>
         )}
 
-        {/* 8. Tab 5: Reviews & Creator Feedback */}
+        {/* 8. Tab: Reviews & Creator Feedback */}
         {activeAdminTab === 'reviews' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div>
-                <h2 className="font-clash inframe-title font-semibold text-lg text-white">
+                <h2 className="font-semibold text-lg text-white">
                   Creator Feedback &amp; Reviews
                 </h2>
                 <p className="text-xs text-neutral-400 mt-0.5">
@@ -1409,7 +1582,7 @@ export default function AdminPage({
                         <div className="text-amber-400 text-sm tracking-wider">
                           {'★'.repeat(rev.rating || 5)}{'☆'.repeat(5 - (rev.rating || 5))}
                         </div>
-                        <div className="font-clash inframe-title font-semibold text-sm text-white mt-1">
+                        <div className="font-semibold text-sm text-white mt-1">
                           {rev.name || 'Anonymous Creator'}
                         </div>
                         <div className="font-mono text-[10.5px] text-neutral-400">
@@ -1445,11 +1618,11 @@ export default function AdminPage({
           </div>
         )}
 
-        {/* 9. Tab 6: System & Infrastructure */}
+        {/* 9. Tab: System & Infrastructure */}
         {activeAdminTab === 'system' && (
           <div className="space-y-6">
             <div className="rounded-3xl border border-white/10 bg-neutral-950/70 p-5 sm:p-7 backdrop-blur-xl">
-              <h2 className="font-clash inframe-title font-semibold text-lg text-white mb-1">
+              <h2 className="font-semibold text-lg text-white mb-1">
                 Infrastructure &amp; Container Architecture
               </h2>
               <p className="text-xs text-neutral-400 mb-6">
@@ -1459,7 +1632,7 @@ export default function AdminPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">Node.js Runtime</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     {serverHealth?.node || 'v20.20.2'}
                   </div>
                   <span className="text-[10.5px] text-emerald-400">Active LTS</span>
@@ -1467,7 +1640,7 @@ export default function AdminPage({
 
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">FFmpeg Engine</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     v5.1.9-0+deb12u1
                   </div>
                   <span className="text-[10.5px] text-cyan-300">Lossless Stream Copy</span>
@@ -1475,15 +1648,15 @@ export default function AdminPage({
 
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">NVMe Free Storage</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-white">
-                    {serverHealth?.freeDiskMb ? `${(serverHealth.freeDiskMb / 1024).toFixed(1)} GB` : '72.6 GB'}
+                  <div className="text-base font-semibold text-white">
+                    {serverHealth?.freeDiskMb ? `${(serverHealth.freeDiskMb / 1024).toFixed(1)} GB` : '80.2 GB'}
                   </div>
                   <span className="text-[10.5px] text-emerald-400">Purged hourly</span>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">Max Upload Buffer</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     600 MB / Video
                   </div>
                   <span className="text-[10.5px] text-neutral-400">Chunked Resumable</span>
@@ -1491,7 +1664,7 @@ export default function AdminPage({
 
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">Gist Persistence</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-emerald-400">
+                  <div className="text-base font-semibold text-emerald-400">
                     Active Sync
                   </div>
                   <span className="text-[10.5px] text-neutral-400">Automatic redeploy restore</span>
@@ -1499,23 +1672,24 @@ export default function AdminPage({
 
                 <div className="p-4 rounded-2xl bg-white/[0.025] border border-white/[0.06] space-y-1">
                   <span className="text-[11px] font-mono uppercase text-neutral-400">Base Clock Alignment</span>
-                  <div className="font-clash inframe-title text-base font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     19,200 Timescale
                   </div>
                   <span className="text-[10.5px] text-cyan-300">TikTok 60fps/120fps sync</span>
                 </div>
               </div>
 
-              <div className="mt-6 pt-5 border-t border-white/[0.06] flex items-center justify-between">
+              <div className="mt-6 pt-5 border-t border-white/[0.06] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <span className="text-xs text-neutral-400">
                   Export complete platform snapshot for offline archive or container migration:
                 </span>
                 <button
                   type="button"
                   onClick={handleExportSnapshot}
-                  className="rounded-xl bg-white px-5 py-2 text-xs font-clash inframe-title font-semibold text-black hover:bg-neutral-200 transition-all cursor-pointer"
+                  style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                  className="rounded-xl px-5 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer shadow-md"
                 >
-                  Download Snapshot (JSON)
+                  <span style={{ color: '#000000', fontWeight: 600 }}>Download Snapshot (JSON)</span>
                 </button>
               </div>
             </div>
