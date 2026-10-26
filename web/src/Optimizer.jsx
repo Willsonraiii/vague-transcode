@@ -437,6 +437,19 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Gue
   const withKey = useCallback((url) => (keyRef.current ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(keyRef.current) : url), []);
   useEffect(() => () => clearInterval(timer.current), []);
 
+  // Warn user if they attempt to refresh or close tab while video is actively processing
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      const active = phase === 'upload' || phase === 'queued' || phase === 'process';
+      if (active) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [phase]);
+
   // Poll server queue status while on confirm screen to inform user of busy engine
   useEffect(() => {
     if (phase !== 'confirm') return;

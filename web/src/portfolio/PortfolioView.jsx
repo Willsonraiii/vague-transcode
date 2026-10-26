@@ -146,9 +146,12 @@ export default function PortfolioView({
         </main>
       )}
 
-      {/* Dedicated Optimizer Pipeline Studio Page */}
-      {activeTab === 'optimizer' && (
-        <main id="optimizer" className="scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-10 sm:pb-14">
+      {/* Dedicated Optimizer Pipeline Studio Page (Always mounted to preserve in-flight uploads/processing across tab navigation) */}
+      <main
+        id="optimizer"
+        className={`scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-10 sm:pb-14 ${activeTab === 'optimizer' ? 'block' : 'hidden'}`}
+        aria-hidden={activeTab !== 'optimizer'}
+      >
           <div className="container-hirael">
             <SectionHeader
               lead="Pipeline"
@@ -255,7 +258,6 @@ export default function PortfolioView({
             )}
           </div>
         </main>
-      )}
 
       {/* Dedicated FAQ Page */}
       {activeTab === 'faq' && (

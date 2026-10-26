@@ -244,7 +244,7 @@ export const Navbar = ({
               >
                 <span className="leading-none">{link.label}</span>
                 {link.id === 'optimizer' && busy && (
-                  <span className="size-1.5 rounded-full bg-emerald-400 ml-0.5" />
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Optimizing video in background" />
                 )}
               </button>
             );
