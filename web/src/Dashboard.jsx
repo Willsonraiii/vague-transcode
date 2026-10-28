@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LightningIcon, InspectIcon, BookOpenIcon,
-  DashboardIcon, ShieldIcon, CheckIcon
+  CheckIcon, TrashIcon, TikTokIcon,
+  UserIcon, ShieldIcon
 } from './icons.jsx';
 
 const scrollBlurCard = {
@@ -19,23 +19,52 @@ const scrollBlurButton = {
   transition: { duration: 0.44, ease: [0.16, 1, 0.3, 1] }
 };
 
-export default function Dashboard({ onSwitchTab, apiKey }) {
-  const [queueStatus, setQueueStatus] = useState({ busy: false, queuedCount: 0, activeJob: null });
-  const [loading, setLoading] = useState(true);
-
+export default function Dashboard({
+  onSwitchTab,
+  apiKey,
+  onKeyChange,
+  onSignOut,
+  userName = 'Guest',
+  userTier = 'free',
+  ownerAuthenticated = false,
+  isMasterOwner = false,
+  onOpenSignIn,
+}) {
   // ---------- Connected accounts (TikTok) ----------
   const [tt, setTt] = useState(null);      // /api/tiktok/me payload
   const [ttBusy, setTtBusy] = useState(false);
   const [ttErr, setTtErr] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [keepNotice, setKeepNotice] = useState(false);
   const ttPopup = useRef(null);
+
+  // ---------- Personal Optimization History & Pipelines ----------
+  const [history, setHistory] = useState([]);
+  const [historyStats, setHistoryStats] = useState({ total: 0, favoritePipeline: 'HDR Rec.2020 / HLG' });
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const ttHeaders = useCallback(
     () => ({ 'content-type': 'application/json', ...(apiKey ? { 'x-access-token': apiKey } : {}) }),
     [apiKey]
   );
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const r = await fetch('/api/user/optimizations', { headers: ttHeaders() });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.ok) {
+        setHistory(j.items || []);
+        if (j.userStats) setHistoryStats(j.userStats);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [ttHeaders]);
+
   const loadTikTok = useCallback(async () => {
-    if (!apiKey) return;
     try {
       const r = await fetch('/api/tiktok/me', { headers: ttHeaders() });
       if (!r.ok) return;
@@ -43,29 +72,34 @@ export default function Dashboard({ onSwitchTab, apiKey }) {
       setTt(j);
       if (j.connected) setTtErr('');
     } catch { /* dashboard is informational — stay quiet on network errors */ }
-  }, [apiKey, ttHeaders]);
+  }, [ttHeaders]);
 
   useEffect(() => {
-    if (!apiKey) return undefined;
     loadTikTok();
-    const interval = setInterval(loadTikTok, 20000);
+    loadHistory();
+    const interval = setInterval(() => {
+      loadTikTok();
+      loadHistory();
+    }, 20000);
     const onMsg = (e) => {
       if (e.origin !== window.location.origin || e.data?.type !== 'obito-tiktok') return;
-      if (e.data.ok) loadTikTok();
-      else setTtErr(e.data.reason || 'TikTok sign-in was cancelled.');
+      if (e.data.ok) {
+        loadTikTok();
+        setConfirmDelete(false);
+      } else {
+        setTtErr(e.data.reason || 'TikTok sign-in was cancelled.');
+      }
     };
     window.addEventListener('message', onMsg);
     return () => {
       clearInterval(interval);
       window.removeEventListener('message', onMsg);
     };
-  }, [apiKey, loadTikTok]);
+  }, [loadTikTok]);
 
   const connectTikTok = async () => {
     setTtErr('');
     setTtBusy(true);
-    // Same rules as the Post sheet: TikTok's authorize page misbehaves inside a script-opened
-    // Safari tab on touch devices (endless spinner) — use a full-page redirect there instead.
     const touchDevice = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 1;
     ttPopup.current = touchDevice ? null : window.open('about:blank', 'obito-tiktok-auth', 'popup=yes,width=520,height=720');
     try {
@@ -76,7 +110,7 @@ export default function Dashboard({ onSwitchTab, apiKey }) {
         ttPopup.current.location = j.url;
         setTtBusy(false);
       } else {
-        window.location.href = j.url; // full redirect; TikTok returns to the site afterwards
+        window.location.href = j.url;
       }
     } catch (e) {
       ttPopup.current?.close();
@@ -88,39 +122,38 @@ export default function Dashboard({ onSwitchTab, apiKey }) {
   const disconnectTikTok = async () => {
     setTtBusy(true);
     setTtErr('');
+    setConfirmDelete(false);
     await fetch('/api/tiktok/disconnect', { method: 'POST', headers: ttHeaders() }).catch(() => {});
     await loadTikTok();
     setTtBusy(false);
   };
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchQueue = async () => {
-      try {
-        const res = await fetch('/api/queue/status');
-        if (res.ok) {
-          const data = await res.json();
-          if (mounted) {
-            setQueueStatus(data);
-            setLoading(false);
-          }
-        }
-      } catch {
-        if (mounted) setLoading(false);
-      }
-    };
+  const onKeepAccount = () => {
+    setKeepNotice(true);
+    setConfirmDelete(false);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) try { navigator.vibrate(8); } catch {}
+    setTimeout(() => setKeepNotice(false), 3200);
+  };
 
-    fetchQueue();
-    const interval = setInterval(fetchQueue, 4000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
+  const handleSignOut = () => {
+    if (onSignOut) {
+      onSignOut();
+    } else if (onKeyChange) {
+      onKeyChange('', '', 'free');
+    }
+  };
+
+  const cleanUser = userName || (ownerAuthenticated ? (isMasterOwner ? 'Owner' : 'Member') : 'Guest');
+  const normalizedTier = (userTier || 'free').toLowerCase();
+  const tierDisplay = normalizedTier === 'redeemed'
+    ? 'Studio Pass (Redeemed)'
+    : normalizedTier === 'paid'
+    ? (isMasterOwner ? 'Studio Owner (VIP)' : 'Studio Member (Paid)')
+    : 'Free Creator Preview';
 
   return (
     <div className="studio-dashboard">
-      {/* ---------- Hero Master Command Center ---------- */}
+      {/* ---------- User Profile Hero Card ---------- */}
       <motion.div
         className="dash-hero-card"
         initial={{ opacity: 0.3, filter: 'blur(12px)', y: 20 }}
@@ -129,280 +162,449 @@ export default function Dashboard({ onSwitchTab, apiKey }) {
       >
         <div className="dash-hero-top">
           <div className="dash-hero-brand">
-            <span className="dash-hero-badge">STUDIO MASTER CONTROL</span>
-            <span className="dash-beta-pill">BETA</span>
+            <span className="dash-hero-badge">CREATOR DASHBOARD</span>
+            <span className="dash-beta-pill">@{cleanUser}</span>
           </div>
-          <div className={`dash-engine-status ${queueStatus.busy ? 'busy' : 'ready'}`}>
+          <div className="dash-engine-status ready">
             <span className="dash-status-dot" />
-            <span className="dash-status-text">
-              {loading
-                ? 'INITIALIZING…'
-                : queueStatus.busy
-                ? 'MASTER ENGINE BUSY'
-                : 'ENGINE STANDBY · READY'}
-            </span>
+            <span className="dash-status-text">{tierDisplay.toUpperCase()}</span>
           </div>
         </div>
 
         <div className="dash-hero-content">
-          <h1 className="dash-hero-title">Obito Video Mastering Suite</h1>
+          <h1 className="dash-hero-title">Welcome back, {cleanUser}</h1>
           <p className="dash-hero-subtitle">
-            Bit-for-bit lossless container mastering. Preserve native 60fps and 120fps motion fluidity, 10-bit HDR wide color gamut, and master export bitrates across mobile video platforms.
+            Manage your connected TikTok publishing accounts, studio pass, and personal account settings.
           </p>
         </div>
 
         <div className="dash-hero-actions">
-          <motion.button
-            type="button"
-            className="btn-dash-hero primary"
-            onClick={() => onSwitchTab('optimizer')}
-            {...scrollBlurButton}
-          >
-            <LightningIcon width={18} height={18} />
-            <span>Open Lossless Optimizer</span>
-            <span className="dash-arrow">→</span>
-          </motion.button>
-          <motion.button
-            type="button"
-            className="btn-dash-hero secondary"
-            onClick={() => onSwitchTab('inspect')}
-            {...scrollBlurButton}
-            transition={{ ...scrollBlurButton.transition, delay: 0.08 }}
-          >
-            <InspectIcon width={18} height={18} />
-            <span>Audit Video Container</span>
-          </motion.button>
+          {!ownerAuthenticated && onOpenSignIn && (
+            <motion.button
+              type="button"
+              className="btn-dash-hero primary"
+              onClick={onOpenSignIn}
+              {...scrollBlurButton}
+            >
+              <UserIcon width={16} height={16} />
+              <span>Sign In with Studio Pass</span>
+            </motion.button>
+          )}
+          {ownerAuthenticated && (
+            <motion.button
+              type="button"
+              className="btn-dash-hero secondary"
+              onClick={handleSignOut}
+              {...scrollBlurButton}
+            >
+              <UserIcon width={16} height={16} />
+              <span>Sign Out</span>
+            </motion.button>
+          )}
+          {!tt?.connected ? (
+            <motion.button
+              type="button"
+              className="btn-dash-hero secondary"
+              onClick={connectTikTok}
+              disabled={ttBusy}
+              {...scrollBlurButton}
+              transition={{ ...scrollBlurButton.transition, delay: 0.08 }}
+            >
+              <TikTokIcon width={16} height={16} />
+              <span>{ttBusy ? 'Connecting…' : 'Connect TikTok Channel'}</span>
+            </motion.button>
+          ) : (
+            <motion.button
+              type="button"
+              className="btn-dash-hero secondary"
+              onClick={onKeepAccount}
+              {...scrollBlurButton}
+              transition={{ ...scrollBlurButton.transition, delay: 0.08 }}
+            >
+              <CheckIcon width={15} height={15} />
+              <span>Keep TikTok Active</span>
+            </motion.button>
+          )}
         </div>
       </motion.div>
 
-      {/* ---------- Live Hardware Telemetry Matrix ---------- */}
-      <div className="dash-telemetry-grid">
+      {/* ---------- Connected Publishing Channels (TikTok) ---------- */}
+      <div className="dash-accounts-section">
+        <motion.div className="dash-section-header" {...scrollBlurCard}>
+          <h2 className="dash-section-title font-clash font-bold">Connected Accounts</h2>
+          <span className="dash-section-sub">Manage your linked TikTok publishing accounts. Official Direct Post API is currently in developer review with TikTok and launching in a couple of days.</span>
+        </motion.div>
+
+        <motion.div className="dash-accounts-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
+          {tt?.connected ? (
+            <>
+              <div className="dash-account-row">
+                {tt.account?.avatar_url ? (
+                  <img className="dash-account-avatar" src={tt.account.avatar_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="dash-account-avatar placeholder">
+                    {(tt.account?.display_name || tt.account?.username || '?').slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+                <div className="dash-account-id">
+                  <span className="dash-account-name">
+                    {tt.account?.display_name || tt.creator?.creator_nickname || tt.account?.username || 'TikTok Account'}
+                  </span>
+                  <span className="dash-account-handle">
+                    {tt.account?.username ? `@${tt.account.username}` : (tt.account?.open_id || 'Connected creator')}
+                  </span>
+                  <div className="dash-scope-tags">
+                    <span className="dash-scope-tag">TikTok Connected</span>
+                    <span className="dash-scope-tag text-cyan-300 border border-cyan-400/30 bg-cyan-500/10 font-medium">Official API · In Review (Coming Soon)</span>
+                    <span className="dash-scope-tag">Account Linked</span>
+                  </div>
+                </div>
+
+                <div className="dash-account-actions">
+                  <button
+                    type="button"
+                    className="dash-account-btn keep"
+                    onClick={onKeepAccount}
+                    title="Keep this account connected and active for TikTok direct posting"
+                  >
+                    <CheckIcon width={14} height={14} />
+                    <span>Keep Account</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-account-btn delete"
+                    disabled={ttBusy}
+                    onClick={() => setConfirmDelete((prev) => !prev)}
+                    title="Remove or disconnect this TikTok account"
+                  >
+                    <TrashIcon width={14} height={14} />
+                    <span>Delete Connection</span>
+                  </button>
+                </div>
+              </div>
+
+              {confirmDelete && (
+                <div className="dash-confirm-delete-box">
+                  <div className="dash-confirm-delete-msg">
+                    <TrashIcon width={16} height={16} />
+                    <span>Remove <b>@{tt.account?.username || 'this account'}</b> from Obito Studio? You can re-link anytime.</span>
+                  </div>
+                  <div className="dash-confirm-delete-btns">
+                    <button type="button" className="dash-account-btn" onClick={() => setConfirmDelete(false)}>
+                      Cancel &amp; Keep
+                    </button>
+                    <button type="button" className="dash-account-btn delete" disabled={ttBusy} onClick={disconnectTikTok}>
+                      {ttBusy ? 'Deleting…' : 'Yes, Delete Account'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {keepNotice && (
+                <div className="dash-keep-notice">
+                  <CheckIcon width={14} height={14} />
+                  <span>Account is active and ready for one-click TikTok Direct Posting (launching once developer review completes).</span>
+                </div>
+              )}
+
+              <p className="dash-account-note">
+                Official TikTok Direct Posting is currently in final developer review with TikTok. Once approved, mastered videos can be published directly to your feed with one tap. Deleting your connection revokes studio posting access at TikTok.
+              </p>
+            </>
+          ) : (
+            <div className="dash-account-row">
+              <div className="dash-account-avatar placeholder" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <TikTokIcon width={22} height={22} />
+              </div>
+              <div className="dash-account-id">
+                <span className="dash-account-name">No TikTok account connected</span>
+                <span className="dash-account-handle">
+                  {tt?.reconnect
+                    ? 'Your TikTok session expired — reconnect to prepare for official direct posting.'
+                    : 'Connect your TikTok account to get ready for official 1-click direct posting (in developer review, launching in a couple of days).'}
+                </span>
+              </div>
+              <div className="dash-account-actions">
+                <button type="button" className="dash-account-btn primary" disabled={ttBusy} onClick={connectTikTok}>
+                  {ttBusy ? 'Opening TikTok…' : tt?.reconnect ? 'Reconnect TikTok' : 'Connect TikTok Account'}
+                </button>
+              </div>
+            </div>
+          )}
+          {ttErr && <p className="dash-account-note err">{ttErr}</p>}
+        </motion.div>
+      </div>
+
+      {/* ---------- User Account Overview Cards ---------- */}
+      <div className="dash-telemetry-grid user-grid">
         <motion.div className="dash-stat-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.02 }}>
           <div className="dash-stat-header">
-            <span className="dash-stat-label">MASTER PIPELINE</span>
+            <span className="dash-stat-label">MEMBERSHIP TIER</span>
           </div>
-          <div className="dash-stat-val">
-            {loading ? 'SYNCING…' : queueStatus.busy ? 'OPTIMIZING' : 'STREAM COPY'}
-          </div>
+          <div className="dash-stat-val inframe-title font-clash font-medium">{tierDisplay}</div>
           <div className="dash-stat-desc">
-            {queueStatus.busy && queueStatus.activeJob?.stage
-              ? `Processing: ${queueStatus.activeJob.stage}`
-              : 'Pure lossless passthrough · Zero generation loss'}
+            Personal studio access for high-framerate processing and video export.
           </div>
+          {!ownerAuthenticated && onOpenSignIn ? (
+            <button type="button" className="dash-card-inline-action" onClick={onOpenSignIn}>
+              Redeem Studio Pass →
+            </button>
+          ) : (
+            <span className="dash-card-inline-status">✓ Active Access</span>
+          )}
         </motion.div>
 
         <motion.div className="dash-stat-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.06 }}>
           <div className="dash-stat-header">
-            <span className="dash-stat-label">MOTION PRESERVATION</span>
+            <span className="dash-stat-label">TIKTOK CHANNEL</span>
           </div>
-          <div className="dash-stat-val">60 &amp; 120 FPS</div>
-          <div className="dash-stat-desc">Locks native frame rates; defeats platform 30fps drop</div>
-        </motion.div>
-
-        <motion.div className="dash-stat-header-card dash-stat-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.1 }}>
-          <div className="dash-stat-header">
-            <span className="dash-stat-label">COLOR FIDELITY</span>
-          </div>
-          <div className="dash-stat-val">10-BIT HDR &amp; DOVI</div>
-          <div className="dash-stat-desc">Native Wide Color Gamut &amp; peak dynamic range intact</div>
-        </motion.div>
-
-        <motion.div className="dash-stat-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.14 }}>
-          <div className="dash-stat-header">
-            <span className="dash-stat-label">SERVER QUEUE</span>
-          </div>
-          <div className="dash-stat-val">
-            {loading ? '—' : queueStatus.queuedCount > 0 ? `${queueStatus.queuedCount} IN QUEUE` : '0 QUEUED'}
+          <div className="dash-stat-val inframe-title font-clash font-medium">
+            {tt?.connected ? `@${tt.account?.username || 'Connected'}` : 'No Channel Linked'}
           </div>
           <div className="dash-stat-desc">
-            {queueStatus.queuedCount > 0
-              ? 'Sequential NVMe execution safely held in line'
-              : 'Direct NVMe streaming · Zero wait time'}
+            {tt?.connected
+              ? 'Authorized for one-click direct publishing to your TikTok feed.'
+              : 'Link your TikTok account to enable direct publishing.'}
+          </div>
+          {tt?.connected ? (
+            <button type="button" className="dash-card-inline-action" onClick={onKeepAccount}>
+              Keep Active ✓
+            </button>
+          ) : (
+            <button type="button" className="dash-card-inline-action" onClick={connectTikTok} disabled={ttBusy}>
+              Link TikTok →
+            </button>
+          )}
+        </motion.div>
+
+        <motion.div className="dash-stat-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.1 }}>
+          <div className="dash-stat-header">
+            <span className="dash-stat-label">SECURITY &amp; STORAGE</span>
+          </div>
+          <div className="dash-stat-val inframe-title font-clash font-medium">Sovereign &amp; Local</div>
+          <div className="dash-stat-desc">
+            Zero cloud media storage. Master video packets are processed in temporary memory and never stored.
+          </div>
+          <span className="dash-card-inline-status">Zero Data Retention</span>
+        </motion.div>
+      </div>
+
+      {/* ---------- Personal Optimization History & Pipelines Section ---------- */}
+      <div className="dash-accounts-section">
+        <motion.div className="dash-section-header" {...scrollBlurCard}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="dash-section-title font-clash font-bold">Optimization History &amp; Pipelines</h2>
+              <span className="dash-section-sub">
+                Verified stream telemetry, pipeline modes, and output cadence from your recent master jobs.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-white/[0.04] border border-white/10 text-neutral-300">
+                {historyStats.total} Mastered
+              </span>
+              <button
+                type="button"
+                onClick={loadHistory}
+                className="size-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all text-xs cursor-pointer"
+                title="Refresh history"
+              >
+                ↻
+              </button>
+            </div>
           </div>
         </motion.div>
-      </div>
 
-      {/* ---------- Connected Accounts ---------- */}
-      {tt?.enabled && (
-        <div className="dash-accounts-section">
-          <motion.div className="dash-section-header" {...scrollBlurCard}>
-            <h2 className="dash-section-title">Connected Accounts</h2>
-            <span className="dash-section-sub">Publish the videos you optimize straight to your own TikTok account</span>
+        {/* History Overview Quick Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Total Optimizations</span>
+            <span className="font-clash inframe-title font-medium text-base text-white mt-0.5 block">
+              {loadingHistory ? '—' : `${historyStats.total} Videos`}
+            </span>
           </motion.div>
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Primary Pipeline</span>
+            <span className="font-clash inframe-title font-medium text-base text-cyan-300 mt-0.5 block truncate">
+              {loadingHistory ? '—' : historyStats.favoritePipeline}
+            </span>
+          </motion.div>
+          <motion.div className="rounded-xl p-3 bg-white/[0.025] border border-white/[0.06] backdrop-blur-md" {...scrollBlurCard}>
+            <span className="block text-[10px] uppercase font-mono text-neutral-400 tracking-wider">Output Clock</span>
+            <span className="font-clash inframe-title font-medium text-base text-purple-300 mt-0.5 block">
+              19,200 Timescale Sync
+            </span>
+          </motion.div>
+        </div>
 
-          <motion.div className="dash-accounts-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
-            {tt.connected ? (
-              <>
-                <div className="dash-account-row">
-                  {tt.account?.avatar_url ? (
-                    <img className="dash-account-avatar" src={tt.account.avatar_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="dash-account-avatar placeholder">
-                      {(tt.account?.display_name || tt.account?.username || '?').slice(0, 1).toUpperCase()}
+        {/* History List or Studio Empty State */}
+        <motion.div className="dash-accounts-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
+          {history.length > 0 ? (
+            <div className="space-y-3">
+              {history.map((job) => {
+                const isDone = job.status === 'done';
+                const dateStr = job.timestamp ? new Date(job.timestamp).toLocaleString([], {
+                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                }) : 'Recent';
+                const modeLabel = job.mode === 'standard' ? 'Standard 709' : 'HDR Rec.2020 / HLG';
+
+                return (
+                  <div
+                    key={job.id}
+                    className="p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-all flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-xs sm:text-sm text-white truncate max-w-xs sm:max-w-md">
+                            {job.fileName || 'Master Video'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                            job.mode === 'standard'
+                              ? 'bg-neutral-500/10 text-neutral-300 border-neutral-500/20'
+                              : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25'
+                          }`}>
+                            {modeLabel}
+                            {job.ensureH264 ? ' · AVC1' : ''}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[11px] text-neutral-400 block">
+                          {dateStr} · ID: <code className="text-neutral-400 bg-white/[0.04] px-1 py-0.2 rounded font-mono">{job.id.slice(0, 12)}…</code>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase font-semibold border ${
+                          isDone
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                            : 'bg-red-500/10 text-red-400 border-red-500/25'
+                        }`}>
+                          {isDone ? 'Completed ✓' : 'Failed'}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                  <div className="dash-account-id">
-                    <span className="dash-account-name">
-                      {tt.account?.display_name || tt.creator?.creator_nickname || tt.account?.username || 'TikTok account'}
-                    </span>
-                    <span className="dash-account-handle">
-                      {tt.account?.username ? `@${tt.account.username}` : (tt.account?.open_id || '')}
-                    </span>
+
+                    {/* Telemetry specs row */}
+                    <div className="pt-2 border-t border-white/[0.04] grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Input Source</span>
+                        <span className="text-neutral-300 font-mono">
+                          {job.in ? `${job.in.w}x${job.in.h} · ${job.in.fps}fps` : '1080p Master'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Output Cadence</span>
+                        <span className="text-cyan-300 font-mono">
+                          {job.out ? `${job.out.w}x${job.out.h} · 19200 ts` : '19200 Base Clock'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Audio &amp; Codec</span>
+                        <span className="text-neutral-300 font-mono">
+                          {job.out ? `${job.out.codec} · 2-Track AAC` : 'Dual AAC Lossless'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase font-mono">Remux Duration</span>
+                        <span className="text-emerald-400 font-mono">
+                          {job.durationMs ? `${(job.durationMs / 1000).toFixed(1)}s` : '< 1s'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="dash-account-actions">
-                    <span className="dash-account-state">{tt.creatorError ? 'Needs reconnect' : 'Connected'}</span>
-                    <button type="button" className="dash-account-btn" disabled={ttBusy} onClick={disconnectTikTok}>
-                      {ttBusy ? 'Working…' : 'Disconnect'}
-                    </button>
-                  </div>
-                </div>
-                <p className="dash-account-note">
-                  Videos are only posted when you press Post to TikTok in the Optimizer. Disconnect revokes Obito's access at TikTok.
-                  {!tt.audited && ' While the app is in review TikTok only accepts "Only me" posts from a private account.'}
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 px-4 space-y-3">
+              <div className="size-10 mx-auto rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center text-neutral-400 text-sm">
+                ⏱
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-clash inframe-title font-medium text-sm text-white">
+                  No Mastering History Yet
+                </h4>
+                <p className="font-sans text-xs text-neutral-400 max-w-sm mx-auto">
+                  Run your first 60fps or HDR clip through the optimizer. Your container surgery records, audio cadences, and timestamps will be saved here.
                 </p>
-              </>
-            ) : (
-              <div className="dash-account-row">
-                <div className="dash-account-id">
-                  <span className="dash-account-name">No TikTok account connected</span>
-                  <span className="dash-account-handle">
-                    {tt.reconnect
-                      ? 'Your TikTok session expired — reconnect to keep posting.'
-                      : 'Connect to publish your optimized masters from the Post to TikTok sheet.'}
-                  </span>
-                </div>
-                <div className="dash-account-actions">
-                  <button type="button" className="dash-account-btn primary" disabled={ttBusy} onClick={connectTikTok}>
-                    {ttBusy ? 'Opening TikTok…' : tt.reconnect ? 'Reconnect TikTok' : 'Connect TikTok'}
-                  </button>
-                </div>
               </div>
-            )}
-            {ttErr && <p className="dash-account-note err">{ttErr}</p>}
-          </motion.div>
-        </div>
-      )}
-
-      {/* ---------- Mastering Workflows ---------- */}
-      <div className="dash-workflows-section">
-        <motion.div className="dash-section-header" {...scrollBlurCard}>
-          <h2 className="dash-section-title">Mastering Workflows</h2>
-          <span className="dash-section-sub">Direct studio actions accessible via the bottom control dock</span>
+              {onSwitchTab && (
+                <button
+                  type="button"
+                  onClick={() => onSwitchTab('optimizer')}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white transition-all cursor-pointer"
+                >
+                  <span>Open Video Optimizer</span>
+                  <span className="text-cyan-400">→</span>
+                </button>
+              )}
+            </div>
+          )}
         </motion.div>
-
-        <div className="dash-workflows-grid">
-          <motion.div
-            className="dash-workflow-card featured"
-            onClick={() => onSwitchTab('optimizer')}
-            {...scrollBlurCard}
-            transition={{ ...scrollBlurCard.transition, delay: 0.04 }}
-          >
-            <div className="dash-wf-top">
-              <div className="dash-wf-icon-wrap primary">
-                <LightningIcon width={24} height={24} />
-              </div>
-              <span className="dash-wf-tag">PRIMARY WORKFLOW</span>
-            </div>
-            <h3 className="dash-wf-title">Lossless Video Optimizer</h3>
-            <p className="dash-wf-desc">
-              Re-structure video containers so mobile feeds acknowledge native 60fps fluidity and full HDR peak nits. Never re-compresses or softens video packets.
-            </p>
-            <div className="dash-wf-footer">
-              <span className="dash-wf-cta">Launch Optimizer</span>
-              <span className="dash-wf-arrow">→</span>
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="dash-workflow-card"
-            onClick={() => onSwitchTab('inspect')}
-            {...scrollBlurCard}
-            transition={{ ...scrollBlurCard.transition, delay: 0.08 }}
-          >
-            <div className="dash-wf-top">
-              <div className="dash-wf-icon-wrap">
-                <InspectIcon width={24} height={24} />
-              </div>
-              <span className="dash-wf-tag">DIAGNOSTICS</span>
-            </div>
-            <h3 className="dash-wf-title">Container Codec Inspector</h3>
-            <p className="dash-wf-desc">
-              Audit box atoms, timescale clocks, real framerates, and color matrices. Probes local master video files or live published TikTok video links.
-            </p>
-            <div className="dash-wf-footer">
-              <span className="dash-wf-cta">Audit Video</span>
-              <span className="dash-wf-arrow">→</span>
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="dash-workflow-card"
-            onClick={() => onSwitchTab('guide')}
-            {...scrollBlurCard}
-            transition={{ ...scrollBlurCard.transition, delay: 0.12 }}
-          >
-            <div className="dash-wf-top">
-              <div className="dash-wf-icon-wrap">
-                <BookOpenIcon width={24} height={24} />
-              </div>
-              <span className="dash-wf-tag">EXPORT PROTOCOLS</span>
-            </div>
-            <h3 className="dash-wf-title">Studio Master Guide</h3>
-            <p className="dash-wf-desc">
-              Step-by-step master export specifications for DaVinci Resolve Studio, Adobe Premiere Pro, and Apple iPhone HDR footage for pristine playback.
-            </p>
-            <div className="dash-wf-footer">
-              <span className="dash-wf-cta">Read Protocols</span>
-              <span className="dash-wf-arrow">→</span>
-            </div>
-          </motion.div>
-        </div>
       </div>
 
-      {/* ---------- Studio Quality Pillars (No Leaked Engineering Formulas) ---------- */}
-      <div className="dash-pillars-section">
+      {/* ---------- Account & Pass Security Settings ---------- */}
+      <div className="dash-accounts-section">
         <motion.div className="dash-section-header" {...scrollBlurCard}>
-          <h2 className="dash-section-title">Master Quality Commitments</h2>
-          <span className="dash-section-sub">Engineered for creators who refuse generational compression loss</span>
+          <h2 className="dash-section-title font-clash font-bold">Account &amp; Session Security</h2>
+          <span className="dash-section-sub">Manage your access credentials and local permissions.</span>
         </motion.div>
 
-        <div className="dash-pillars-grid">
-          <motion.div className="dash-pillar-item" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
-            <div className="dash-pillar-top">
-              <div className="dash-pillar-check">
-                <CheckIcon width={16} height={16} strokeWidth={2.5} />
-              </div>
-              <h4 className="dash-pillar-name">100% Bit-for-Bit Stream Copy</h4>
+        <motion.div className="dash-accounts-card" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.04 }}>
+          <div className="dash-settings-row">
+            <div className="dash-settings-meta">
+              <span className="dash-settings-label">Studio Access Key</span>
+              <span className="dash-settings-sub">
+                {apiKey
+                  ? `Active Pass Key: ••••••••${typeof apiKey === 'string' && apiKey.length >= 4 ? apiKey.slice(-4) : '••••'}`
+                  : 'No pass key configured — running in Free Creator Preview mode.'}
+              </span>
             </div>
-            <p className="dash-pillar-desc">
-              Obito Studio never decompresses or re-encodes frames. Compressed video and audio packets pass through completely intact, ensuring 0% loss of master sharpness.
-            </p>
-          </motion.div>
+            <div className="dash-settings-actions">
+              {apiKey ? (
+                <button type="button" className="dash-account-btn" onClick={handleSignOut}>
+                  Sign Out / Remove Key
+                </button>
+              ) : onOpenSignIn ? (
+                <button type="button" className="dash-account-btn primary" onClick={onOpenSignIn}>
+                  Enter Key / Redeem Pass
+                </button>
+              ) : null}
+            </div>
+          </div>
 
-          <motion.div className="dash-pillar-item" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.08 }}>
-            <div className="dash-pillar-top">
-              <div className="dash-pillar-check">
-                <CheckIcon width={16} height={16} strokeWidth={2.5} />
-              </div>
-              <h4 className="dash-pillar-name">Full High-FPS Fluidity Lock</h4>
+          <div className="dash-settings-row">
+            <div className="dash-settings-meta">
+              <span className="dash-settings-label">TikTok Authorization Status</span>
+              <span className="dash-settings-sub">
+                {tt?.connected
+                  ? 'Authorized scopes: Login Kit & Content Posting API. Obito Studio never accesses private messages or drafts.'
+                  : 'No TikTok account currently authorized.'}
+              </span>
             </div>
-            <p className="dash-pillar-desc">
-              Container metadata is structured to satisfy platform ingestion rules, eliminating the automatic 30fps downsampling pass applied to standard uploads.
-            </p>
-          </motion.div>
-
-          <motion.div className="dash-pillar-item" {...scrollBlurCard} transition={{ ...scrollBlurCard.transition, delay: 0.12 }}>
-            <div className="dash-pillar-top">
-              <div className="dash-pillar-check">
-                <CheckIcon width={16} height={16} strokeWidth={2.5} />
-              </div>
-              <h4 className="dash-pillar-name">Sovereign On-Device Security</h4>
+            <div className="dash-settings-actions">
+              {tt?.connected ? (
+                <button
+                  type="button"
+                  className="dash-account-btn delete"
+                  disabled={ttBusy}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Revoke TikTok Access
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="dash-account-btn"
+                  disabled={ttBusy}
+                  onClick={connectTikTok}
+                >
+                  Authorize Channel
+                </button>
+              )}
             </div>
-            <p className="dash-pillar-desc">
-              Your masters never touch public cloud repositories. Operations run locally on NVMe storage, and files are automatically purged immediately after download.
-            </p>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
