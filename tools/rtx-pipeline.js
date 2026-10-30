@@ -612,6 +612,9 @@ reportProgress(95, 'audio-done');
 // 6. Report
 // ---------------------------------------------------------------------------
 
+const outputStat = await stat(outputPath);
+const outputBytes = outputStat.size;
+
 const durSec = videoMediaTicks > 0 ? videoMediaTicks / TARGET_VIDEO_TIMESCALE : 1;
 const avgBitrate = Math.round((outputBytes * 8) / durSec);
 const maxBitrate = Math.round(avgBitrate * 1.35);
