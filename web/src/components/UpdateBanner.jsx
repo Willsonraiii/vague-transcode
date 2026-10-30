@@ -1,32 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export const CURRENT_UPDATE_KEY = 'obito_update_seen_2026_10_26_v24';
+export const CURRENT_UPDATE_KEY = 'obito_update_seen_2026_10_30_v3_3_turbo_fix';
 
 export const UpdateBanner = ({ isSignedUser, onSwitchTab }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!isSignedUser) return;
     try {
       const seen = localStorage.getItem(CURRENT_UPDATE_KEY);
       if (!seen) {
-        // Mark immediately so a page reload will NEVER show the banner again
-        localStorage.setItem(CURRENT_UPDATE_KEY, 'true');
         setVisible(true);
       }
     } catch {
-      /* ignore storage exception */
+      setVisible(true);
     }
-  }, [isSignedUser]);
+
+    const handleForceShow = () => setVisible(true);
+    window.addEventListener('obito:showUpdateBanner', handleForceShow);
+    return () => window.removeEventListener('obito:showUpdateBanner', handleForceShow);
+  }, []);
 
   const handleDismiss = () => {
+    try { localStorage.setItem(CURRENT_UPDATE_KEY, 'true'); } catch {}
     setVisible(false);
   };
 
   const handleExplore = () => {
+    try { localStorage.setItem(CURRENT_UPDATE_KEY, 'true'); } catch {}
     setVisible(false);
-    if (onSwitchTab) onSwitchTab('dashboard');
+    if (onSwitchTab) onSwitchTab('optimizer');
   };
 
   if (!visible) return null;
@@ -46,9 +49,9 @@ export const UpdateBanner = ({ isSignedUser, onSwitchTab }) => {
 
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
-              <span className="font-mono text-[11px] font-semibold tracking-wider text-cyan-300 uppercase">
-                Studio Update · October Release
+              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-mono text-[11px] font-semibold tracking-wider text-emerald-300 uppercase">
+                New Enhancements Live · v3.2
               </span>
             </div>
             <button
@@ -63,31 +66,43 @@ export const UpdateBanner = ({ isSignedUser, onSwitchTab }) => {
 
           <div className="mt-2.5 space-y-1">
             <h4 className="font-clash inframe-title font-medium text-sm sm:text-base text-white tracking-tight">
-              Hardware 60fps Pipeline &amp; Personal Telemetry Live
+              Zero-Buffering Engine &amp; Studio Lossless Audit
             </h4>
             <p className="font-sans text-xs text-neutral-400 leading-relaxed">
-              We updated the video mastering suite with dedicated GPU acceleration, platform telemetry, and personal job history.
+              New pipeline updates are active to eliminate TikTok feed stalls and provide verified lossless proof.
             </p>
           </div>
 
           {/* Key Updates List */}
           <div className="mt-3.5 space-y-2 pt-3 border-t border-white/[0.08] text-xs">
             <div className="flex items-start gap-2 text-neutral-300">
-              <span className="text-cyan-400 shrink-0 mt-0.5">•</span>
+              <span className="text-emerald-400 shrink-0 mt-0.5">•</span>
               <span>
-                <strong className="text-white font-medium">GPU Hardware Decoded 60fps:</strong> Comparison player now runs at native 60fps lockstep without browser lag.
+                <strong className="text-white font-medium">Pre-Flight Buffer Risk Audit:</strong> Instant on-device bitrate probe alerts you before uploading if a video is too heavy for mobile feeds.
               </span>
             </div>
             <div className="flex items-start gap-2 text-neutral-300">
               <span className="text-cyan-400 shrink-0 mt-0.5">•</span>
               <span>
-                <strong className="text-white font-medium">Creator Optimization History:</strong> Track your personal mastered jobs, pipeline modes, and bitrates in your dashboard.
+                <strong className="text-white font-medium">Studio Lossless Audit Receipt:</strong> Proves 0.00% re-encoding loss, 19200 clock sync, and 10-bit HLG gamut retention on every master.
               </span>
             </div>
             <div className="flex items-start gap-2 text-neutral-300">
               <span className="text-cyan-400 shrink-0 mt-0.5">•</span>
               <span>
-                <strong className="text-white font-medium">Live Telemetry &amp; Reviews:</strong> Real-time platform counters and direct engineering feedback channel.
+                <strong className="text-white font-medium">Zero-Buffering Interleaving:</strong> Video and Audio Chunk 0 are aligned within ~6 bytes in `mdat` to prevent CDN buffer starvation.
+              </span>
+            </div>
+            <div className="flex items-start gap-2 text-neutral-300">
+              <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+              <span>
+                <strong className="text-white font-medium">Download Stability &amp; Mobile Memory Fix:</strong> Replaced in-memory RAM buffering with direct kernel streaming so iPhone and Android downloads never reload or break.
+              </span>
+            </div>
+            <div className="flex items-start gap-2 text-neutral-300">
+              <span className="text-cyan-400 shrink-0 mt-0.5">•</span>
+              <span>
+                <strong className="text-white font-medium">Audio Lead-In &amp; btrt Cushion:</strong> Smooth playback buffer pre-allocation for mobile players on slow networks.
               </span>
             </div>
           </div>
@@ -99,15 +114,15 @@ export const UpdateBanner = ({ isSignedUser, onSwitchTab }) => {
               onClick={handleDismiss}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-white transition-all cursor-pointer"
             >
-              Got it
+              Dismiss
             </button>
             <button
               type="button"
               onClick={handleExplore}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 border border-white/20 text-white transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-300 transition-all cursor-pointer flex items-center gap-1.5 shadow-lg"
             >
-              <span>View Dashboard History</span>
-              <span className="text-cyan-400">→</span>
+              <span>Try Video Optimizer</span>
+              <span className="text-emerald-400">→</span>
             </button>
           </div>
         </motion.div>

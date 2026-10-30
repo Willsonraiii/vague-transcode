@@ -23,9 +23,8 @@ export function getRecommendedConcurrency(totalBytes) {
     (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
 
   if (isMobile) {
-    // Mobile WebKit / Safari: 2-3 streams yields 2-3x speed without socket congestion or memory crashes
-    if (totalBytes > 80 * 1024 * 1024) return 2;
-    return 3;
+    // Mobile WebKit / Safari: 2 parallel streams yields 2x speed without memory pressure
+    return 2;
   }
   // Desktop
   if (totalBytes > 100 * 1024 * 1024) return 4;

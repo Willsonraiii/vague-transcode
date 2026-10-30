@@ -775,9 +775,9 @@ export default function App() {
         apiKey={apiKey}
       />
 
-      {/* Post-Update Premium Banner for Signed Users */}
+      {/* Post-Update Release Banner */}
       <UpdateBanner
-        isSignedUser={Boolean(ownerAuthenticated || (userTier && userTier !== 'free') || apiKey)}
+        isSignedUser={true}
         onSwitchTab={switchTabWithHaptic}
       />
     </div>

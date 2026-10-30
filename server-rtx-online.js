@@ -1064,11 +1064,13 @@ const handleChunk = async (req, res) => {
   // If the server already received past or equal to this offset (e.g. duplicate retry after dropped ACK),
   // return success immediately so the client can advance without conflict.
   if (offset < up.received) {
+    req.resume();
     return res.json({ received: up.received, bytesReceived: up.received, synced: true });
   }
 
   // If offset skips ahead of received bytes, notify client of the actual received offset.
   if (offset > up.received) {
+    req.resume();
     return res.status(409).json({ error: 'Offset mismatch.', received: up.received, bytesReceived: up.received });
   }
 

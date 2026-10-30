@@ -158,7 +158,7 @@ export default function PortfolioView({
         className={`scroll-anchor pt-24 sm:pt-28 md:pt-32 pb-10 sm:pb-14 ${activeTab === 'optimizer' ? 'block' : 'hidden'}`}
         aria-hidden={activeTab !== 'optimizer'}
       >
-          <div className="container-hirael">
+          <div className="container-hirael px-2 sm:px-6">
             <SectionHeader
               lead="Pipeline"
               accent="Studio"
@@ -171,9 +171,9 @@ export default function PortfolioView({
                 Checking access permissions…
               </div>
             ) : memberPreview && !ownerAuthenticated ? (
-              <div className="studio-optimizer w-full max-w-xl mx-auto px-3 sm:px-0">
+              <div className="studio-optimizer w-full max-w-4xl mx-auto px-0 sm:px-4">
                 <div
-                  className="clean-dropzone liquid-glass-frame relative overflow-hidden rounded-[26px] p-5 sm:p-6 md:p-7 phase-idle text-center cursor-pointer"
+                  className="clean-dropzone liquid-glass-frame relative overflow-hidden rounded-[26px] p-5 sm:p-7 md:p-8 phase-idle text-center cursor-pointer"
                   onClick={(e) => {
                     if (e.target.closest('button, a, input')) return;
                     onOpenSignIn?.();
@@ -189,10 +189,10 @@ export default function PortfolioView({
                   <BotStage phase="idle" busy={false} />
 
                   <div className="dropzone-text mt-1.5 mb-3 text-center">
-                    <h2 className="dropzone-title font-clash inframe-title font-medium text-xl sm:text-2xl md:text-[26px] text-white tracking-[-0.02em] drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)]">
+                    <h2 className="dropzone-title font-clash inframe-title font-medium text-xl sm:text-2xl md:text-[28px] text-white tracking-[-0.02em] drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)]">
                       Choose a video to optimize
                     </h2>
-                    <p className="dropzone-sub font-bricolage text-xs sm:text-[13.5px] text-neutral-300 mt-1 max-w-md mx-auto leading-relaxed">
+                    <p className="dropzone-sub font-bricolage text-xs sm:text-[14px] text-neutral-300 mt-1 max-w-xl mx-auto leading-relaxed">
                       Sign in with an active membership to upload a video.
                     </p>
                   </div>
@@ -209,7 +209,7 @@ export default function PortfolioView({
                       </button>
                     </div>
 
-                    <div className="engine-trust-row grid grid-cols-3 gap-2 sm:gap-2.5 w-full max-w-md mx-auto mt-3.5 pt-3.5 border-t border-white/[0.08]">
+                    <div className="engine-trust-row grid grid-cols-3 gap-2 sm:gap-2.5 w-full max-w-xl mx-auto mt-3.5 pt-3.5 border-t border-white/[0.08]">
                       <div className="trust-item p-2 sm:p-2.5 rounded-xl bg-white/[0.025] border border-white/[0.06] text-center">
                         <span className="trust-val font-clash inframe-title font-medium text-white/95 text-xs sm:text-[12.5px] block tracking-normal">4K Ultra HD</span>
                         <span className="trust-lbl font-sans font-normal text-[9.5px] text-neutral-400 block mt-0.5 tracking-wide">Full Resolution</span>
@@ -224,7 +224,7 @@ export default function PortfolioView({
                       </div>
                     </div>
 
-                    <div className="tiktok-tip-card liquid-glass-frame rounded-xl p-3 sm:p-3.5 mt-3 text-left flex items-start gap-2.5 border border-white/[0.08] shadow-md max-w-md mx-auto">
+                    <div className="tiktok-tip-card liquid-glass-frame rounded-xl p-3 sm:p-3.5 mt-3 text-left flex items-start gap-2.5 border border-white/[0.08] shadow-md max-w-xl mx-auto">
                       <div className="size-7 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center text-white shrink-0 mt-0.5">
                         <PremiumKeyIcon width={14} height={14} className="text-white/80" />
                       </div>
