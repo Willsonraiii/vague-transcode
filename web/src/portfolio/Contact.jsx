@@ -143,19 +143,19 @@ export const Contact = ({ onSwitchTab }) => {
             </span>
             <ul className="space-y-2.5 text-neutral-400 font-bricolage text-[13px]">
               <li>
-                <button type="button" onClick={() => onSwitchTab?.('optimizer')} className="hover:text-white transition-colors text-left">
+                <a href="/" onClick={(e) => { e.preventDefault(); onSwitchTab?.('optimizer'); }} className="hover:text-white transition-colors text-left block">
                   Lossless Optimizer
-                </button>
+                </a>
               </li>
               <li>
-                <a href="#compare" className="hover:text-white transition-colors">
+                <a href="#compare" className="hover:text-white transition-colors block">
                   Quality Comparison
                 </a>
               </li>
               <li>
-                <button type="button" onClick={() => onSwitchTab?.('inspect')} className="hover:text-white transition-colors text-left">
+                <a href="/inspector.html" onClick={(e) => { e.preventDefault(); onSwitchTab?.('inspect'); }} className="hover:text-white transition-colors text-left block">
                   Codec Inspector
-                </button>
+                </a>
               </li>
               <li>
                 <button type="button" onClick={() => onSwitchTab?.('dashboard')} className="hover:text-white transition-colors text-left">
@@ -171,19 +171,19 @@ export const Contact = ({ onSwitchTab }) => {
             </span>
             <ul className="space-y-2.5 text-neutral-400 font-bricolage text-[13px]">
               <li>
-                <button type="button" onClick={() => onSwitchTab?.('guide')} className="hover:text-white transition-colors text-left">
+                <a href="/guide.html" onClick={(e) => { e.preventDefault(); onSwitchTab?.('guide'); }} className="hover:text-white transition-colors text-left block">
                   Creator Upload Guide
-                </button>
+                </a>
               </li>
               <li>
-                <a href="/guide.html" className="hover:text-white transition-colors">
+                <a href="/guide.html" className="hover:text-white transition-colors block">
                   DaVinci Resolve Master
                 </a>
               </li>
               <li>
-                <button type="button" onClick={() => onSwitchTab?.('specs')} className="hover:text-white transition-colors text-left">
+                <a href="/specs.html" onClick={(e) => { e.preventDefault(); onSwitchTab?.('specs'); }} className="hover:text-white transition-colors text-left block">
                   Ingestion Specs &amp; FAQ
-                </button>
+                </a>
               </li>
             </ul>
           </div>
