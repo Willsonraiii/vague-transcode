@@ -1464,19 +1464,31 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Gue
                   </button>
                 )}
 
-                {/* Direct TikTok Post Button: Coming Soon */}
-                <button
-                  type="button"
-                  onClick={() => setTtReviewOpen(true)}
-                  className="btn-secondary btn-tiktok liquid-glass-chip rounded-full px-4 py-3 text-xs sm:text-sm font-medium text-white/90 flex items-center gap-2 hover:border-cyan-400/40 hover:bg-white/[0.08] transition-all cursor-pointer group shadow-lg"
-                  title="Official TikTok Direct Post is in developer review — click to view status"
-                >
-                  <TikTokIcon width={15} height={15} className="text-white group-hover:scale-110 transition-transform" />
-                  <span>Post to TikTok</span>
-                  <span className="text-[10px] font-clash inframe-title bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">
-                    Coming Soon
-                  </span>
-                </button>
+                {/* Direct TikTok Post Button */}
+                {ttCfg.enabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setTtOpen(true)}
+                    className="btn-secondary btn-tiktok liquid-glass-chip rounded-full px-4 py-3 text-xs sm:text-sm font-medium text-white/90 flex items-center gap-2 hover:border-cyan-400/40 hover:bg-white/[0.08] transition-all cursor-pointer group shadow-lg"
+                    title="Post the optimized master directly to your TikTok account"
+                  >
+                    <TikTokIcon width={15} height={15} className="text-white group-hover:scale-110 transition-transform" />
+                    <span>Post to TikTok</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTtReviewOpen(true)}
+                    className="btn-secondary btn-tiktok liquid-glass-chip rounded-full px-4 py-3 text-xs sm:text-sm font-medium text-white/90 flex items-center gap-2 hover:border-cyan-400/40 hover:bg-white/[0.08] transition-all cursor-pointer group shadow-lg"
+                    title="Official TikTok Direct Post is in developer review — click to view status"
+                  >
+                    <TikTokIcon width={15} height={15} className="text-white group-hover:scale-110 transition-transform" />
+                    <span>Post to TikTok</span>
+                    <span className="text-[10px] font-clash inframe-title bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">
+                      Coming Soon
+                    </span>
+                  </button>
+                )}
 
                 {onOpenReview && (
                   <button
@@ -1630,10 +1642,11 @@ export default function Optimizer({ apiKey, onKeyChange, onBusy, userName = 'Gue
                         href="https://www.tiktok.com/upload?lang=en"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full sm:flex-1 py-2.5 px-4 rounded-full bg-white text-black font-clash inframe-title text-xs sm:text-[13px] font-semibold text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5"
+                        style={{ color: '#000000' }}
+                        className="w-full sm:flex-1 py-2.5 px-4 rounded-full bg-white font-clash text-xs sm:text-[13px] font-semibold text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5"
                       >
-                        <span>Open tiktok.com/upload</span>
-                        <span aria-hidden="true">&nearr;</span>
+                        <span style={{ color: '#000000' }}>Open tiktok.com/upload</span>
+                        <span aria-hidden="true" style={{ color: '#000000' }}>&nearr;</span>
                       </a>
                       {onSwitchToGuide && (
                         <button
