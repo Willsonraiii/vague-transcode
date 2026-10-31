@@ -120,6 +120,10 @@ Any modifications to the mastering pipeline must honor these four fundamental ru
 * **Never conduct experiments on this main production branch**: Whenever the user asks to experiment with or prototype new updates (UI redesigns, pipeline adjustments, or architectural features), work MUST be performed **ONLY in a cloned repository** (isolated clone or worktree).
 * **Owner permission required for cloning**: If a cloned repository does not already exist, the agent MUST explicitly ask the owner for permission to create/clone one before proceeding. Strict following is required.
 
+### I. Obito Studio Scope Only (Strict)
+* **Exclusive Focus**: All development, assistance, analysis, and execution must remain 100% focused on the Obito Studio video mastering application (`vague-transcode`).
+* **Zero Cross-Project Contamination**: Never touch, reference, or execute changes for external or unrelated projects. If a prompt mentions unrelated systems or appears mistakenly sent, explicitly clarify and keep Obito Studio untouched.
+
 ---
 
 ## 5. Build & Deployment Workflow

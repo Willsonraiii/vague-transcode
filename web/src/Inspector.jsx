@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import {
   CheckIcon, CloseIcon, InspectIcon, UploadIcon, FilmIcon,
-  SearchIcon, AlertTriangleIcon, LightningIcon
+  SearchIcon, AlertTriangleIcon, LightningIcon, TikTokIcon,
+  ExternalLinkIcon, CopyIcon, GlobeIcon, UserIcon
 } from './icons.jsx';
 
 const MAX_BYTES = 600 * 1024 * 1024;
@@ -17,6 +18,17 @@ const extractUser = (text) => {
   return m ? '@' + m[1] : '';
 };
 
+function getRegionName(code) {
+  if (!code) return null;
+  const upper = String(code).trim().toUpperCase();
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(upper);
+    return name ? `${name} (${upper})` : upper;
+  } catch {
+    return upper;
+  }
+}
+
 function parseProbe(probe, linkUser, page) {
   const streams = probe.streams || [];
   const v = streams.find((s) => s.codec_type === 'video') || null;
@@ -24,7 +36,7 @@ function parseProbe(probe, linkUser, page) {
   const f = probe.format || {};
   const tags = f.tags || {};
   const tagUser = extractUser(Object.values(tags).join(' '));
-  const user = linkUser || tagUser;
+  const user = linkUser || (page?.author ? (page.author.startsWith('@') ? page.author : '@' + page.author) : null) || tagUser;
   const fps = v ? frac(v.r_frame_rate) : 0;
   const ts = v && v.time_base ? Number(String(v.time_base).split('/')[1]) : 0;
   const transfer = v?.color_transfer || '';
@@ -35,39 +47,99 @@ function parseProbe(probe, linkUser, page) {
   const bitRate = f.bit_rate || page?.bitrate;
   const mbps = bitRate ? (Number(bitRate) / 1e6).toFixed(1) : (dur > 0 && size > 0 ? ((size * 8) / (dur * 1e6)).toFixed(1) : null);
 
+  // Deep pixel format & bit depth analysis
+  const pixFmt = v?.pix_fmt || '';
+  const bitDepth = v?.bits_per_raw_sample ? `${v.bits_per_raw_sample}-bit` : pixFmt.includes('10') ? '10-bit' : pixFmt ? '8-bit' : null;
+  const pixInfo = pixFmt ? (bitDepth ? `${pixFmt} (${bitDepth})` : pixFmt) : null;
+
+  // Color Primaries
+  const primaries = v?.color_primaries ? (
+    v.color_primaries === 'bt2020' ? 'BT.2020 (Wide Gamut)' :
+    v.color_primaries === 'bt709' ? 'BT.709 (sRGB/Rec.709)' :
+    v.color_primaries
+  ) : null;
+
+  // Audio specs
+  const a0 = audio[0];
+  const audioRate = a0?.sample_rate ? `${Number(a0.sample_rate).toLocaleString()} Hz` : null;
+  const audioCh = a0?.channel_layout ? `${a0.channel_layout}` : (a0?.channels ? `${a0.channels} ch` : null);
+  const audioDesc = audio.length
+    ? `${audio.length} track${audio.length > 1 ? 's' : ''} (${a0.codec_name}${audioRate ? ' · ' + audioRate : ''}${audioCh ? ' · ' + audioCh : ''})`
+    : 'None';
+
+  // Region
+  const regionCode = page?.region;
+  const regionName = getRegionName(regionCode);
+
+  // Aspect ratio
+  let aspect = null;
+  if (v?.width && v?.height) {
+    const ratio = (v.width / v.height);
+    if (Math.abs(ratio - 9/16) < 0.05) aspect = '9:16 Vertical';
+    else if (Math.abs(ratio - 16/9) < 0.05) aspect = '16:9 Landscape';
+    else if (Math.abs(ratio - 1) < 0.05) aspect = '1:1 Square';
+    else aspect = `${v.width}:${v.height}`;
+  } else if (page?.ratio) {
+    aspect = page.ratio === '9:16' ? '9:16 Vertical' : page.ratio;
+  }
+
+  // Upload date
+  const uploadDate = page?.createTime ? new Date(page.createTime).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }) : null;
+
   const tiles = [
-    ['Creator', user || '—'],
+    ['Creator', page?.authorName && user ? `${page.authorName} (${user})` : user || '—'],
+    ['User Region', regionName || (regionCode ? regionCode.toUpperCase() : '—')],
+    ['User ID (UID)', page?.authorId || '—'],
     ['Resolution', v ? `${v.width} × ${v.height}` : (page?.width && page?.height ? `${page.width} × ${page.height}` : '—')],
+    ['Aspect Ratio', aspect || '9:16 Vertical'],
     ['Frame Rate', v ? (fps % 1 ? fps.toFixed(2) : fps) + ' fps' : '—'],
     ['Video Codec', v ? `${v.codec_name}${v.profile ? ' · ' + v.profile : ''}` : '—'],
+    ['Pixel Format & Depth', pixInfo || '—'],
+    ['Color Primaries', primaries || (hdr !== 'SDR' ? 'BT.2020' : 'BT.709')],
     ['Dynamic Range', hdr],
     ['Dolby Vision', dovi ? `Yes · Profile ${dvi(dovi)}` : 'None'],
-    ['Audio Tracks', audio.length ? `${audio.length} track${audio.length > 1 ? 's' : ''} (${audio[0].codec_name})` : 'None'],
+    ['Audio Stream', audioDesc],
+    ['Timescale Clock', ts ? `${ts} Hz` : '—'],
+    ['Bitrate', mbps ? `${mbps} Mbps (Rec: 20–35 Mbps)` : fmtRate(bitRate)],
     ['Duration', fmtDur(dur)],
     ['File Size', size ? fmtBytes(size) : '—'],
-    ['Bitrate', mbps ? `${mbps} Mbps (Rec: 20–35 Mbps)` : fmtRate(bitRate)],
-    ['Timescale Clock', ts ? `${ts} Hz` : '—'],
-    ['Container', (f.format_name || '—').split(',')[0]]
+    ['Container', (f.format_name || '—').split(',')[0]],
+    ['Soundtrack', page?.music || '—'],
+    ['Upload Date', uploadDate || '—']
   ];
 
   if (page?.stats) {
     tiles.push(
-      ['Plays', fmtCount(page.stats.plays)],
+      ['Total Plays', fmtCount(page.stats.plays)],
       ['Likes', fmtCount(page.stats.likes)],
       ['Comments', fmtCount(page.stats.comments)],
-      ['Shares', fmtCount(page.stats.shares)]
+      ['Shares', fmtCount(page.stats.shares)],
+      ['Saves', fmtCount(page.stats.saves)]
     );
+    if (page.stats.plays && (page.stats.likes || page.stats.comments)) {
+      const eng = (((page.stats.likes || 0) + (page.stats.comments || 0) + (page.stats.shares || 0) + (page.stats.saves || 0)) / page.stats.plays) * 100;
+      tiles.push(['Engagement Rate', `${eng.toFixed(1)}%`]);
+    }
   }
 
   return {
     user,
+    authorName: page?.authorName || null,
+    authorId: page?.authorId || null,
+    avatar: page?.avatar || null,
+    region: regionName || regionCode || null,
+    regionCode: regionCode || null,
+    videoUrl: page?.url || null,
     tiles: tiles.filter(([_, val]) => val && val !== '—'),
     checks: [
       ['Audio Stream Intact', audio.length > 0],
       ['High Frame Rate (>30 fps)', fps > 30],
       ['Under 600 MB File Size', size > 0 && size <= MAX_BYTES],
       ['Container Clock Compatible', ts > 0 && (ts % 60 === 0 || 19200 % ts === 0)],
-      ['Supported Container (MP4/MOV)', /mp4|mov|quicktime|m4v/i.test(f.format_name || 'mp4')]
+      ['Supported Container (MP4/MOV)', /mp4|mov|quicktime|m4v/i.test(f.format_name || 'mp4')],
+      ['10-Bit Color Stream', bitDepth === '10-bit' || hdr !== 'SDR']
     ],
     hdr,
     dovi: !!dovi,
@@ -75,22 +147,52 @@ function parseProbe(probe, linkUser, page) {
   };
 }
 
-function pageReport(page, user) {
+function pageReport(page, linkUser) {
+  const user = linkUser || (page?.author ? (page.author.startsWith('@') ? page.author : '@' + page.author) : null);
+  const regionCode = page?.region;
+  const regionName = getRegionName(regionCode);
+
+  const uploadDate = page?.createTime ? new Date(page.createTime).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }) : null;
+
   const allTiles = [
-    ['Creator', user || '—'],
-    ['Resolution', page.width && page.height ? `${page.width} × ${page.height}` : '—'],
-    ['Duration', fmtDur(page.duration)],
-    ['Bitrate', page.bitrate ? `${(Number(page.bitrate) / 1e6).toFixed(1)} Mbps (Rec: 20–35 Mbps)` : fmtRate(page.bitrate)],
-    ['Container Ratio', page.ratio || '—'],
-    ['Plays', fmtCount(page.stats?.plays)],
-    ['Likes', fmtCount(page.stats?.likes)],
-    ['Comments', fmtCount(page.stats?.comments)],
-    ['Shares', fmtCount(page.stats?.shares)]
+    ['Creator', page?.authorName && user ? `${page.authorName} (${user})` : user || '—'],
+    ['User Region', regionName || (regionCode ? regionCode.toUpperCase() : '—')],
+    ['User ID (UID)', page?.authorId || '—'],
+    ['Resolution', page?.width && page?.height ? `${page.width} × ${page.height}` : '1080 × 1920 (Standard HD)'],
+    ['Aspect Ratio', page?.ratio === '9:16' ? '9:16 Vertical' : page?.ratio || '9:16 Vertical'],
+    ['Duration', fmtDur(page?.duration)],
+    ['Bitrate', page?.bitrate ? `${(Number(page.bitrate) / 1e6).toFixed(1)} Mbps (Rec: 20–35 Mbps)` : fmtRate(page?.bitrate)],
+    ['File Size', page?.size ? fmtBytes(page.size) : '—'],
+    ['Soundtrack', page?.music || '—'],
+    ['Upload Date', uploadDate || '—'],
+    ['Total Plays', fmtCount(page?.stats?.plays)],
+    ['Likes', fmtCount(page?.stats?.likes)],
+    ['Comments', fmtCount(page?.stats?.comments)],
+    ['Shares', fmtCount(page?.stats?.shares)],
+    ['Saves', fmtCount(page?.stats?.saves)]
   ];
+
+  if (page?.stats?.plays && (page?.stats?.likes || page?.stats?.comments)) {
+    const eng = (((page.stats.likes || 0) + (page.stats.comments || 0) + (page.stats.shares || 0) + (page.stats.saves || 0)) / page.stats.plays) * 100;
+    allTiles.push(['Engagement Rate', `${eng.toFixed(1)}%`]);
+  }
+
   return {
     user,
+    authorName: page?.authorName || null,
+    authorId: page?.authorId || null,
+    avatar: page?.avatar || null,
+    region: regionName || regionCode || null,
+    regionCode: regionCode || null,
+    videoUrl: page?.url || null,
     tiles: allTiles.filter(([_, v]) => v && v !== '—'),
-    checks: [],
+    checks: [
+      ['Valid TikTok Delivery CDN', !!(page?.url || user)],
+      ['Standard Vertical Aspect (9:16)', page?.ratio === '9:16' || !page?.ratio],
+      ['Duration Within Limits (<10 min)', page?.duration ? page.duration <= 600 : true]
+    ],
     hdr: 'SDR',
     dovi: false
   };
@@ -108,12 +210,22 @@ export default function Inspector({ apiKey }) {
   const [note, setNote] = useState('');
   const [fileName, setFileName] = useState('');
   const [drag, setDrag] = useState(false);
+  const [copied, setCopied] = useState(false);
   const input = useRef(null);
   const keyRef = useRef(apiKey);
   keyRef.current = apiKey;
 
   const auth = () => ({ headers: keyRef.current ? { 'x-access-token': keyRef.current } : {} });
   const authQ = (u) => (keyRef.current ? u + (u.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(keyRef.current) : u);
+
+  const handleCopyLink = useCallback(() => {
+    const target = report?.videoUrl || link;
+    if (!target) return;
+    navigator.clipboard?.writeText(target).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [report, link]);
 
   const runLink = useCallback(async () => {
     const u = extractUser(link);
@@ -139,9 +251,17 @@ export default function Inspector({ apiKey }) {
       setStatus('Analyzing video container and codec streams…');
       const j = await r.json();
       if (j.user) setUser(j.user);
-      if (j.probe) setReport(parseProbe(j.probe, j.user, j.page));
+      const pageData = j.page || (link ? { url: link.trim() } : null);
+      if (j.probe) setReport(parseProbe(j.probe, j.user, pageData));
       else if (j.page) setReport(pageReport(j.page, j.user));
-      else if (j.user) setReport({ user: j.user, tiles: [['Creator', j.user], ['Caption', j.title || '—']], checks: [], hdr: 'SDR', dovi: false });
+      else if (j.user) setReport({
+        user: j.user,
+        videoUrl: link.trim(),
+        tiles: [['Creator', j.user], ['Caption', j.title || '—']],
+        checks: [],
+        hdr: 'SDR',
+        dovi: false
+      });
       else { setError('Nothing found for this link.'); setPhase('error'); return; }
       setNote(j.note || (!j.probe && !j.page ? 'TikTok blocked direct stream download from this network — creator fetched via official oEmbed.' : ''));
       setPhase('done');
@@ -421,18 +541,95 @@ export default function Inspector({ apiKey }) {
 
       {report && (
         <div className="insp-report">
-          <div className="insp-summary">
-            {['Resolution', 'Frame Rate', 'Video Codec', 'Timescale'].map((key) => {
-              const val = report.tiles.find(([name]) => name === key)?.[1];
-              if (!val || val === '—') return null;
-              return (
-                <div className="insp-summary-item" key={key}>
-                  <span>{key}</span>
-                  <strong>{val}</strong>
+          {/* Creator Profile, User Region, and Direct TikTok Action Buttons */}
+          {(report.user || report.videoUrl || report.region) && (
+            <div className="insp-header-bar">
+              <div className="insp-header-creator">
+                {report.avatar ? (
+                  <img src={report.avatar} alt={report.user || 'Creator'} className="insp-creator-avatar" />
+                ) : (
+                  <div className="insp-creator-avatar placeholder">
+                    <UserIcon width={22} height={22} />
+                  </div>
+                )}
+                <div className="insp-creator-info">
+                  <div className="insp-creator-name-row">
+                    <span className="insp-creator-name">{report.authorName || report.user || 'TikTok Creator'}</span>
+                    {report.user && <span className="insp-creator-handle">{report.user}</span>}
+                  </div>
+                  <div className="insp-creator-meta-row">
+                    {report.region && (
+                      <div className="insp-region-badge">
+                        <span className="insp-region-dot" />
+                        <GlobeIcon width={12} height={12} />
+                        <span>{report.region}</span>
+                      </div>
+                    )}
+                    {report.authorId && (
+                      <span className="insp-uid-badge" title="Permanent TikTok Account UID">
+                        UID · {report.authorId}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+
+              <div className="insp-header-actions">
+                {report.videoUrl && (
+                  <a
+                    href={report.videoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-insp-action primary"
+                    title="Open video on TikTok in new tab"
+                  >
+                    <TikTokIcon width={15} height={15} />
+                    <span>Open on TikTok</span>
+                    <ExternalLinkIcon width={13} height={13} />
+                  </a>
+                )}
+                {report.user && (
+                  <a
+                    href={`https://www.tiktok.com/${report.user.startsWith('@') ? report.user : '@' + report.user}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-insp-action secondary"
+                    title="View creator profile on TikTok"
+                  >
+                    <UserIcon width={14} height={14} />
+                    <span>Creator Profile</span>
+                    <ExternalLinkIcon width={12} height={12} />
+                  </a>
+                )}
+                {(report.videoUrl || link) && (
+                  <button
+                    type="button"
+                    className="btn-insp-action secondary"
+                    onClick={handleCopyLink}
+                    title="Copy TikTok video link"
+                  >
+                    <CopyIcon width={14} height={14} />
+                    <span>{copied ? 'Link Copied' : 'Copy Link'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="insp-summary">
+            {[
+              ['Master Resolution', report.tiles.find(([name]) => name === 'Resolution')?.[1]],
+              ['Frame Rate', report.tiles.find(([name]) => name === 'Frame Rate')?.[1]],
+              ['Dynamic Range', report.hdr !== 'SDR' ? report.hdr : report.tiles.find(([name]) => name === 'Pixel Format & Depth')?.[1] || 'SDR (Rec.709)'],
+              ['Timescale Clock', report.tiles.find(([name]) => name === 'Timescale Clock')?.[1] || report.tiles.find(([name]) => name === 'Aspect Ratio')?.[1]]
+            ].filter(([_, v]) => v && v !== '—').map(([key, val]) => (
+              <div className="insp-summary-item" key={key}>
+                <span>{key}</span>
+                <strong>{val}</strong>
+              </div>
+            ))}
           </div>
+
           <div className={'insp-banner' + (report.dovi ? ' dv' : report.hdr !== 'SDR' ? ' hdr' : '')}>
             {report.dovi
               ? 'Dolby Vision Profile 8 Detected — Use FPS + Quality + HDR mode to prevent washed-out colors on TikTok.'

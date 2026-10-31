@@ -825,18 +825,27 @@ app.post('/api/inspect-link', express.json({ limit: '10kb' }), async (req, res) 
         const td = tj.data;
         if (td.author?.unique_id) out.user = '@' + td.author.unique_id;
         if (td.title) out.title = td.title;
+        out.region = td.region || null;
         out.page = {
           width: null, height: null,
           duration: td.duration || null,
           bitrate: td.size && td.duration ? Math.round((td.size * 8) / td.duration) : null,
           ratio: '9:16',
           author: td.author?.unique_id || null,
+          authorId: td.author?.id || null,
+          authorName: td.author?.nickname || null,
+          avatar: td.author?.avatar || null,
+          region: td.region || null,
+          music: td.music_info?.title ? `${td.music_info.title}${td.music_info.author ? ' · ' + td.music_info.author : ''}` : null,
+          createTime: td.create_time ? td.create_time * 1000 : null,
           size: td.hd_size || td.size || null,
+          url,
           stats: {
             plays: td.play_count || null,
             likes: td.digg_count || null,
             comments: td.comment_count || null,
-            shares: td.share_count || null
+            shares: td.share_count || null,
+            saves: td.collect_count || null
           }
         };
         videoUrl = td.play || td.hdplay || null;

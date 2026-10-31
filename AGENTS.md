@@ -25,6 +25,7 @@ Current focus (2026-10-17): a TikTok optimizer timing fix was validated by the u
 6. **Decisions already made — do not reopen:** no color-grade presets; TikTok products = Login Kit + Content Posting API only; legal contact `resume@willsonrai.com.np`.
 7. **Do not touch the TikTok developer portal** (app `7696831141604771848`): products, scopes, URLs, demo video, review text. The app is **In review** — any edit re-triggers the queue.
 8. **Experiments ONLY in cloned repo (strict).** When the user asks to experiment with or develop any new updates (UI redesigns, pipeline experiments, or feature prototypes), work MUST be performed **ONLY in a cloned repository** (isolated worktree/clone). Never experiment directly on this main production branch. If a cloned repository does not already exist, the agent MUST explicitly ask the owner for permission to clone before doing anything. Strict following required.
+9. **Obito Studio scope only (strict).** Work strictly on topics, tasks, code, and features directly related to the Obito Studio project (`vague-transcode`). Never divert to, inspect, or modify other projects or unrelated topics. If a user prompt appears intended for another project, confirm or decline rather than switching contexts or modifying code.
 
 ## Build & ship
 
