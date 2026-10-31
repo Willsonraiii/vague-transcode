@@ -3362,6 +3362,8 @@ h1, h2, h3, h4, h5, h6,
   width: 100%;
   max-width: 1080px;
   margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: clip;
 }
 
 .insp-tabs {
@@ -3640,6 +3642,8 @@ h1, h2, h3, h4, h5, h6,
   width: 100%;
   max-width: 1080px;
   margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: clip;
   animation: fadeIn 0.35s ease;
 }
 
@@ -3836,9 +3840,10 @@ h1, h2, h3, h4, h5, h6,
 
 .insp-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .insp-tile {
@@ -3847,13 +3852,16 @@ h1, h2, h3, h4, h5, h6,
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);
-  padding: 14px 18px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   text-align: left;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .insp-tile:hover {
@@ -3863,19 +3871,27 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .insp-tile span {
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.25;
+  min-width: 0;
 }
 
 .insp-tile b {
-  font-size: 14.5px;
+  font-size: 13.5px;
   color: #ffffff;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   font-weight: 600;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  min-width: 0;
 }
 
 .insp-checks {
@@ -4456,11 +4472,15 @@ h1, h2, h3, h4, h5, h6,
     border-radius: 20px;
   }
   .insp-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
   .insp-tile {
-    padding: 10px 12px;
+    padding: 10px 10px;
+    min-width: 0;
+    box-sizing: border-box;
   }
   .lib-metrics-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -4897,13 +4917,18 @@ h1, h2, h3, h4, h5, h6,
 }
 @media (max-width: 900px) {
   .insp-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 @media (max-width: 768px) {
   .insp-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 @media (max-width: 600px) {
@@ -4916,19 +4941,36 @@ h1, h2, h3, h4, h5, h6,
   .insp-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
   .insp-summary-item {
     padding: 12px 14px;
+    min-width: 0;
+    box-sizing: border-box;
   }
   .insp-summary-item strong {
     font-size: 14px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .insp-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
   .insp-tile {
-    padding: 10px 12px;
+    padding: 10px 10px;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .insp-tile span {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+  }
+  .insp-tile b {
+    font-size: 12px;
   }
   .insp-header-bar {
     flex-direction: column;
